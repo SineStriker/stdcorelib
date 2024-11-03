@@ -13,7 +13,7 @@ namespace stdc {
     STDCORELIB_EXPORT std::string normalizePathSeparators(const std::string &path,
                                                         bool native = false);
 
-    inline std::filesystem::path u8str2path(const std::string &s) {
+    inline std::filesystem::path utf8ToPath(const std::string &s) {
 #ifdef _WIN32
         return utf8ToWide(s);
 #else
@@ -21,7 +21,7 @@ namespace stdc {
 #endif
     }
 
-    inline std::string path2u8str(const std::filesystem::path &path) {
+    inline std::string pathToUtf8(const std::filesystem::path &path) {
 #ifdef _WIN32
         return wideToUtf8(path.wstring());
 #else

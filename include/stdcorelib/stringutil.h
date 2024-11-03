@@ -33,15 +33,22 @@ namespace stdc {
     }
 
     template <>
-    struct StringConverter<std::filesystem::path> {
-        std::string operator()(const std::filesystem::path &path) {
-            return normalizePathSeparators(path2u8str(path), true);
+    struct StringConverter<std::string> {
+        std::string operator()(const std::string &s) {
+            return s;
         }
     };
 
     template <>
-    struct StringConverter<std::string> {
-        std::string operator()(const std::string &s) {
+    struct StringConverter<char *> {
+        std::string operator()(const char *s) {
+            return s;
+        }
+    };
+
+    template <>
+    struct StringConverter<const char *> {
+        std::string operator()(const char *s) {
             return s;
         }
     };
@@ -68,24 +75,17 @@ namespace stdc {
     };
 
     template <>
-    struct StringConverter<char *> {
-        std::string operator()(const char *s) {
-            return s;
-        }
-    };
-
-    template <>
-    struct StringConverter<const char *> {
-        std::string operator()(const char *s) {
-            return s;
+    struct StringConverter<std::filesystem::path> {
+        std::string operator()(const std::filesystem::path &path) {
+            return normalizePathSeparators(pathToUtf8(path), true);
         }
     };
 
     STDCORELIB_EXPORT std::vector<std::string_view> split(const std::string_view &s,
-                                                        const std::string_view &delimiter);
+                                                          const std::string_view &delimiter);
 
     STDCORELIB_EXPORT std::string join(const std::vector<std::string> &v,
-                                     const std::string_view &delimiter);
+                                       const std::string_view &delimiter);
 
 }
 

@@ -23,9 +23,9 @@ int main(int /* argc */, char * /* argv */[]) {
     // 2 app info
     {
         u8printf("[Application info]\n");
-        u8printf("File path: %s\n", path2u8str(System::applicationPath()).c_str());
-        u8printf("Directory: %s\n", path2u8str(System::applicationDirectory()).c_str());
-        u8printf("File name: %s\n", path2u8str(System::applicationFileName()).c_str());
+        u8printf("File path: %s\n", pathToUtf8(System::applicationPath()).c_str());
+        u8printf("Directory: %s\n", pathToUtf8(System::applicationDirectory()).c_str());
+        u8printf("File name: %s\n", pathToUtf8(System::applicationFileName()).c_str());
         u8printf("Name: %s\n", System::applicationName().c_str());
         u8printf("\n");
     }
@@ -39,9 +39,19 @@ int main(int /* argc */, char * /* argv */[]) {
             stack_args[i] = std::string_view(args[i].data(), args[i].size());
         }
 
-        u8printf("address 1: %p\n", &args);
-        u8printf("address 2: %p\n", &stack_args[0]);
-        u8printf("address 3: %p\n", &args[0]);
+        u8printf("address of stack object: %p\n", &args);
+        u8printf("address of VLA object  : %p\n", &stack_args[0]);
+        u8printf("address of heap object : %p\n", &args[0]);
+        u8printf("\n");
+    }
+
+    // 4 console color
+    {
+        u8printf("[Console color]\n");
+        Console::printf(Console::Red, Console::White | Console::Intensified, " Red in white ");
+        u8printf("\n");
+        Console::printf(Console::Yellow, Console::Blue, " Yellow in blue ");
+        u8printf("\n");
         u8printf("\n");
     }
 
