@@ -5,8 +5,6 @@
 
 #ifdef _WIN32
 #  include "windows_utils.h"
-// 12345
-#  include <Shlwapi.h>
 #else
 #  include <dlfcn.h>
 #  include <limits.h>
@@ -70,9 +68,11 @@ namespace stdc {
 #endif
     }
 
+    static constexpr const DWORD g_EnglishLangId = MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US);
+
     std::string Library::Impl::sysErrorMessage(bool nativeLanguage) {
 #ifdef _WIN32
-        return wideToUtf8(winErrorMessage(::GetLastError(), nativeLanguage));
+        return wideToUtf8(winFormatError(::GetLastError(), nativeLanguage ? 0 : g_EnglishLangId));
 #else
         auto err = dlerror();
         if (err) {

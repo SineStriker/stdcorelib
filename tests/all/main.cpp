@@ -8,6 +8,28 @@
 
 using namespace stdc;
 
+static void test_to_string() {
+    // const char *
+    {
+        const char *s = "123";
+        to_string(s);
+    }
+
+    // const char []
+    {
+        const char s[] = {'a', 'b', 'c'};
+        to_string(s);
+        to_string("123");
+    }
+
+    // char *
+    {
+        char *s = new char[10];
+        to_string(s);
+        delete[] s;
+    }
+}
+
 int main(int /* argc */, char * /* argv */[]) {
 
     // 1 cmd line
@@ -56,5 +78,6 @@ int main(int /* argc */, char * /* argv */[]) {
     }
 
     u8printf("OK\n");
+
     return 0;
 }

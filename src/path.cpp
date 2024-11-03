@@ -36,7 +36,6 @@ namespace stdc {
 #if _WIN32
         if (native) {
             std::replace(res.begin(), res.end(), '/', '\\');
-
         } else {
             std::replace(res.begin(), res.end(), '\\', '/');
         }

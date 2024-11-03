@@ -91,9 +91,7 @@ if(STDCORELIB_INSTALL)
     )
 endif()
 
-if(WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE shlwapi)
-else()
+if(NOT WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE dl)
 endif()
 

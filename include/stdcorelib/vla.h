@@ -52,6 +52,7 @@ namespace stdc_private::vla {
       const size_t NAME##_VLA_SIZE__ = (SIZE);                                                     \
       VLA_ALLOC(TYPE, NAME, NAME##_VLA_SIZE__);                                                    \
       ::stdc_private::vla::ScopeGuard<TYPE> NAME##_VLA_GUARD__(NAME, NAME##_VLA_SIZE__);
+
 #endif
 
 #endif // STDCORELIB_VLA_H

@@ -13,7 +13,7 @@ namespace stdc {
 
     template <class... Args>
     auto formatTextN(const std::string &format, Args &&...args) {
-        return formatText(format, {any2str(std::forward<decltype(args)>(args))...});
+        return formatText(format, {to_string(std::forward<decltype(args)>(args))...});
     }
 
 }
