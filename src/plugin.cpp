@@ -2,7 +2,7 @@
 
 #include "library.h"
 
-namespace cpputils {
+namespace stdc {
 
 #ifdef _WIN32
 #endif

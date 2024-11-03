@@ -1,14 +1,14 @@
-#ifndef CPPUTILS_FORMAT_H
-#define CPPUTILS_FORMAT_H
+#ifndef STDCORELIB_FORMAT_H
+#define STDCORELIB_FORMAT_H
 
 #include <string>
 #include <vector>
 
-#include <cpputils/stringutil.h>
+#include <stdcorelib/stringutil.h>
 
-namespace cpputils {
+namespace stdc {
 
-    CPPUTILS_EXPORT std::string formatText(const std::string &format,
+    STDCORELIB_EXPORT std::string formatText(const std::string &format,
                                            const std::vector<std::string> &args);
 
     template <class... Args>
@@ -18,4 +18,4 @@ namespace cpputils {
 
 }
 
-#endif // CPPUTILS_FORMAT_H
+#endif // STDCORELIB_FORMAT_H

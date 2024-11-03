@@ -1,6 +1,6 @@
 #include "format.h"
 
-namespace cpputils {
+namespace stdc {
 
     /*!
         \fn std::string anyToString(T &&t)

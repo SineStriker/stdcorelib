@@ -23,7 +23,7 @@
 
 namespace fs = std::filesystem;
 
-namespace cpputils {
+namespace stdc {
 
     class Library::Impl {
     public:

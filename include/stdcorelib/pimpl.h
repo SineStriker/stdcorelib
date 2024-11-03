@@ -1,9 +1,9 @@
-#ifndef CPPUTILS_PIMPL_H
-#define CPPUTILS_PIMPL_H
+#ifndef STDCORELIB_PIMPL_H
+#define STDCORELIB_PIMPL_H
 
 #include <memory>
 
-namespace cpputils_private::pimpl {
+namespace stdc_private::pimpl {
 
     // Unique Data
     template <class T, class T1 = T>
@@ -32,13 +32,13 @@ namespace cpputils_private::pimpl {
 
 }
 
-#define __cpputils_impl_get(T) ::cpputils_private::pimpl::get<std::remove_const_t<T::Impl>>(_impl)
-#define __cpputils_decl_get(T) static_cast<T *>(_decl)
+#define __stdc_impl_get(T) ::stdcorelib_private::pimpl::get<std::remove_const_t<T::Impl>>(_impl)
+#define __stdc_decl_get(T) static_cast<T *>(_decl)
 
-#define __cpputils_impl(T) auto &impl = *__cpputils_impl_get(T)
-#define __cpputils_decl(T) auto &decl = *__cpputils_decl_get(T)
+#define __stdc_impl(T) auto &impl = *__stdc_impl_get(T)
+#define __stdc_decl(T) auto &decl = *__stdc_decl_get(T)
 
-#define __cpputils_impl_t __cpputils_impl(std::remove_pointer_t<decltype(this)>)
-#define __cpputils_decl_t __cpputils_decl(Decl)
+#define __stdc_impl_t __stdc_impl(std::remove_pointer_t<decltype(this)>)
+#define __stdc_decl_t __stdc_decl(Decl)
 
-#endif // CPPUTILS_PIMPL_H
+#endif // STDCORELIB_PIMPL_H

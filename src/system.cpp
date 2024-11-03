@@ -22,7 +22,7 @@ using PathString = std::string;
 static constexpr const PathChar PathSeparator = '/';
 #endif
 
-namespace cpputils {
+namespace stdc {
 
 #if defined(__APPLE__)
 

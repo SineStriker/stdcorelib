@@ -1,13 +1,13 @@
-#ifndef CPPUTILS_STRINGUTIL_H
-#define CPPUTILS_STRINGUTIL_H
+#ifndef STDCORELIB_STRINGUTIL_H
+#define STDCORELIB_STRINGUTIL_H
 
 #include <string_view>
 #include <sstream>
 
-#include <cpputils/path.h>
-#include <cpputils/codec.h>
+#include <stdcorelib/path.h>
+#include <stdcorelib/codec.h>
 
-namespace cpputils {
+namespace stdc {
 
     template <class T>
     struct StringConverter;
@@ -79,12 +79,12 @@ namespace cpputils {
         }
     };
 
-    CPPUTILS_EXPORT std::vector<std::string_view> split(const std::string_view &s,
+    STDCORELIB_EXPORT std::vector<std::string_view> split(const std::string_view &s,
                                                         const std::string_view &delimiter);
 
-    CPPUTILS_EXPORT std::string join(const std::vector<std::string> &v,
+    STDCORELIB_EXPORT std::string join(const std::vector<std::string> &v,
                                      const std::string_view &delimiter);
 
 }
 
-#endif // CPPUTILS_STRINGUTIL_H
+#endif // STDCORELIB_STRINGUTIL_H

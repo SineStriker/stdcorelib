@@ -1,15 +1,15 @@
-#ifndef CPPUTILS_SYSTEM_H
-#define CPPUTILS_SYSTEM_H
+#ifndef STDCORELIB_SYSTEM_H
+#define STDCORELIB_SYSTEM_H
 
 #include <string>
 #include <vector>
 #include <filesystem>
 
-#include <cpputils/global.h>
+#include <stdcorelib/global.h>
 
-namespace cpputils {
+namespace stdc {
 
-    class CPPUTILS_EXPORT System {
+    class STDCORELIB_EXPORT System {
     public:
         static std::filesystem::path applicationPath();
         static std::filesystem::path applicationDirectory();
@@ -21,4 +21,4 @@ namespace cpputils {
 
 }
 
-#endif // CPPUTILS_SYSTEM_H
+#endif // STDCORELIB_SYSTEM_H

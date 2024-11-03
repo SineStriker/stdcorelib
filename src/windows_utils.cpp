@@ -1,6 +1,6 @@
 #include "windows_utils.h"
 
-namespace cpputils {
+namespace stdc {
 
     /*!
         Get Windows last error message using \c FormatMessageW without ending line break.

@@ -1,14 +1,14 @@
-#ifndef CPPUTILS_PLUGINFACTORY_H
-#define CPPUTILS_PLUGINFACTORY_H
+#ifndef STDCORELIB_PLUGINFACTORY_H
+#define STDCORELIB_PLUGINFACTORY_H
 
 #include <vector>
 #include <filesystem>
 
-#include <cpputils/plugin.h>
+#include <stdcorelib/plugin.h>
 
-namespace cpputils {
+namespace stdc {
 
-    class CPPUTILS_EXPORT PluginFactory {
+    class STDCORELIB_EXPORT PluginFactory {
     public:
         PluginFactory();
         virtual ~PluginFactory();
@@ -36,10 +36,10 @@ namespace cpputils {
 
     template <class T>
     inline T *PluginFactory::plugin(const char *key) const {
-        static_assert(std::is_base_of<Plugin, T>::value, "T should inherit from cpputils::Plugin");
+        static_assert(std::is_base_of<Plugin, T>::value, "T should inherit from stdcorelib::Plugin");
         return static_cast<T *>(plugin(reinterpret_cast<T *>(0)->T::iid(), key));
     }
 
 }
 
-#endif // CPPUTILS_PLUGINFACTORY_H
+#endif // STDCORELIB_PLUGINFACTORY_H

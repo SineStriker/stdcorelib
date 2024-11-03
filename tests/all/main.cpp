@@ -1,10 +1,10 @@
 #include <string>
 #include <vector>
 
-#include <cpputils/system.h>
-#include <cpputils/console.h>
+#include <stdcorelib/system.h>
+#include <stdcorelib/console.h>
 
-using namespace cpputils;
+using namespace stdc;
 
 int main(int /* argc */, char * /* argv */[]) {
 

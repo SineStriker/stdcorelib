@@ -1,13 +1,13 @@
-#ifndef CPPUTILS_VLA_H
-#define CPPUTILS_VLA_H
+#ifndef STDCORELIB_VLA_H
+#define STDCORELIB_VLA_H
 
 #include <stddef.h>
 #include <malloc.h>
 
 #if defined(_MSC_VER)
-#  define _CPPUTILS_ALLOCA(size) _alloca(size)
+#  define _STDCORELIB_ALLOCA(size) _alloca(size)
 #elif defined(__GNUC__) || defined(__clang__)
-#  define _CPPUTILS_ALLOCA(size) alloca(size)
+#  define _STDCORELIB_ALLOCA(size) alloca(size)
 #else
 #  error "Unsupported compiler"
 #endif
@@ -16,11 +16,11 @@
  * @brief Allocate a buffer on stack with the given type and size (Uninitialized).
  *
  */
-#define VLA_ALLOC(TYPE, NAME, SIZE) TYPE *NAME = (TYPE *) _CPPUTILS_ALLOCA((SIZE) * sizeof(TYPE))
+#define VLA_ALLOC(TYPE, NAME, SIZE) TYPE *NAME = (TYPE *) _STDCORELIB_ALLOCA((SIZE) * sizeof(TYPE))
 
 #ifdef __cplusplus
 
-namespace cpputils_private::vla {
+namespace stdc_private::vla {
 
     template <class T>
     struct ScopeGuard {
@@ -51,7 +51,7 @@ namespace cpputils_private::vla {
 #  define VLA_NEW(TYPE, NAME, SIZE)                                                                \
       const size_t NAME##_VLA_SIZE__ = (SIZE);                                                     \
       VLA_ALLOC(TYPE, NAME, NAME##_VLA_SIZE__);                                                    \
-      ::cpputils_private::vla::ScopeGuard<TYPE> NAME##_VLA_GUARD__(NAME, NAME##_VLA_SIZE__);
+      ::stdcorelib_private::vla::ScopeGuard<TYPE> NAME##_VLA_GUARD__(NAME, NAME##_VLA_SIZE__);
 #endif
 
-#endif // CPPUTILS_VLA_H
+#endif // STDCORELIB_VLA_H

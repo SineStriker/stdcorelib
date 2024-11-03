@@ -1,6 +1,6 @@
 #include "stringutil.h"
 
-namespace cpputils {
+namespace stdc {
 
     /*!
         Splits the string into substring view list.

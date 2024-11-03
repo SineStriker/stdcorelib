@@ -1,14 +1,14 @@
-#ifndef CPPUTILS_CONSOLE_H
-#define CPPUTILS_CONSOLE_H
+#ifndef STDCORELIB_CONSOLE_H
+#define STDCORELIB_CONSOLE_H
 
 #include <cstdarg>
 
-#include <cpputils/global.h>
-#include <cpputils/format.h>
+#include <stdcorelib/global.h>
+#include <stdcorelib/format.h>
 
-namespace cpputils {
+namespace stdc {
 
-    class CPPUTILS_EXPORT Console {
+    class STDCORELIB_EXPORT Console {
     public:
         enum Color {
             Default = -1,
@@ -24,7 +24,7 @@ namespace cpputils {
         };
 
         static int printf(int foreground, int background, const char *fmt, ...)
-            CPPUTILS_PRINTF_FORMAT(3, 4);
+            STDCORELIB_PRINTF_FORMAT(3, 4);
 
         static int vprintf(int foreground, int background, const char *fmt, va_list args);
 
@@ -35,9 +35,9 @@ namespace cpputils {
         }
     };
 
-    CPPUTILS_EXPORT int u8printf(const char *fmt, ...);
+    STDCORELIB_EXPORT int u8printf(const char *fmt, ...);
 
-    CPPUTILS_EXPORT int u8vprintf(const char *fmt, va_list args);
+    STDCORELIB_EXPORT int u8vprintf(const char *fmt, va_list args);
 
     template <class... Args>
     static inline void u8print(const std::string &format, Args &&...args) {
@@ -46,4 +46,4 @@ namespace cpputils {
 
 }
 
-#endif // CPPUTILS_CONSOLE_H
+#endif // STDCORELIB_CONSOLE_H

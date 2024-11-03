@@ -1,16 +1,16 @@
-#ifndef CPPUTILS_PATH_H
-#define CPPUTILS_PATH_H
+#ifndef STDCORELIB_PATH_H
+#define STDCORELIB_PATH_H
 
 #include <string>
 #include <filesystem>
 
-#include <cpputils/codec.h>
+#include <stdcorelib/codec.h>
 
-namespace cpputils {
+namespace stdc {
 
-    CPPUTILS_EXPORT std::filesystem::path cleanPath(const std::filesystem::path &path);
+    STDCORELIB_EXPORT std::filesystem::path cleanPath(const std::filesystem::path &path);
 
-    CPPUTILS_EXPORT std::string normalizePathSeparators(const std::string &path,
+    STDCORELIB_EXPORT std::string normalizePathSeparators(const std::string &path,
                                                         bool native = false);
 
     inline std::filesystem::path u8str2path(const std::string &s) {
@@ -31,4 +31,4 @@ namespace cpputils {
 
 }
 
-#endif // CPPUTILS_PATH_H
+#endif // STDCORELIB_PATH_H

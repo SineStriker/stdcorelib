@@ -1,13 +1,13 @@
-#ifndef CPPUTILS_PLUGIN_H
-#define CPPUTILS_PLUGIN_H
+#ifndef STDCORELIB_PLUGIN_H
+#define STDCORELIB_PLUGIN_H
 
 #include <filesystem>
 
-#include <cpputils/global.h>
+#include <stdcorelib/global.h>
 
-namespace cpputils {
+namespace stdc {
 
-    class CPPUTILS_EXPORT Plugin {
+    class STDCORELIB_EXPORT Plugin {
     public:
         virtual ~Plugin();
 
@@ -21,8 +21,8 @@ namespace cpputils {
 
 }
 
-#define CPPUTILS_EXPORT_PLUGIN(PLUGIN_NAME)                                                        \
-    extern "C" CPPUTILS_DECL_EXPORT cpputils::Plugin *cpputils_plugin_instance() {                 \
+#define STDCORELIB_EXPORT_PLUGIN(PLUGIN_NAME)                                                           \
+    extern "C" STDCORELIB_DECL_EXPORT stdcorelib::Plugin *stdcorelib_plugin_instance() {                          \
         static PLUGIN_NAME _instance;                                                              \
         return &_instance;                                                                         \
     }

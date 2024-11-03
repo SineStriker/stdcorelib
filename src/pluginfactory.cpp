@@ -9,7 +9,7 @@
 
 namespace fs = std::filesystem;
 
-namespace cpputils {
+namespace stdc {
 
     PluginFactory::Impl::Impl(PluginFactory *decl) : _decl(decl) {
     }
@@ -45,7 +45,7 @@ namespace cpputils {
 
                     using PluginGetter = Plugin *(*) ();
                     auto getter =
-                        reinterpret_cast<PluginGetter>(so.resolve("cpputils_plugin_instance"));
+                        reinterpret_cast<PluginGetter>(so.resolve("stdcorelib_plugin_instance"));
                     if (!getter) {
                         continue;
                     }
@@ -80,7 +80,7 @@ namespace cpputils {
         Adds a static plugin to the internal plugin map.
     */
     void PluginFactory::addStaticPlugin(Plugin *plugin) {
-        __cpputils_impl_t;
+        __stdc_impl_t;
         std::unique_lock<std::shared_mutex> lock(impl.plugins_mtx);
         impl.staticPlugins.emplace(plugin);
         impl.pluginsDirty.insert(plugin->iid());
@@ -90,7 +90,7 @@ namespace cpputils {
         Returns the static plugins.
     */
     std::vector<Plugin *> PluginFactory::staticPlugins() const {
-        __cpputils_impl_t;
+        __stdc_impl_t;
         std::shared_lock<std::shared_mutex> lock(impl.plugins_mtx);
         return {impl.staticPlugins.begin(), impl.staticPlugins.end()};
     }
@@ -99,7 +99,7 @@ namespace cpputils {
         Adds a plugin searching path of interface id \a iid.
     */
     void PluginFactory::addPluginPath(const char *iid, const std::filesystem::path &path) {
-        __cpputils_impl_t;
+        __stdc_impl_t;
         if (!fs::is_directory(path)) {
             return;
         }
@@ -113,7 +113,7 @@ namespace cpputils {
     */
     void PluginFactory::setPluginPaths(const char *iid,
                                        const std::vector<std::filesystem::path> &paths) {
-        __cpputils_impl_t;
+        __stdc_impl_t;
         std::unique_lock<std::shared_mutex> lock(impl.plugins_mtx);
         if (paths.empty()) {
             impl.pluginPaths.erase(iid);
@@ -134,7 +134,7 @@ namespace cpputils {
         Returns the plugin searching paths of interface id \a iid.
     */
     const std::vector<std::filesystem::path> &PluginFactory::pluginPaths(const char *iid) const {
-        __cpputils_impl_t;
+        __stdc_impl_t;
 
         std::shared_lock<std::shared_mutex> lock(impl.plugins_mtx);
         auto it = impl.pluginPaths.find(iid);
@@ -149,7 +149,7 @@ namespace cpputils {
         Returns the plugin instance of the matching identifiers if successfully found and loaded.
     */
     Plugin *PluginFactory::plugin(const char *iid, const char *key) const {
-        __cpputils_impl_t;
+        __stdc_impl_t;
 
         std::unique_lock<std::shared_mutex> lock(impl.plugins_mtx);
         if (impl.pluginsDirty.count(iid)) {

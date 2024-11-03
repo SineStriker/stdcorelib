@@ -1,6 +1,6 @@
-# CPP Utils
+# STDCORELIB
 
-Simple C++ Utilities.
+C++ extra core library, as a supplement to the standard library.
 
 ## Features
 
@@ -18,9 +18,9 @@ Simple C++ Utilities.
 ### Command Line
 
 ```cpp
-#include <cpputils/system.h>
+#include <stdcorelib/system.h>
 
-using namespace cpputils;
+using namespace stdc;
 
 int main(int /* argc */, char * /* argv */[]) {
     // No need to use main entry arguments
@@ -49,7 +49,7 @@ int main(int /* argc */, char * /* argv */[]) {
 ```cpp
 #include <string_view>
 
-#include <cpputils/vla.h>
+#include <stdcorelib/vla.h>
 
 // I need the command line in `string_view` array
 extern void foo(const std::string_view cmdline[], int count);

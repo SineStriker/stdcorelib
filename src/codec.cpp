@@ -8,7 +8,7 @@
 #include <cstring>
 #include <filesystem>
 
-namespace cpputils {
+namespace stdc {
 
     /*!
         Returns the UTF-8 encoded string converted from wide string.

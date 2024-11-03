@@ -7,7 +7,7 @@
 #include <mutex>
 #include <cstdio>
 
-namespace cpputils {
+namespace stdc {
 
     class PrintScopeGuard {
     public:

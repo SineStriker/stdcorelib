@@ -1,14 +1,14 @@
-#ifndef CPPUTILS_LIBRARY_H
-#define CPPUTILS_LIBRARY_H
+#ifndef STDCORELIB_LIBRARY_H
+#define STDCORELIB_LIBRARY_H
 
 #include <memory>
 #include <filesystem>
 
-#include <cpputils/global.h>
+#include <stdcorelib/global.h>
 
-namespace cpputils {
+namespace stdc {
 
-    class CPPUTILS_EXPORT Library {
+    class STDCORELIB_EXPORT Library {
     public:
         Library();
         ~Library();
@@ -47,4 +47,4 @@ namespace cpputils {
 
 }
 
-#endif // CPPUTILS_LIBRARY_H
+#endif // STDCORELIB_LIBRARY_H

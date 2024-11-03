@@ -6,7 +6,7 @@
 
 namespace fs = std::filesystem;
 
-namespace cpputils {
+namespace stdc {
 
     /*!
         Returns path with directory separators normalized.

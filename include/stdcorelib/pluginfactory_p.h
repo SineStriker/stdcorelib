@@ -1,14 +1,14 @@
-#ifndef CPPUTILS_PLUGINFACTORY_P_H
-#define CPPUTILS_PLUGINFACTORY_P_H
+#ifndef STDCORELIB_PLUGINFACTORY_P_H
+#define STDCORELIB_PLUGINFACTORY_P_H
 
 #include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
 
-#include <cpputils/pluginfactory.h>
-#include <cpputils/library.h>
+#include <stdcorelib/pluginfactory.h>
+#include <stdcorelib/library.h>
 
-namespace cpputils {
+namespace stdc {
 
     class PluginFactory::Impl {
     public:
@@ -32,4 +32,4 @@ namespace cpputils {
 
 }
 
-#endif // CPPUTILS_PLUGINFACTORY_P_H
+#endif // STDCORELIB_PLUGINFACTORY_P_H
