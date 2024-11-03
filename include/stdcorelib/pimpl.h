@@ -32,7 +32,7 @@ namespace stdc_private::pimpl {
 
 }
 
-#define __stdc_impl_get(T) ::stdcorelib_private::pimpl::get<std::remove_const_t<T::Impl>>(_impl)
+#define __stdc_impl_get(T) ::stdc_private::pimpl::get<std::remove_const_t<T::Impl>>(_impl)
 #define __stdc_decl_get(T) static_cast<T *>(_decl)
 
 #define __stdc_impl(T) auto &impl = *__stdc_impl_get(T)

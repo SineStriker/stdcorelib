@@ -125,7 +125,7 @@ if(STDCORELIB_INSTALL)
     # Install cmake targets files
     install(EXPORT ${STDCORELIB_INSTALL_NAME}Targets
         FILE "${STDCORELIB_INSTALL_NAME}Targets.cmake"
-        namespace stdc::
+        NAMESPACE stdcorelib::
         DESTINATION ${_install_dir}
     )
 
