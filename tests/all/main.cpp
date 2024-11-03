@@ -26,6 +26,7 @@ int main(int /* argc */, char * /* argv */[]) {
         u8printf("\n");
     }
 
-    u8printf("OK");
+    u8printf("OK\n");
+
     return 0;
 }
