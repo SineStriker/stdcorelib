@@ -1,18 +1,18 @@
-# Get CommandLine
+# CPP Utils
 
-Get Command Line Arguments Independent From Entry.
+Simple C++ Utilities.
 
-## Test
+## Command Line
 
 ```c++
 std::vector<std::string> commandLineArguments();
 
 int main(int /* argc */, char * /* argv */[]) {
-  auto args = commandLineArguments();
-  for (int i = 0; i < args.size(); ++i) {
-    u8printf("%-4d %s\n", i, args[i].data());
-  }
-  return 0;
+    auto args = commandLineArguments();
+    for (int i = 0; i < args.size(); ++i) {
+        u8printf("%-4d %s\n", i, args[i].data());
+    }
+    return 0;
 }
 ```
 
