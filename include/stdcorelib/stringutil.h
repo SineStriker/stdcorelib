@@ -1,8 +1,10 @@
 #ifndef STDCORELIB_STRINGUTIL_H
 #define STDCORELIB_STRINGUTIL_H
 
+#include <string>
 #include <string_view>
 #include <sstream>
+#include <vector>
 
 #include <stdcorelib/path.h>
 #include <stdcorelib/codec.h>

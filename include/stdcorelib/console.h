@@ -35,7 +35,7 @@ namespace stdc {
         }
     };
 
-    STDCORELIB_EXPORT int u8printf(const char *fmt, ...);
+    STDCORELIB_EXPORT int u8printf(const char *fmt, ...) STDCORELIB_PRINTF_FORMAT(1, 2);
 
     STDCORELIB_EXPORT int u8vprintf(const char *fmt, va_list args);
 
