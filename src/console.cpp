@@ -202,6 +202,9 @@ namespace cpputils {
 #endif
     };
 
+    /*!
+        Print formatted string in UTF-8 encoding with specified colors.
+    */
     int Console::printf(int foreground, int background, const char *fmt, ...) {
         PrintScopeGuard _guard(foreground, background);
 
@@ -212,11 +215,23 @@ namespace cpputils {
         return res;
     }
 
+    /*!
+        Print formatted string in UTF-8 encoding with specified colors.
+    */
     int Console::vprintf(int foreground, int background, const char *fmt, va_list args) {
         PrintScopeGuard _guard(foreground, background);
         return std::vprintf(fmt, args);
     }
 
+    /*!
+        \fn void print(int foreground, int background, const std::string &format, Args &&...args)
+        
+        Print formatted string in UTF-8 encoding with specified colors.
+    */
+
+    /*!
+        Print formatted string in UTF-8 encoding with default colors.
+    */
     int u8printf(const char *fmt, ...) {
         PrintScopeGuard _guard(Console::Default, Console::Default);
 
@@ -227,6 +242,9 @@ namespace cpputils {
         return res;
     }
 
+    /*!
+        Print formatted string in UTF-8 encoding with default colors.
+    */
     int u8vprintf(const char *fmt, va_list args) {
         PrintScopeGuard _guard(Console::Default, Console::Default);
         return std::vprintf(fmt, args);

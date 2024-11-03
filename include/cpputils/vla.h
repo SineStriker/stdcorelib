@@ -12,6 +12,10 @@
 #  error "Unsupported compiler"
 #endif
 
+/**
+ * @brief Allocate a buffer on stack with the given type and size (Uninitialized).
+ *
+ */
 #define VLA_ALLOC(TYPE, NAME, SIZE) TYPE *NAME = (TYPE *) _CPPUTILS_ALLOCA((SIZE) * sizeof(TYPE))
 
 #ifdef __cplusplus
@@ -40,6 +44,10 @@ namespace cpputils_private::vla {
 
 }
 
+/**
+ * @brief Allocate a C++ class array on stack with the given type and size (Initialized).
+ *
+ */
 #  define VLA_NEW(TYPE, NAME, SIZE)                                                                \
       VLA_ALLOC(TYPE, NAME, (SIZE));                                                               \
       ::cpputils_private::vla::ScopeGuard<TYPE> NAME##_VLA_GUARD__(NAME, (SIZE));

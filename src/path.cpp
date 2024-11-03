@@ -8,6 +8,9 @@ namespace fs = std::filesystem;
 
 namespace cpputils {
 
+    /*!
+        Returns path with directory separators normalized.
+    */
     std::filesystem::path cleanPath(const std::filesystem::path &path) {
         fs::path result;
         for (const auto &part : path) {
@@ -24,6 +27,10 @@ namespace cpputils {
         return result;
     }
 
+    /*!
+        Returns path with separators normalized as '/' or the one appropriate for the underlying
+        operating system.
+    */
     std::string normalizePathSeparators(const std::string &path, bool native) {
         std::string res = path;
 #if _WIN32
@@ -39,5 +46,17 @@ namespace cpputils {
 #endif
         return res;
     }
+
+    /*!
+        \fn std::filesystem::path u8str2path(const std::string &s)
+
+        Returns path converted from UTF-8 encoded string.
+    */
+
+    /*!
+        \fn std::string path2u8str(const std::filesystem::path &path)
+
+        Returns UTF-8 encoded string converted from path.
+    */
 
 }

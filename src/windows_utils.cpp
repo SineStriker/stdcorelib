@@ -2,6 +2,9 @@
 
 namespace cpputils {
 
+    /*!
+        Get Windows last error message using \c FormatMessageW without ending line break.
+    */
     std::wstring winErrorMessage(DWORD error, DWORD languageId) {
         std::wstring rc;
         wchar_t *lpMsgBuf;
@@ -29,6 +32,9 @@ namespace cpputils {
         return rc;
     }
 
+    /*!
+        Get the full path of \c GetDllDirectoryW result.
+    */
     std::wstring winGetFullDllDirectory() {
         auto size = ::GetDllDirectoryW(0, nullptr);
         if (size == 0) {
@@ -43,6 +49,9 @@ namespace cpputils {
         return res;
     }
 
+    /*!
+        Get the full path of \c GetModuleFileNameW result.
+    */
     std::wstring winGetFullModuleFileName(HMODULE hModule) {
         // https://stackoverflow.com/a/57114164/17177007
         DWORD size = MAX_PATH;

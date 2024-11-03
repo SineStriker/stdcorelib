@@ -115,27 +115,7 @@ namespace cpputils {
 #endif
     }
 
-    std::string System::applicationFileName() {
-        static std::string result = __path2str(__application_filename());
-        return result;
-    }
-
-    std::string System::applicationDirectory() {
-        static std::string result = __path2str(__application_dir());
-        return result;
-    }
-
-    std::string System::applicationPath() {
-        static std::string result = __path2str(__application_path());
-        return result;
-    }
-
-    std::string System::applicationName() {
-        static std::string result = __path2str(__application_name());
-        return result;
-    }
-
-    std::vector<std::string> System::commandLineArguments() {
+    static std::vector<std::string> __command_line_arguments() {
         std::vector<std::string> res;
 #ifdef _WIN32
         int argc;
@@ -163,6 +143,46 @@ namespace cpputils {
         file.close();
 #endif
         return res;
+    }
+
+    /*!
+        Returns the application file path.
+    */
+    std::filesystem::path System::applicationPath() {
+        static std::filesystem::path result = __application_path();
+        return result;
+    }
+
+    /*!
+        Returns the application directory.
+    */
+    std::filesystem::path System::applicationDirectory() {
+        static std::filesystem::path result = __application_dir();
+        return result;
+    }
+
+    /*!
+        Returns the application file name.
+    */
+    std::filesystem::path System::applicationFileName() {
+        static std::filesystem::path result = __application_filename();
+        return result;
+    }
+
+    /*!
+        Returns the application name in UTF-8 encoding.
+    */
+    std::string System::applicationName() {
+        static std::string result = __path2str(__application_name());
+        return result;
+    }
+
+    /*!
+        Returns the command line arguments in UTF-8 encoding.
+    */
+    std::vector<std::string> System::commandLineArguments() {
+        static auto result = __command_line_arguments();
+        return result;
     }
 
 }

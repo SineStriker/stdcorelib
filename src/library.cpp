@@ -144,9 +144,15 @@ namespace cpputils {
         return reinterpret_cast<void *>(addr);
     }
 
+    /*!
+        Constructs a library.
+     */
     Library::Library() : _impl(new Impl()) {
     }
 
+    /*!
+        Destroys the library object.
+    */
     Library::~Library() = default;
 
     Library::Library(Library &&other) noexcept {
@@ -160,6 +166,9 @@ namespace cpputils {
         return *this;
     }
 
+    /*!
+        Loads the library and returns \c true if the library was loaded successfully.
+    */
     bool Library::open(const fs::path &path, int hints) {
         _impl->path = path;
         if (_impl->open(hints)) {
@@ -170,6 +179,9 @@ namespace cpputils {
         return false;
     }
 
+    /*!
+        Unloads the library and returns \c true if the library could be unloaded.
+    */
     bool Library::close() {
         if (_impl->close()) {
             _impl->path.clear();
@@ -178,22 +190,37 @@ namespace cpputils {
         return false;
     }
 
+    /*!
+        Returns \c true if the library is open.
+    */
     bool Library::isOpen() const {
         return _impl->hDll != nullptr;
     }
 
+    /*!
+        Returns the opened library path.
+    */
     fs::path Library::path() const {
         return _impl->path;
     }
 
+    /*!
+        Returns the opened library handle.
+    */
     void *Library::handle() const {
         return _impl->hDll;
     }
 
+    /*!
+        Returns the address of the exported symbol \a name, the library must be opened.
+    */
     void *Library::resolve(const char *name) const {
         return _impl->resolve(name);
     }
 
+    /*!
+        Returns the error message of the last failed library operation.
+    */
     std::string Library::lastError() const {
         return _impl->sysErrorMessage(false);
     }
@@ -219,6 +246,9 @@ namespace cpputils {
     }
 #endif
 
+    /*!
+        Returns \c true if \a path has a valid suffix for a loadable library.
+    */
     bool Library::isLibrary(const fs::path &path) {
 #if defined(_WIN32)
         auto fileName = path.wstring();
@@ -247,6 +277,10 @@ namespace cpputils {
 #endif
     }
 
+    /*!
+        Sets the library path hint as \a path, which is helpful when searching a loading library's
+        dependencies.
+    */
     fs::path Library::setLibraryPath(const fs::path &path) {
 #ifdef _WIN32
         std::wstring org = winGetFullDllDirectory();
@@ -258,6 +292,9 @@ namespace cpputils {
         return org;
     }
 
+    /*!
+        Returns the path of the library that the address \a addr locates in.
+    */
     fs::path Library::locateLibraryPath(const void *addr) {
 #ifdef _WIN32
         HMODULE hModule = nullptr;

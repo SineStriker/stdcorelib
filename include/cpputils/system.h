@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <filesystem>
 
 #include <cpputils/global.h>
 
@@ -10,9 +11,9 @@ namespace cpputils {
 
     class CPPUTILS_EXPORT System {
     public:
-        static std::string applicationFileName();
-        static std::string applicationDirectory();
-        static std::string applicationPath();
+        static std::filesystem::path applicationPath();
+        static std::filesystem::path applicationDirectory();
+        static std::filesystem::path applicationFileName();
         static std::string applicationName();
 
         static std::vector<std::string> commandLineArguments();

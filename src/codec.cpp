@@ -10,6 +10,9 @@
 
 namespace cpputils {
 
+    /*!
+        Returns the UTF-8 encoded string converted from wide string.
+    */
     std::string wideToUtf8(const wchar_t *s, int size) {
 #ifdef _WIN32
         if (size < 0) {
@@ -33,6 +36,9 @@ namespace cpputils {
 #endif
     }
 
+    /*!
+        Returns the wide string converted from UTF-8 encoded string.
+    */
     std::wstring utf8ToWide(const char *s, int size) {
 #ifdef _WIN32
         if (size < 0) {
@@ -56,6 +62,9 @@ namespace cpputils {
     }
 
 #ifdef _WIN32
+    /*!
+        Returns the local 8 bit string converted from UTF-8 encoded string, Windows only.
+    */
     std::string ansiToUtf8(const char *s, int size) {
         if (size < 0) {
             size = (int) strlen(s);
