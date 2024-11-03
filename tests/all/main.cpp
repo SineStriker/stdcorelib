@@ -8,6 +8,7 @@ using namespace cpputils;
 
 int main(int /* argc */, char * /* argv */[]) {
 
+    // 1
     {
         u8printf("[Command line arguments]\n");
         auto args = System::commandLineArguments();
@@ -17,6 +18,7 @@ int main(int /* argc */, char * /* argv */[]) {
         u8printf("\n");
     }
 
+    // 2
     {
         u8printf("[Application info]\n");
         u8printf("File path: %s\n", System::applicationPath().c_str());
@@ -27,6 +29,5 @@ int main(int /* argc */, char * /* argv */[]) {
     }
 
     u8printf("OK\n");
-
     return 0;
 }

@@ -1,5 +1,5 @@
-#ifndef CPPUTILSPLUGINFACTORY_H
-#define CPPUTILSPLUGINFACTORY_H
+#ifndef CPPUTILS_PLUGINFACTORY_H
+#define CPPUTILS_PLUGINFACTORY_H
 
 #include <vector>
 #include <filesystem>
@@ -42,4 +42,4 @@ namespace cpputils {
 
 }
 
-#endif // CPPUTILSPLUGINFACTORY_H
+#endif // CPPUTILS_PLUGINFACTORY_H

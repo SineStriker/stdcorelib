@@ -1,5 +1,5 @@
-#ifndef STRINGUTIL_H
-#define STRINGUTIL_H
+#ifndef CPPUTILS_STRINGUTIL_H
+#define CPPUTILS_STRINGUTIL_H
 
 #include <string_view>
 #include <sstream>
@@ -87,4 +87,4 @@ namespace cpputils {
 
 }
 
-#endif // STRINGUTIL_H
+#endif // CPPUTILS_STRINGUTIL_H

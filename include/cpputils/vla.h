@@ -49,9 +49,9 @@ namespace cpputils_private::vla {
  *
  */
 #  define VLA_NEW(TYPE, NAME, SIZE)                                                                \
-      VLA_ALLOC(TYPE, NAME, (SIZE));                                                               \
-      ::cpputils_private::vla::ScopeGuard<TYPE> NAME##_VLA_GUARD__(NAME, (SIZE));
-
+      const size_t NAME##_VLA_SIZE__ = (SIZE);                                                     \
+      VLA_ALLOC(TYPE, NAME, NAME##_VLA_SIZE__);                                                    \
+      ::cpputils_private::vla::ScopeGuard<TYPE> NAME##_VLA_GUARD__(NAME, NAME##_VLA_SIZE__);
 #endif
 
 #endif // CPPUTILS_VLA_H

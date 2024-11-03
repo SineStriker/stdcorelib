@@ -1,5 +1,5 @@
-#ifndef CPPUTILSPLUGINFACTORY_P_H
-#define CPPUTILSPLUGINFACTORY_P_H
+#ifndef CPPUTILS_PLUGINFACTORY_P_H
+#define CPPUTILS_PLUGINFACTORY_P_H
 
 #include <shared_mutex>
 #include <unordered_map>
@@ -32,4 +32,4 @@ namespace cpputils {
 
 }
 
-#endif // CPPUTILSPLUGINFACTORY_P_H
+#endif // CPPUTILS_PLUGINFACTORY_P_H
