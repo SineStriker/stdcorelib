@@ -87,31 +87,30 @@ namespace stdc {
         Returns multi-byte string converted from wide string.
     */
     std::wstring win8bitToWide(const std::string_view &s, UINT cp, DWORD flags) {
-        const int utf16Length = ::MultiByteToWideChar(cp, flags, s.data(), s.size(), nullptr, 0);
-        if (utf16Length <= 0) {
+        auto size = ::MultiByteToWideChar(cp, flags, s.data(), s.size(), nullptr, 0);
+        if (size <= 0) {
             return {};
         }
-        std::wstring utf16Str;
-        utf16Str.resize(utf16Length);
-        std::ignore =
-            ::MultiByteToWideChar(cp, flags, s.data(), s.size(), utf16Str.data(), utf16Length);
-        return utf16Str;
+        std::wstring res;
+        res.resize(size);
+        std::ignore = ::MultiByteToWideChar(cp, flags, s.data(), s.size(), res.data(), size);
+        return res;
     }
 
     /*!
         Returns wide string converted from multi-byte string.
     */
     std::string winWideTo8bit(const std::wstring_view &s, UINT cp, DWORD flags) {
-        const int utf8Length =
+        auto size =
             ::WideCharToMultiByte(cp, flags, s.data(), s.size(), nullptr, 0, nullptr, nullptr);
-        if (utf8Length <= 0) {
+        if (size <= 0) {
             return {};
         }
-        std::string utf8Str;
-        utf8Str.resize(utf8Length);
-        std::ignore = ::WideCharToMultiByte(cp, flags, s.data(), s.size(), utf8Str.data(),
-                                            utf8Length, nullptr, nullptr);
-        return utf8Str;
+        std::string res;
+        res.resize(size);
+        std::ignore = ::WideCharToMultiByte(cp, flags, s.data(), s.size(), res.data(), size,
+                                            nullptr, nullptr);
+        return res;
     }
 
 }
