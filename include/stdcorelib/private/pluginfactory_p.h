@@ -10,7 +10,7 @@
 
 namespace stdc {
 
-    class PluginFactory::Impl {
+    class STDCORELIB_EXPORT PluginFactory::Impl {
     public:
         explicit Impl(PluginFactory *decl);
         virtual ~Impl();
