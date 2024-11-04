@@ -26,6 +26,8 @@ namespace stdc {
 
     STDCORELIB_EXPORT std::string winWideTo8bit(const std::wstring_view &s, UINT cp, DWORD flags);
 
+    STDCORELIB_EXPORT RTL_OSVERSIONINFOW winSystemVersion();
+
 }
 
 #endif // STDCORELIB_WINDOWS_UTILS_H

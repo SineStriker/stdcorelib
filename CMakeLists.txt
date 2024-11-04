@@ -54,6 +54,23 @@ set(STDCORELIB_INSTALL_NAME ${PROJECT_NAME})
 # ----------------------------------
 file(GLOB_RECURSE _src include/*.h src/*.h src/*.cpp)
 
+if(NOT WIN32)
+    set(_temp)
+
+    foreach(_item IN LISTS _src)
+        get_filename_component(_name ${_item} NAME)
+
+        if(_name MATCHES "^windows_.+")
+            continue()
+        endif()
+
+        list(APPEND _temp ${_item})
+    endforeach()
+
+    set(_src ${_temp})
+    unset(_temp)
+endif()
+
 if(STDCORELIB_BUILD_STATIC)
     add_library(${PROJECT_NAME} STATIC)
     target_compile_definitions(${PROJECT_NAME} PUBLIC STDCORELIB_STATIC)

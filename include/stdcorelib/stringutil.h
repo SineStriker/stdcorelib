@@ -42,49 +42,49 @@ namespace stdc {
 
     template <>
     struct string_conv<std::string> {
-        std::string operator()(const std::string &s) {
+        std::string operator()(const std::string &s) const {
             return s;
         }
     };
 
     template <>
     struct string_conv<std::string_view> {
-        std::string operator()(const std::string_view &s) {
+        std::string operator()(const std::string_view &s) const {
             return std::string(s.data(), s.size());
         }
     };
 
     template <>
     struct string_conv<char *> {
-        std::string operator()(const char *s) {
+        std::string operator()(const char *s) const {
             return s;
         }
     };
 
     template <>
     struct string_conv<std::wstring> {
-        std::string operator()(const std::wstring &s) {
+        std::string operator()(const std::wstring &s) const {
             return wideToUtf8(s);
         }
     };
 
     template <>
     struct string_conv<std::wstring_view> {
-        std::string operator()(const std::wstring_view &s) {
+        std::string operator()(const std::wstring_view &s) const {
             return wideToUtf8(s.data(), s.size());
         }
     };
 
     template <>
     struct string_conv<wchar_t *> {
-        std::string operator()(const wchar_t *s) {
+        std::string operator()(const wchar_t *s) const {
             return wideToUtf8(s);
         }
     };
 
     template <>
     struct string_conv<std::filesystem::path> {
-        std::string operator()(const std::filesystem::path &path) {
+        std::string operator()(const std::filesystem::path &path) const {
             return normalizePathSeparators(pathToUtf8(path), true);
         }
     };

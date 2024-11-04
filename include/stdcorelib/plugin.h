@@ -21,8 +21,8 @@ namespace stdc {
 
 }
 
-#define STDCORELIB_EXPORT_PLUGIN(PLUGIN_NAME)                                                           \
-    extern "C" STDCORELIB_DECL_EXPORT stdc::Plugin *stdcorelib_plugin_instance() {                          \
+#define STDCORELIB_EXPORT_PLUGIN(PLUGIN_NAME)                                                      \
+    extern "C" STDCORELIB_DECL_EXPORT stdc::Plugin *stdcorelib_plugin_instance() {                 \
         static PLUGIN_NAME _instance;                                                              \
         return &_instance;                                                                         \
     }
