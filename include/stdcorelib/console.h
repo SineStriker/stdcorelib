@@ -31,6 +31,12 @@ namespace stdc {
         template <class... Args>
         static inline void print(int foreground, int background, const std::string &format,
                                  Args &&...args) {
+            printf(foreground, background, "%s", formatTextN(format, args...).c_str());
+        }
+
+        template <class... Args>
+        static inline void println(int foreground, int background, const std::string &format,
+                                   Args &&...args) {
             printf(foreground, background, "%s\n", formatTextN(format, args...).c_str());
         }
     };
@@ -41,6 +47,11 @@ namespace stdc {
 
     template <class... Args>
     static inline void u8print(const std::string &format, Args &&...args) {
+        u8printf("%s", formatTextN(format, args...).c_str());
+    }
+
+    template <class... Args>
+    static inline void u8println(const std::string &format, Args &&...args) {
         u8printf("%s\n", formatTextN(format, args...).c_str());
     }
 

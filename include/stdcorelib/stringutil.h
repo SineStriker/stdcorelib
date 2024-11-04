@@ -48,6 +48,13 @@ namespace stdc {
     };
 
     template <>
+    struct string_conv<std::string_view> {
+        std::string operator()(const std::string_view &s) {
+            return std::string(s.data(), s.size());
+        }
+    };
+
+    template <>
     struct string_conv<char *> {
         std::string operator()(const char *s) {
             return s;
@@ -58,6 +65,13 @@ namespace stdc {
     struct string_conv<std::wstring> {
         std::string operator()(const std::wstring &s) {
             return wideToUtf8(s);
+        }
+    };
+
+    template <>
+    struct string_conv<std::wstring_view> {
+        std::string operator()(const std::wstring_view &s) {
+            return wideToUtf8(s.data(), s.size());
         }
     };
 
