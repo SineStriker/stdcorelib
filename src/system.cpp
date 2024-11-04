@@ -5,6 +5,8 @@
 #elif defined(__APPLE__)
 #  include <crt_externs.h>
 #else
+#  include <limits.h>
+// 
 #  include <fstream>
 #endif
 

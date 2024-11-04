@@ -6,6 +6,7 @@
 
 #include <mutex>
 #include <cstdio>
+#include <cstring>
 
 namespace stdc {
 
@@ -20,8 +21,8 @@ namespace stdc {
             : consoleChanged(!(foreground == Console::Default && background == Console::Default)) {
             global_mtx().lock();
 #ifdef _WIN32
-            _codepage = ::GetConsoleOutputCP();
-            ::SetConsoleOutputCP(CP_UTF8);
+            _codepage = ::GetConsoleCP();
+            ::SetConsoleCP(CP_UTF8);
 
             if (consoleChanged) {
                 WORD winColor = 0;
@@ -87,29 +88,29 @@ namespace stdc {
             if (consoleChanged) {
                 const char *strList[3];
                 int strListSize = 0;
-                if (foreground != ConsoleOutput::Default) {
-                    bool light = foreground & ConsoleOutput::Intensified;
+                if (foreground != Console::Default) {
+                    bool light = foreground & Console::Intensified;
                     const char *colorStr = nullptr;
                     switch (foreground & 0xF) {
-                        case ConsoleOutput::Red:
+                        case Console::Red:
                             colorStr = light ? "91" : "31";
                             break;
-                        case ConsoleOutput::Green:
+                        case Console::Green:
                             colorStr = light ? "92" : "32";
                             break;
-                        case ConsoleOutput::Blue:
+                        case Console::Blue:
                             colorStr = light ? "94" : "34";
                             break;
-                        case ConsoleOutput::Yellow:
+                        case Console::Yellow:
                             colorStr = light ? "93" : "33";
                             break;
-                        case ConsoleOutput::Purple:
+                        case Console::Purple:
                             colorStr = light ? "95" : "35";
                             break;
-                        case ConsoleOutput::Cyan:
+                        case Console::Cyan:
                             colorStr = light ? "96" : "36";
                             break;
-                        case ConsoleOutput::White:
+                        case Console::White:
                             colorStr = light ? "97" : "37";
                             break;
                         default:
@@ -120,29 +121,29 @@ namespace stdc {
                         strListSize++;
                     }
                 }
-                if (background != ConsoleOutput::Default) {
-                    bool light = background & ConsoleOutput::Intensified;
+                if (background != Console::Default) {
+                    bool light = background & Console::Intensified;
                     const char *colorStr = nullptr;
                     switch (background & 0xF) {
-                        case ConsoleOutput::Red:
+                        case Console::Red:
                             colorStr = light ? "101" : "41";
                             break;
-                        case ConsoleOutput::Green:
+                        case Console::Green:
                             colorStr = light ? "102" : "42";
                             break;
-                        case ConsoleOutput::Blue:
+                        case Console::Blue:
                             colorStr = light ? "104" : "44";
                             break;
-                        case ConsoleOutput::Yellow:
+                        case Console::Yellow:
                             colorStr = light ? "103" : "43";
                             break;
-                        case ConsoleOutput::Purple:
+                        case Console::Purple:
                             colorStr = light ? "105" : "45";
                             break;
-                        case ConsoleOutput::Cyan:
+                        case Console::Cyan:
                             colorStr = light ? "106" : "46";
                             break;
-                        case ConsoleOutput::White:
+                        case Console::White:
                             colorStr = light ? "107" : "47";
                             break;
                         default:
@@ -178,7 +179,7 @@ namespace stdc {
 
         ~PrintScopeGuard() {
 #ifdef _WIN32
-            ::SetConsoleOutputCP(_codepage);
+            ::SetConsoleCP(_codepage);
 
             if (consoleChanged) {
                 SetConsoleTextAttribute(_hConsole, _csbi.wAttributes);

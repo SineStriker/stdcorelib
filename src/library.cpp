@@ -68,10 +68,9 @@ namespace stdc {
 #endif
     }
 
-    static constexpr const DWORD g_EnglishLangId = MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US);
-
     std::string Library::Impl::sysErrorMessage(bool nativeLanguage) {
 #ifdef _WIN32
+        static constexpr const DWORD g_EnglishLangId = MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US);
         return wideToUtf8(winFormatError(::GetLastError(), nativeLanguage ? 0 : g_EnglishLangId));
 #else
         auto err = dlerror();

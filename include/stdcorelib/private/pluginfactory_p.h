@@ -23,7 +23,7 @@ namespace stdc {
 
         std::unordered_map<std::string, std::vector<std::filesystem::path>> pluginPaths;
         std::unordered_set<Plugin *> staticPlugins;
-        mutable std::unordered_map<std::filesystem::path, Library *> libraryInstances;
+        mutable std::unordered_map<std::filesystem::path::string_type, Library *> libraryInstances;
         mutable std::unordered_set<std::string> pluginsDirty;
         mutable std::unordered_map<std::string, std::unordered_map<std::string, Plugin *>>
             allPlugins;
