@@ -67,7 +67,11 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-target_include_directories(${PROJECT_NAME} PRIVATE src include/stdcorelib)
+target_include_directories(${PROJECT_NAME} PRIVATE
+    src
+    include/stdcorelib
+    include/stdcorelib/private
+)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_EXTENSIONS OFF
