@@ -21,8 +21,8 @@ namespace stdc {
             : consoleChanged(!(foreground == Console::Default && background == Console::Default)) {
             global_mtx().lock();
 #ifdef _WIN32
-            _codepage = ::GetConsoleCP();
-            ::SetConsoleCP(CP_UTF8);
+            _codepage = ::GetConsoleOutputCP();
+            ::SetConsoleOutputCP(CP_UTF8);
 
             if (consoleChanged) {
                 WORD winColor = 0;
@@ -179,7 +179,7 @@ namespace stdc {
 
         ~PrintScopeGuard() {
 #ifdef _WIN32
-            ::SetConsoleCP(_codepage);
+            ::SetConsoleOutputCP(_codepage);
 
             if (consoleChanged) {
                 SetConsoleTextAttribute(_hConsole, _csbi.wAttributes);
