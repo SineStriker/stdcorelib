@@ -21,23 +21,33 @@
 #  endif
 #endif
 
-#define STDCORELIB_DISABLE_COPY(Class)                                                               \
+#define STDCORELIB_DISABLE_COPY(Class)                                                             \
     Class(const Class &) = delete;                                                                 \
     Class &operator=(const Class &) = delete;
 
-#define STDCORELIB_DISABLE_MOVE(Class)                                                               \
+#define STDCORELIB_DISABLE_MOVE(Class)                                                             \
     Class(Class &&) = delete;                                                                      \
     Class &operator=(Class &&) = delete;
 
-#define STDCORELIB_DISABLE_COPY_MOVE(Class)                                                          \
-    STDCORELIB_DISABLE_COPY(Class)                                                                   \
+#define STDCORELIB_DISABLE_COPY_MOVE(Class)                                                        \
+    STDCORELIB_DISABLE_COPY(Class)                                                                 \
     STDCORELIB_DISABLE_MOVE(Class)
 
 #if defined(__GNUC__) || defined(__clang__)
-#  define STDCORELIB_PRINTF_FORMAT(fmtpos, attrpos)                                                  \
+#  define STDCORELIB_PRINTF_FORMAT(fmtpos, attrpos)                                                \
       __attribute__((__format__(__printf__, fmtpos, attrpos)))
 #else
 #  define STDCORELIB_PRINTF_FORMAT(fmtpos, attrpos)
+#endif
+
+#if defined(_MSC_VER)
+#  define STDCORELIB_NOINLINE __declspec(noinline)
+#  define STDCORELIB_INLINE   __forceinline
+#  define STDCORELIB_USED
+#else
+#  define STDCORELIB_NOINLINE __attribute__((noinline))
+#  define STDCORELIB_INLINE   __attribute__((always_inline))
+#  define STDCORELIB_USED     __attribute__((used))
 #endif
 
 #ifndef _TSTR
