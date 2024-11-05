@@ -2,11 +2,15 @@
 
 #ifdef _WIN32
 #  include "windows_utils.h"
+// ...
+#  include <Psapi.h>
 #elif defined(__APPLE__)
 #  include <crt_externs.h>
+#  include <mach/mach.h>
 #else
 #  include <limits.h>
-// 
+#  include <unistd.h>
+//
 #  include <fstream>
 #endif
 
@@ -136,7 +140,7 @@ namespace stdc {
         }
 #else
         std::ifstream file("/proc/self/cmdline", std::ios::in);
-        if (file.fail())
+        if (!file.is_open())
             return {};
         std::string s;
         while (std::getline(file, s, '\0')) {
@@ -185,6 +189,35 @@ namespace stdc {
     std::vector<std::string> System::commandLineArguments() {
         static auto result = __command_line_arguments();
         return result;
+    }
+
+    /*
+        Returns the memory usage of current process in bytes.
+    */
+    [[maybe_unused]] static size_t processMemoryUsage() {
+#ifdef _WIN32
+        PROCESS_MEMORY_COUNTERS pmc;
+        if (::GetProcessMemoryInfo(::GetCurrentProcess(), &pmc, sizeof(pmc))) {
+            return pmc.WorkingSetSize; // 以字节为单位
+        }
+        return 0;
+#elif defined __APPLE__
+        mach_task_basic_info info;
+        mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+        if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t) &info, &count) ==
+            KERN_SUCCESS) {
+            return info.resident_size;
+        }
+        return 0;
+#else
+        std::ifstream statm("/proc/self/statm");
+        if (!statm.is_open()) {
+            return 0;
+        }
+        size_t size, resident, shared, text, lib, data, dt;
+        statm >> size >> resident >> shared >> text >> lib >> data >> dt;
+        return resident * sysconf(_SC_PAGESIZE);
+#endif
     }
 
 }

@@ -55,6 +55,10 @@ namespace stdc {
         u8printf("%s\n", formatTextN(format, args...).c_str());
     }
 
+    static inline void u8println() {
+        u8printf("\n");
+    }
+
 }
 
 #endif // STDCORELIB_CONSOLE_H
