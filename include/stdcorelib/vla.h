@@ -69,7 +69,7 @@ namespace stdc {
                 ptr = reinterpret_cast<T *>(malloc(sizeof(T) * size));
             }
             if constexpr (!std::is_trivial_v<T>) {
-                auto p = reinterpret_cast<T *>(arr);
+                auto p = ptr;
                 auto q = p + size;
                 while (p != q) {
                     new (p) T();
