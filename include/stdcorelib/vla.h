@@ -71,8 +71,9 @@ namespace stdc {
             if constexpr (!std::is_trivial_v<T>) {
                 auto p = reinterpret_cast<T *>(arr);
                 auto q = p + size;
-                while (p++ != q) {
+                while (p != q) {
                     new (p) T();
+                    p++;
                 }
             }
         }
