@@ -26,7 +26,14 @@ namespace stdc {
         if (v.empty())
             return {};
 
+        size_t length = 0;
+        for (const auto &item : v) {
+            length += item.size();
+        }
+        length += delimiter.size() * (v.size() - 1);
+
         std::string res;
+        res.reserve(length);
         for (int i = 0; i < v.size() - 1; ++i) {
             res.append(v[i]);
             res.append(delimiter);

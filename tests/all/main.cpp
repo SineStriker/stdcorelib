@@ -10,28 +10,6 @@
 
 using namespace stdc;
 
-static void test_to_string() {
-    // const char *
-    {
-        const char *s = "123";
-        to_string(s);
-    }
-
-    // const char []
-    {
-        const char s[] = {'a', 'b', 'c'};
-        to_string(s);
-        to_string("123");
-    }
-
-    // char *
-    {
-        char *s = new char[10];
-        to_string(s);
-        delete[] s;
-    }
-}
-
 static void tst_CommandLine() {
     auto args = System::commandLineArguments();
     for (int i = 0; i < args.size(); ++i) {
@@ -68,17 +46,6 @@ static void tst_ConsoleColor() {
 }
 
 int main(int /* argc */, char * /* argv */[]) {
-    VarLengthArray<std::string> v(4);
-    v[0] = "0";
-    v[1] = "1";
-    v[2] = "2";
-    v[3] = "3";
-    u8printf("%s\n", v[1].c_str());
-    v.resize(2);
-    v.resize(4);
-    u8printf("%lld\n", v[3].size());
-    return 0;
-
     // 1 cmd line
     {
         u8printf("[Command line arguments]\n");

@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstdint>
+#include <cstring>
 #include <cassert>
 #include <iterator>
 #include <type_traits>
@@ -356,7 +357,7 @@ namespace stdc {
     template <class T, int Prealloc>
     template <int Prealloc2>
     void VarLengthArray<T, Prealloc>::shared_move_construct(VarLengthArray<T, Prealloc2> &&other) {
-        if (other.is_stack_ptr()) {
+        if (other.is_stack_ptr() || s < StackLength) {
             alloc_impl();
             if constexpr (!std::is_trivial_v<T>) {
                 construct_move_impl(other.begin(), other.end());
@@ -390,7 +391,7 @@ namespace stdc {
     template <class T, int Prealloc>
     template <int Prealloc2>
     void VarLengthArray<T, Prealloc>::shared_move_assign(VarLengthArray<T, Prealloc2> &&other) {
-        if (other.is_stack_ptr()) {
+        if (other.is_stack_ptr() || other.s < StackLength) {
             destruct_impl();
             if (s != other.s) {
                 free_impl();
