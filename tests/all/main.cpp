@@ -6,6 +6,8 @@
 #include <stdcorelib/path.h>
 #include <stdcorelib/vla.h>
 
+#include <stdcorelib/orderedmap.h>
+
 using namespace stdc;
 
 static void test_to_string() {
@@ -66,6 +68,16 @@ static void tst_ConsoleColor() {
 }
 
 int main(int /* argc */, char * /* argv */[]) {
+    VarLengthArray<std::string> v(4);
+    v[0] = "0";
+    v[1] = "1";
+    v[2] = "2";
+    v[3] = "3";
+    u8printf("%s\n", v[1].c_str());
+    v.resize(2);
+    v.resize(4);
+    u8printf("%lld\n", v[3].size());
+    return 0;
 
     // 1 cmd line
     {

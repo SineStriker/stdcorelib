@@ -31,6 +31,19 @@
 *.out
 *.app
 
-build*/
-.cache
+build-src*
+build/
+cmake-build*
+*.user
+*.lnk
+_workingDir*
 .vscode
+.idea
+.cache
+cache
+.vs
+out/
+CMakeSettings.json
+/vcpkg
+/data
+/*.natvis
