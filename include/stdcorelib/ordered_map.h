@@ -1,5 +1,5 @@
-#ifndef STDCORELIB_ORDEREDMAP_H
-#define STDCORELIB_ORDEREDMAP_H
+#ifndef STDCORELIB_ORDERED_MAP_H
+#define STDCORELIB_ORDERED_MAP_H
 
 #include <list>
 #include <vector>
@@ -14,7 +14,7 @@
 namespace stdc {
 
     template <class K, class V, template <class, class, class...> class Map = std::unordered_map>
-    class OrderedMap {
+    class ordered_map {
     private:
         std::list<std::pair<K, V>> m_list;
         Map<K, typename decltype(m_list)::iterator> m_map;
@@ -25,20 +25,20 @@ namespace stdc {
         typedef typename decltype(m_list)::difference_type difference_type;
         typedef int size_type;
 
-        OrderedMap() = default;
+        ordered_map() = default;
 
-        OrderedMap(const OrderedMap &other) {
+        ordered_map(const ordered_map &other) {
             for (const auto &item : other.m_list) {
                 append(item.first, item.second);
             }
         }
 
-        OrderedMap(OrderedMap &&other) noexcept {
+        ordered_map(ordered_map &&other) noexcept {
             m_list = std::move(other.m_list);
             m_map = std::move(other.m_map);
         }
 
-        OrderedMap &operator=(const OrderedMap &other) {
+        ordered_map &operator=(const ordered_map &other) {
             clear();
             for (const auto &item : other.m_list) {
                 append(item.first, item.second);
@@ -46,29 +46,29 @@ namespace stdc {
             return *this;
         }
 
-        OrderedMap &operator=(OrderedMap &&other) noexcept {
+        ordered_map &operator=(ordered_map &&other) noexcept {
             m_list = std::move(other.m_list);
             m_map = std::move(other.m_map);
             return *this;
         }
 
-        OrderedMap(std::initializer_list<std::pair<K, V>> list) {
+        ordered_map(std::initializer_list<std::pair<K, V>> list) {
             for (typename std::initializer_list<std::pair<K, V>>::const_iterator it = list.begin();
                  it != list.end(); ++it)
                 append(it->first, it->second);
         }
 
         template <typename InputIterator>
-        OrderedMap(InputIterator f, InputIterator l) {
+        ordered_map(InputIterator f, InputIterator l) {
             for (; f != l; ++f)
                 append(f.key(), f.value());
         }
 
-        inline bool operator==(const OrderedMap &other) const {
+        inline bool operator==(const ordered_map &other) const {
             return m_list == other.m_list;
         }
 
-        inline bool operator!=(const OrderedMap &other) const {
+        inline bool operator!=(const ordered_map &other) const {
             return m_list != other.m_list;
         }
 
@@ -125,7 +125,7 @@ namespace stdc {
 
             typename decltype(m_list)::iterator i;
 
-            friend class OrderedMap;
+            friend class ordered_map;
             friend class const_iterator;
         };
 
@@ -184,7 +184,7 @@ namespace stdc {
 
             typename decltype(m_list)::const_iterator i;
 
-            friend class OrderedMap;
+            friend class ordered_map;
         };
 
         class key_iterator {
@@ -437,4 +437,4 @@ namespace stdc {
 
 }
 
-#endif // STDCORELIB_ORDEREDMAP_H
+#endif // STDCORELIB_ORDERED_MAP_H

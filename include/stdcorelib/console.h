@@ -3,8 +3,7 @@
 
 #include <cstdarg>
 
-#include <stdcorelib/global.h>
-#include <stdcorelib/format.h>
+#include <stdcorelib/strings.h>
 
 namespace stdc {
 
@@ -31,13 +30,13 @@ namespace stdc {
         template <class... Args>
         static inline void print(int foreground, int background, const std::string &format,
                                  Args &&...args) {
-            printf(foreground, background, "%s", formatTextN(format, args...).c_str());
+            printf(foreground, background, "%s", formatN(format, args...).c_str());
         }
 
         template <class... Args>
         static inline void println(int foreground, int background, const std::string &format,
                                    Args &&...args) {
-            printf(foreground, background, "%s\n", formatTextN(format, args...).c_str());
+            printf(foreground, background, "%s\n", formatN(format, args...).c_str());
         }
     };
 
@@ -46,16 +45,16 @@ namespace stdc {
     STDCORELIB_EXPORT int u8vprintf(const char *fmt, va_list args);
 
     template <class... Args>
-    static inline void u8print(const std::string &format, Args &&...args) {
+    inline void u8print(const std::string &format, Args &&...args) {
         u8printf("%s", formatTextN(format, args...).c_str());
     }
 
     template <class... Args>
-    static inline void u8println(const std::string &format, Args &&...args) {
+    inline void u8println(const std::string &format, Args &&...args) {
         u8printf("%s\n", formatTextN(format, args...).c_str());
     }
 
-    static inline void u8println() {
+    inline void u8println() {
         u8printf("\n");
     }
 

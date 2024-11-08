@@ -6,7 +6,7 @@
 #include <stdcorelib/path.h>
 #include <stdcorelib/vla.h>
 
-#include <stdcorelib/orderedmap.h>
+#include <stdcorelib/ordered_map.h>
 
 using namespace stdc;
 
@@ -18,9 +18,9 @@ static void tst_CommandLine() {
 }
 
 static void tst_AppInfo() {
-    u8printf("File path: %s\n", pathToUtf8(System::applicationPath()).c_str());
-    u8printf("Directory: %s\n", pathToUtf8(System::applicationDirectory()).c_str());
-    u8printf("File name: %s\n", pathToUtf8(System::applicationFileName()).c_str());
+    u8printf("File path: %s\n", path::to_utf8(System::applicationPath()).c_str());
+    u8printf("Directory: %s\n", path::to_utf8(System::applicationDirectory()).c_str());
+    u8printf("File name: %s\n", path::to_utf8(System::applicationFileName()).c_str());
     u8printf("Name: %s\n", System::applicationName().c_str());
 }
 
