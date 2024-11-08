@@ -1,16 +1,6 @@
-#include <string>
-#include <vector>
-#include <cassert>
-
-#define BOOST_TEST_MAIN
+#include <stdcorelib/vla.h>
 
 #include <boost/test/unit_test.hpp>
-
-#include <stdcorelib/system.h>
-#include <stdcorelib/console.h>
-#include <stdcorelib/path.h>
-#include <stdcorelib/vla.h>
-#include <stdcorelib/orderedmap.h>
 
 using namespace stdc;
 
@@ -161,16 +151,16 @@ BOOST_AUTO_TEST_CASE(test_operators) {
     VarLengthArray<int> v2{1, 2, 3, 4};
     VarLengthArray<int, 4> v3{1, 2, 3, 4};
     VarLengthArray<int, 4> v4{1, 2, 3};
-    BOOST_VERIFY(v1 == v2);
-    BOOST_VERIFY(v2 == v3);
-    BOOST_VERIFY(v2 != v4);
+    BOOST_CHECK(v1 == v2);
+    BOOST_CHECK(v2 == v3);
+    BOOST_CHECK(v2 != v4);
 
     v2.resize(3);
-    BOOST_VERIFY(v2 == v4);
+    BOOST_CHECK(v2 == v4);
 
     v4.resize(4);
     v4[3] = 4;
-    BOOST_VERIFY(v1 == v4);
+    BOOST_CHECK(v1 == v4);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

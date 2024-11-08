@@ -80,9 +80,9 @@ namespace stdc {
                             break;
                     }
                 }
-                _hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-                GetConsoleScreenBufferInfo(_hConsole, &_csbi);
-                SetConsoleTextAttribute(_hConsole, winColor);
+                _hConsole = ::GetStdHandle(STD_OUTPUT_HANDLE);
+                ::GetConsoleScreenBufferInfo(_hConsole, &_csbi);
+                ::SetConsoleTextAttribute(_hConsole, winColor);
             }
 #else
             if (consoleChanged) {
@@ -158,7 +158,6 @@ namespace stdc {
                     char buf[20];
                     int bufSize = 0;
                     auto buf_puts = [&buf, &bufSize](const char *s) {
-                        auto len = strlen(s);
                         for (; *s != '\0'; ++s) {
                             buf[bufSize++] = *s;
                         }
@@ -182,7 +181,7 @@ namespace stdc {
             ::SetConsoleOutputCP(_codepage);
 
             if (consoleChanged) {
-                SetConsoleTextAttribute(_hConsole, _csbi.wAttributes);
+                ::SetConsoleTextAttribute(_hConsole, _csbi.wAttributes);
             }
 #else
             if (consoleChanged) {
@@ -226,7 +225,7 @@ namespace stdc {
 
     /*!
         \fn void print(int foreground, int background, const std::string &format, Args &&...args)
-        
+
         Print formatted string in UTF-8 encoding with specified colors.
     */
 

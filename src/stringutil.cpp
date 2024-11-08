@@ -3,6 +3,12 @@
 namespace stdc {
 
     /*!
+        \fn std::string to_string(T &&t)
+
+        Returns UTF-8 encoded string converted from supported classes.
+    */
+
+    /*!
         Splits the string into substring view list.
     */
     std::vector<std::string_view> split(const std::string_view &s,

@@ -13,7 +13,7 @@
 namespace stdc {
 
     template <class T>
-    struct string_conv;
+    struct string_cvt;
 
     template <class T>
     std::string to_string(T &&t) {
@@ -21,7 +21,7 @@ namespace stdc {
         if constexpr (std::is_pointer_v<T1>) {
             using T2 =
                 std::add_pointer_t<std::decay_t<std::remove_cv_t<std::remove_pointer_t<T1>>>>;
-            return string_conv<T2>()(t);
+            return string_cvt<T2>()(t);
         } else {
             using T2 = std::decay_t<std::remove_cv_t<T1>>;
             if constexpr (std::is_same_v<T2, bool>) {
@@ -35,55 +35,55 @@ namespace stdc {
                 oss << std::noshowpoint << t;
                 return oss.str();
             } else {
-                return string_conv<T2>()(t);
+                return string_cvt<T2>()(t);
             }
         }
     }
 
     template <>
-    struct string_conv<std::string> {
+    struct string_cvt<std::string> {
         std::string operator()(const std::string &s) const {
             return s;
         }
     };
 
     template <>
-    struct string_conv<std::string_view> {
+    struct string_cvt<std::string_view> {
         std::string operator()(const std::string_view &s) const {
-            return std::string(s.data(), s.size());
+            return {s.data(), s.size()};
         }
     };
 
     template <>
-    struct string_conv<char *> {
+    struct string_cvt<char *> {
         std::string operator()(const char *s) const {
             return s;
         }
     };
 
     template <>
-    struct string_conv<std::wstring> {
+    struct string_cvt<std::wstring> {
         std::string operator()(const std::wstring &s) const {
             return wideToUtf8(s);
         }
     };
 
     template <>
-    struct string_conv<std::wstring_view> {
+    struct string_cvt<std::wstring_view> {
         std::string operator()(const std::wstring_view &s) const {
-            return wideToUtf8(s.data(), s.size());
+            return wideToUtf8(s.data(), int(s.size()));
         }
     };
 
     template <>
-    struct string_conv<wchar_t *> {
+    struct string_cvt<wchar_t *> {
         std::string operator()(const wchar_t *s) const {
             return wideToUtf8(s);
         }
     };
 
     template <>
-    struct string_conv<std::filesystem::path> {
+    struct string_cvt<std::filesystem::path> {
         std::string operator()(const std::filesystem::path &path) const {
             return normalizePathSeparators(pathToUtf8(path), true);
         }

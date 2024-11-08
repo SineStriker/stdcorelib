@@ -13,7 +13,7 @@ namespace stdc {
 
         DWORD len = ::FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
                                          FORMAT_MESSAGE_IGNORE_INSERTS,
-                                     NULL, error, languageId, //
+                                     nullptr, error, languageId, //
                                      reinterpret_cast<LPWSTR>(&lpMsgBuf), 0, args);
 
         if (len) {
@@ -87,13 +87,13 @@ namespace stdc {
         Returns multi-byte string converted from wide string.
     */
     std::wstring win8bitToWide(const std::string_view &s, UINT cp, DWORD flags) {
-        auto size = ::MultiByteToWideChar(cp, flags, s.data(), s.size(), nullptr, 0);
+        auto size = ::MultiByteToWideChar(cp, flags, s.data(), int(s.size()), nullptr, 0);
         if (size <= 0) {
             return {};
         }
         std::wstring res;
         res.resize(size);
-        std::ignore = ::MultiByteToWideChar(cp, flags, s.data(), s.size(), res.data(), size);
+        std::ignore = ::MultiByteToWideChar(cp, flags, s.data(), int(s.size()), res.data(), size);
         return res;
     }
 
@@ -102,18 +102,18 @@ namespace stdc {
     */
     std::string winWideTo8bit(const std::wstring_view &s, UINT cp, DWORD flags) {
         auto size =
-            ::WideCharToMultiByte(cp, flags, s.data(), s.size(), nullptr, 0, nullptr, nullptr);
+            ::WideCharToMultiByte(cp, flags, s.data(), int(s.size()), nullptr, 0, nullptr, nullptr);
         if (size <= 0) {
             return {};
         }
         std::string res;
         res.resize(size);
-        std::ignore = ::WideCharToMultiByte(cp, flags, s.data(), s.size(), res.data(), size,
+        std::ignore = ::WideCharToMultiByte(cp, flags, s.data(), int(s.size()), res.data(), size,
                                             nullptr, nullptr);
         return res;
     }
 
-    static RTL_OSVERSIONINFOW __get_real_os_verison() {
+    static RTL_OSVERSIONINFOW __get_real_os_version() {
         HMODULE hMod = ::GetModuleHandleW(L"ntdll.dll");
         using RtlGetVersionPtr = NTSTATUS(WINAPI *)(PRTL_OSVERSIONINFOW);
         auto pRtlGetVersion =
@@ -128,7 +128,7 @@ namespace stdc {
         Returns system version from \c ntdll.dll runtime library.
     */
     RTL_OSVERSIONINFOW winSystemVersion() {
-        static auto result = __get_real_os_verison();
+        static auto result = __get_real_os_version();
         return result;
     }
 

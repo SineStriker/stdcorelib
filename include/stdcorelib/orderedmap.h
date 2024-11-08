@@ -13,7 +13,7 @@
 
 namespace stdc {
 
-    template <class K, class V, template <class, class...> class Map = std::unordered_map>
+    template <class K, class V, template <class, class, class...> class Map = std::unordered_map>
     class OrderedMap {
     private:
         std::list<std::pair<K, V>> m_list;
@@ -25,8 +25,7 @@ namespace stdc {
         typedef typename decltype(m_list)::difference_type difference_type;
         typedef int size_type;
 
-        OrderedMap() {
-        }
+        OrderedMap() = default;
 
         OrderedMap(const OrderedMap &other) {
             for (const auto &item : other.m_list) {

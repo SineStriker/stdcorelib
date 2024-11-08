@@ -1,4 +1,4 @@
-project(tst_vla)
+project(tst_auto)
 
 file(GLOB _src *.h *.cpp)
 add_executable(${PROJECT_NAME} ${_src})
