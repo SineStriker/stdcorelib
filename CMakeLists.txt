@@ -78,15 +78,20 @@ else()
     add_library(${PROJECT_NAME} SHARED)
 endif()
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE STDCORELIB_LIBRARY)
 target_sources(${PROJECT_NAME} PRIVATE ${_src})
-target_include_directories(${PROJECT_NAME} PUBLIC
+target_compile_definitions(${PROJECT_NAME} PRIVATE STDCORELIB_LIBRARY)
+target_include_directories(${PROJECT_NAME} INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+if (MSVC)
+    target_include_directories(${PROJECT_NAME} PRIVATE include/stdcorelib)
+else()
+    target_compile_options(${PROJECT_NAME} PRIVATE -idirafter ${CMAKE_CURRENT_SOURCE_DIR}/include/stdcorelib)
+endif()
 target_include_directories(${PROJECT_NAME} PRIVATE
     src
-    include/stdcorelib
+    include
     include/stdcorelib/private
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)

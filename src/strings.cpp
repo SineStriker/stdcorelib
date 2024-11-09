@@ -100,6 +100,7 @@ namespace stdc {
 #endif
         }
 
+#ifdef _WIN32
         /*!
             Returns wide string converted from local 8 bit string, Windows only.
         */
@@ -125,6 +126,7 @@ namespace stdc {
             }
             return winWideTo8bit(std::wstring_view(s, size), CP_ACP, WC_ERR_INVALID_CHARS);
         }
+#endif
 
         std::string strings::conv<std::filesystem::path>::operator()(
             const std::filesystem::path &path) const {
