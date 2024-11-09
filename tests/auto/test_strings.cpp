@@ -28,20 +28,20 @@ BOOST_AUTO_TEST_CASE(test_format) {
 
 BOOST_AUTO_TEST_CASE(test_codec_convert) {
     {
-        std::wstring actual = strings::conv<std::wstring>::from_utf8("HelloWorld");
+        std::wstring actual = wstring_conv::from_utf8("HelloWorld");
         std::wstring expect = L"HelloWorld";
         BOOST_CHECK(actual == expect);
     }
 
     {
-        std::string actual = strings::conv<std::wstring>::to_utf8(L"HelloWorld");
+        std::string actual = wstring_conv::to_utf8(L"HelloWorld");
         std::string expect = "HelloWorld";
         BOOST_CHECK(actual == expect);
     }
 
 #ifdef _WIN32
     {
-        std::wstring actual = strings::conv<std::wstring>::from_ansi("HelloWorld");
+        std::wstring actual = wstring_conv::from_ansi("HelloWorld");
         std::wstring expect = L"HelloWorld";
         BOOST_CHECK(actual == expect);
     }

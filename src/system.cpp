@@ -120,7 +120,7 @@ namespace stdc {
 
     static inline std::string __path2str(const PathString &s) {
 #ifdef _WIN32
-        return strings::conv<std::wstring>::to_utf8(s);
+        return wstring_conv::to_utf8(s);
 #else
         return s;
 #endif
@@ -135,7 +135,7 @@ namespace stdc {
             return {};
         res.reserve(argc);
         for (int i = 0; i != argc; ++i) {
-            res.push_back(strings::conv<std::wstring>::to_utf8(argvW[i]));
+            res.push_back(wstring_conv::to_utf8(argvW[i]));
         }
         ::LocalFree(argvW);
 #elif defined(__APPLE__)

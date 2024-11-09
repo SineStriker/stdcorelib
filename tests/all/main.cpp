@@ -6,8 +6,6 @@
 #include <stdcorelib/path.h>
 #include <stdcorelib/vla.h>
 
-#include <stdcorelib/ordered_map.h>
-
 using namespace stdc;
 
 static void tst_CommandLine() {

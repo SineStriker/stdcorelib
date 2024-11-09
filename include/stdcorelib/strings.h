@@ -10,6 +10,8 @@
 
 #include <stdcorelib/global.h>
 
+// This file is a supplement to the standard library and use the STL naming convention.
+
 namespace stdc {
 
     namespace strings {
@@ -131,11 +133,13 @@ namespace stdc {
 
     }
 
-    using strings::to_string;
-    using strings::join;
-    using strings::split;
     using strings::format;
     using strings::formatN;
+    using strings::join;
+    using strings::split;
+    using strings::to_string;
+
+    using wstring_conv = strings::conv<std::wstring>;
 
 }
 
