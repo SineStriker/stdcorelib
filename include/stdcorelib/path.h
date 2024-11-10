@@ -12,11 +12,6 @@ namespace stdc {
 
     namespace path {
 
-        STDCORELIB_EXPORT std::filesystem::path clean_path(const std::filesystem::path &path);
-
-        STDCORELIB_EXPORT std::string normalize_separators(const std::string &path,
-                                                           bool native = false);
-
         inline std::filesystem::path from_utf8(const std::string &s) {
 #ifdef _WIN32
             return wstring_conv::from_utf8(s);
@@ -31,6 +26,14 @@ namespace stdc {
 #else
             return path.string();
 #endif
+        }
+
+        STDCORELIB_EXPORT std::filesystem::path clean_path(const std::filesystem::path &path);
+
+        inline std::string normalize_separators(const std::filesystem::path &path,
+                                                bool native = false) {
+            return strings::conv<std::filesystem::path>::normalize_separators(to_utf8(path),
+                                                                              native);
         }
 
     }

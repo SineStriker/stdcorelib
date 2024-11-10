@@ -1,8 +1,9 @@
 #ifndef STDCORELIB_PLUGINFACTORY_H
 #define STDCORELIB_PLUGINFACTORY_H
 
-#include <vector>
+#include <memory>
 #include <filesystem>
+#include <vector>
 
 #include <stdcorelib/plugin.h>
 

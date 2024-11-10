@@ -66,9 +66,6 @@ namespace stdc {
             return tokens;
         }
 
-        /*!
-            Returns the wide string converted from UTF-8 encoded string.
-        */
         std::wstring conv<std::wstring>::from_utf8(const char *s, int size) {
             if (size < 0) {
                 size = int(std::strlen(s));
@@ -83,9 +80,6 @@ namespace stdc {
 #endif
         }
 
-        /*!
-            Returns the UTF-8 encoded string converted from wide string.
-        */
         std::string conv<std::wstring>::to_utf8(const wchar_t *s, int size) {
             if (size < 0) {
                 size = int(std::wcslen(s));
@@ -101,9 +95,7 @@ namespace stdc {
         }
 
 #ifdef _WIN32
-        /*!
-            Returns wide string converted from local 8 bit string, Windows only.
-        */
+
         std::wstring conv<std::wstring>::from_ansi(const char *s, int size) {
             if (size < 0) {
                 size = int(std::strlen(s));
@@ -114,9 +106,6 @@ namespace stdc {
             return win8bitToWide(std::string_view(s, size), CP_ACP, MB_ERR_INVALID_CHARS);
         }
 
-        /*!
-            Returns local 8 bit string converted from wide string, Windows only.
-        */
         std::string conv<std::wstring>::to_ansi(const wchar_t *s, int size) {
             if (size < 0) {
                 size = int(std::wcslen(s));
@@ -128,9 +117,20 @@ namespace stdc {
         }
 #endif
 
-        std::string strings::conv<std::filesystem::path>::operator()(
-            const std::filesystem::path &path) const {
-            return path::normalize_separators(path::to_utf8(path), true);
+        std::string conv<std::filesystem::path>::normalize_separators(const std::string &utf8_path,
+                                                                      bool native) {
+            std::string res = utf8_path;
+#if _WIN32
+            if (native) {
+                std::replace(res.begin(), res.end(), '/', '\\');
+            } else {
+                std::replace(res.begin(), res.end(), '\\', '/');
+            }
+#else
+            (void) native;
+            std::replace(res.begin(), res.end(), '\\', '/');
+#endif
+            return res;
         }
 
         /*!

@@ -21,51 +21,51 @@ namespace stdc {
 
         template <>
         struct conv<std::string> {
-            std::string operator()(const std::string &s) const {
+            inline std::string operator()(const std::string &s) const {
                 return s;
             }
         };
 
         template <>
         struct conv<std::string_view> {
-            std::string operator()(const std::string_view &s) const {
+            inline std::string operator()(const std::string_view &s) const {
                 return {s.data(), s.size()};
             }
         };
 
         template <>
         struct conv<char *> {
-            std::string operator()(const char *s) const {
+            inline std::string operator()(const char *s) const {
                 return s;
             }
         };
 
         template <>
-        struct STDCORELIB_EXPORT conv<std::wstring> {
+        struct conv<std::wstring> {
             inline std::string operator()(const std::wstring &s) const {
                 return to_utf8(s);
             }
 
-            static std::wstring from_utf8(const char *s, int size = -1);
+            STDCORELIB_EXPORT static std::wstring from_utf8(const char *s, int size = -1);
 
             static inline std::wstring from_utf8(const std::string &s) {
                 return from_utf8(s.c_str(), int(s.size()));
             }
 
-            static std::string to_utf8(const wchar_t *s, int size = -1);
+            STDCORELIB_EXPORT static std::string to_utf8(const wchar_t *s, int size = -1);
 
             static inline std::string to_utf8(const std::wstring &s) {
                 return to_utf8(s.c_str(), int(s.size()));
             }
 
 #ifdef _WIN32
-            static std::wstring from_ansi(const char *s, int size = -1);
+            STDCORELIB_EXPORT static std::wstring from_ansi(const char *s, int size = -1);
 
             static inline std::wstring from_ansi(const std::string &s) {
                 return from_ansi(s.c_str(), int(s.size()));
             }
 
-            static std::string to_ansi(const wchar_t *s, int size = -1);
+            STDCORELIB_EXPORT static std::string to_ansi(const wchar_t *s, int size = -1);
 
             static inline std::string to_ansi(const std::wstring &s) {
                 return to_ansi(s.c_str(), int(s.size()));
@@ -75,21 +75,30 @@ namespace stdc {
 
         template <>
         struct conv<std::wstring_view> {
-            std::string operator()(const std::wstring_view &s) const {
+            inline std::string operator()(const std::wstring_view &s) const {
                 return conv<std::wstring>::to_utf8(s.data(), int(s.size()));
             }
         };
 
         template <>
         struct conv<wchar_t *> {
-            std::string operator()(const wchar_t *s) const {
+            inline std::string operator()(const wchar_t *s) const {
                 return conv<std::wstring>::to_utf8(s);
             }
         };
 
         template <>
-        struct STDCORELIB_EXPORT conv<std::filesystem::path> {
-            std::string operator()(const std::filesystem::path &path) const;
+        struct conv<std::filesystem::path> {
+            inline std::string operator()(const std::filesystem::path &path) const {
+#ifdef _WIN32
+                return normalize_separators(conv<std::wstring>::to_utf8(path.wstring()), true);
+#else
+                return normalize_separators(path.string());
+#endif
+            }
+
+            STDCORELIB_EXPORT static std::string normalize_separators(const std::string &utf8_path,
+                                                                      bool native);
         };
 
         template <class T>
