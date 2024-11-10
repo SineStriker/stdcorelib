@@ -8,6 +8,7 @@
 #include <cassert>
 #include <iterator>
 #include <type_traits>
+#include <algorithm>
 
 #if defined(_MSC_VER)
 #  define _STDCORELIB_ALLOCA(size) _alloca(size)

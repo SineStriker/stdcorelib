@@ -7,6 +7,7 @@
 #elif defined(__APPLE__)
 #  include <crt_externs.h>
 #  include <mach/mach.h>
+#  include <mach-o/dyld.h>
 #else
 #  include <limits.h>
 #  include <unistd.h>
