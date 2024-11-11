@@ -113,7 +113,7 @@ namespace stdc {
         return res;
     }
 
-    static RTL_OSVERSIONINFOW __get_real_os_version() {
+    static RTL_OSVERSIONINFOW static_get_real_os_version() {
         HMODULE hMod = ::GetModuleHandleW(L"ntdll.dll");
         using RtlGetVersionPtr = NTSTATUS(WINAPI *)(PRTL_OSVERSIONINFOW);
         auto pRtlGetVersion =
@@ -128,7 +128,7 @@ namespace stdc {
         Returns system version from \c ntdll.dll runtime library.
     */
     RTL_OSVERSIONINFOW winSystemVersion() {
-        static auto result = __get_real_os_version();
+        static auto result = static_get_real_os_version();
         return result;
     }
 

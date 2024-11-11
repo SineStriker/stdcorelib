@@ -62,38 +62,38 @@ namespace stdc::vla::_private_ {
 
 namespace stdc {
 
-    template <class T, int Prealloc = 256>
-    class VarLengthArray {
+    template <class T, int PreAlloc = 256>
+    class vlarray {
     public:
-        VarLengthArray(int size = 0);
-        ~VarLengthArray();
+        vlarray(int size = 0);
+        ~vlarray();
 
         template <class InputIterator>
-        VarLengthArray(InputIterator first, InputIterator last);
-        inline VarLengthArray(std::initializer_list<T> args)
-            : VarLengthArray(args.begin(), args.end()) {
+        vlarray(InputIterator first, InputIterator last);
+        inline vlarray(std::initializer_list<T> args)
+            : vlarray(args.begin(), args.end()) {
         }
 
         // copy constructor
-        inline VarLengthArray(const VarLengthArray<T> &other) : s(other.s) {
+        inline vlarray(const vlarray<T> &other) : s(other.s) {
             shared_copy_construct(other);
         }
         // move constructor
-        inline VarLengthArray(VarLengthArray<T> &&other) noexcept : s(other.s) {
-            shared_move_construct(std::forward<VarLengthArray<T>>(other));
+        inline vlarray(vlarray<T> &&other) noexcept : s(other.s) {
+            shared_move_construct(std::forward<vlarray<T>>(other));
         }
         // template copy constructor
-        template <int Prealloc2>
-        inline VarLengthArray(const VarLengthArray<T, Prealloc2> &other) : s(other.s) {
+        template <int PreAlloc2>
+        inline vlarray(const vlarray<T, PreAlloc2> &other) : s(other.s) {
             shared_copy_construct(other);
         }
         // template move constructor
         template <int Prealloc2>
-        inline VarLengthArray(VarLengthArray<T, Prealloc2> &&other) noexcept : s(other.s) {
+        inline vlarray(vlarray<T, Prealloc2> &&other) noexcept : s(other.s) {
             shared_move_construct(other);
         }
         // copy assign
-        VarLengthArray &operator=(const VarLengthArray<T> &other) {
+        vlarray &operator=(const vlarray<T> &other) {
             if (this == &other) {
                 return *this;
             }
@@ -101,35 +101,35 @@ namespace stdc {
             return *this;
         }
         // move assign
-        VarLengthArray &operator=(VarLengthArray<T> &&other) noexcept {
+        vlarray &operator=(vlarray<T> &&other) noexcept {
             if (this == &other) {
                 return *this;
             }
-            shared_move_assign(std::forward<VarLengthArray<T>>(other));
+            shared_move_assign(std::forward<vlarray<T>>(other));
             return *this;
         }
         // template copy assign
         template <int Prealloc2>
-        VarLengthArray &operator=(const VarLengthArray<T, Prealloc2> &other) {
+        vlarray &operator=(const vlarray<T, Prealloc2> &other) {
             shared_copy_assign(other);
             return *this;
         }
         // template move assign
         template <int Prealloc2>
-        VarLengthArray &operator=(VarLengthArray<T, Prealloc2> &&other) noexcept {
-            shared_move_assign(std::forward<VarLengthArray<T, Prealloc2>>(other));
+        vlarray &operator=(vlarray<T, Prealloc2> &&other) noexcept {
+            shared_move_assign(std::forward<vlarray<T, Prealloc2>>(other));
             return *this;
         }
 
         template <int Prealloc2>
-        inline bool operator==(const VarLengthArray<T, Prealloc2> &other) const {
+        inline bool operator==(const vlarray<T, Prealloc2> &other) const {
             if (s != other.s) {
                 return false;
             }
             return std::equal(begin(), end(), other.begin(), other.end());
         }
         template <int Prealloc2>
-        inline bool operator!=(const VarLengthArray<T, Prealloc2> &other) const {
+        inline bool operator!=(const vlarray<T, Prealloc2> &other) const {
             return !operator==(other);
         }
 
@@ -192,11 +192,11 @@ namespace stdc {
         int s;  // size
         T *ptr; // data
         union {
-            char arr[Prealloc];
+            char arr[PreAlloc];
             int64_t _align1;
             double _align2;
         };
-        static constexpr const int StackLength = Prealloc / sizeof(T);
+        static constexpr const int StackLength = PreAlloc / sizeof(T);
 
         void alloc_impl(); // `s` must be set before calling, `ptr` will be set
         void free_impl();  // must reset `ptr` after calling
@@ -209,14 +209,14 @@ namespace stdc {
         }
 
         template <int Prealloc2>
-        void shared_copy_construct(const VarLengthArray<T, Prealloc2> &other);
+        void shared_copy_construct(const vlarray<T, Prealloc2> &other);
         template <int Prealloc2>
-        void shared_move_construct(VarLengthArray<T, Prealloc2> &&other);
+        void shared_move_construct(vlarray<T, Prealloc2> &&other);
 
         template <int Prealloc2>
-        void shared_copy_assign(const VarLengthArray<T, Prealloc2> &other);
+        void shared_copy_assign(const vlarray<T, Prealloc2> &other);
         template <int Prealloc2>
-        void shared_move_assign(VarLengthArray<T, Prealloc2> &&other);
+        void shared_move_assign(vlarray<T, Prealloc2> &&other);
 
         void construct_new_impl();
         template <class InputIterator>
@@ -226,31 +226,31 @@ namespace stdc {
         void destruct_impl();
 
         template <class T1, int Prealloc2>
-        friend class VarLengthArray;
+        friend class vlarray;
     };
 
     template <class T, int Prealloc>
-    VarLengthArray<T, Prealloc>::VarLengthArray(int size) : s(size) {
+    vlarray<T, Prealloc>::vlarray(int size) : s(size) {
         alloc_impl();
         construct_new_impl();
     }
 
     template <class T, int Prealloc>
-    VarLengthArray<T, Prealloc>::~VarLengthArray() {
+    vlarray<T, Prealloc>::~vlarray() {
         destruct_impl();
         free_impl();
     }
 
     template <class T, int Prealloc>
     template <class InputIterator>
-    VarLengthArray<T, Prealloc>::VarLengthArray(InputIterator first, InputIterator last)
+    vlarray<T, Prealloc>::vlarray(InputIterator first, InputIterator last)
         : s(std::distance(first, last)) {
         alloc_impl();
         construct_copy_impl(first, last);
     }
 
     template <class T, int Prealloc>
-    void VarLengthArray<T, Prealloc>::resize(int size) {
+    void vlarray<T, Prealloc>::resize(int size) {
         if (size == s) {
             return;
         }
@@ -328,7 +328,7 @@ namespace stdc {
     }
 
     template <class T, int Prealloc>
-    void VarLengthArray<T, Prealloc>::alloc_impl() {
+    void vlarray<T, Prealloc>::alloc_impl() {
         if (s <= StackLength) {
             ptr = reinterpret_cast<T *>(arr);
         } else {
@@ -337,7 +337,7 @@ namespace stdc {
     }
 
     template <class T, int Prealloc>
-    void VarLengthArray<T, Prealloc>::free_impl() {
+    void vlarray<T, Prealloc>::free_impl() {
         if (!is_stack_ptr()) {
             free(ptr);
         }
@@ -345,8 +345,8 @@ namespace stdc {
 
     template <class T, int Prealloc>
     template <int Prealloc2>
-    void VarLengthArray<T, Prealloc>::shared_copy_construct(
-        const VarLengthArray<T, Prealloc2> &other) {
+    void vlarray<T, Prealloc>::shared_copy_construct(
+        const vlarray<T, Prealloc2> &other) {
         alloc_impl();
         if constexpr (!std::is_trivial_v<T>) {
             construct_copy_impl(other.begin(), other.end());
@@ -357,7 +357,7 @@ namespace stdc {
 
     template <class T, int Prealloc>
     template <int Prealloc2>
-    void VarLengthArray<T, Prealloc>::shared_move_construct(VarLengthArray<T, Prealloc2> &&other) {
+    void vlarray<T, Prealloc>::shared_move_construct(vlarray<T, Prealloc2> &&other) {
         if (other.is_stack_ptr() || s < StackLength) {
             alloc_impl();
             if constexpr (!std::is_trivial_v<T>) {
@@ -375,7 +375,7 @@ namespace stdc {
     template <class T, int Prealloc>
     template <int Prealloc2>
     void
-        VarLengthArray<T, Prealloc>::shared_copy_assign(const VarLengthArray<T, Prealloc2> &other) {
+        vlarray<T, Prealloc>::shared_copy_assign(const vlarray<T, Prealloc2> &other) {
         destruct_impl();
         if (s != other.s) {
             free_impl();
@@ -391,7 +391,7 @@ namespace stdc {
 
     template <class T, int Prealloc>
     template <int Prealloc2>
-    void VarLengthArray<T, Prealloc>::shared_move_assign(VarLengthArray<T, Prealloc2> &&other) {
+    void vlarray<T, Prealloc>::shared_move_assign(vlarray<T, Prealloc2> &&other) {
         if (other.is_stack_ptr() || other.s < StackLength) {
             destruct_impl();
             if (s != other.s) {
@@ -415,7 +415,7 @@ namespace stdc {
     }
 
     template <class T, int Prealloc>
-    void VarLengthArray<T, Prealloc>::construct_new_impl() {
+    void vlarray<T, Prealloc>::construct_new_impl() {
         if constexpr (!std::is_trivial_v<T>) {
             auto p = ptr;
             auto q = p + s;
@@ -429,7 +429,7 @@ namespace stdc {
 
     template <class T, int Prealloc>
     template <class InputIterator>
-    void VarLengthArray<T, Prealloc>::construct_copy_impl(InputIterator first, InputIterator last) {
+    void vlarray<T, Prealloc>::construct_copy_impl(InputIterator first, InputIterator last) {
         auto p = ptr;
         while (first != last) {
             new (p++) T(*(first++));
@@ -438,7 +438,7 @@ namespace stdc {
 
     template <class T, int Prealloc>
     template <class InputIterator>
-    void VarLengthArray<T, Prealloc>::construct_move_impl(InputIterator first, InputIterator last) {
+    void vlarray<T, Prealloc>::construct_move_impl(InputIterator first, InputIterator last) {
         auto p = ptr;
         while (first != last) {
             new (p++) T(std::move(*(first++)));
@@ -446,7 +446,7 @@ namespace stdc {
     }
 
     template <class T, int Prealloc>
-    void VarLengthArray<T, Prealloc>::destruct_impl() {
+    void vlarray<T, Prealloc>::destruct_impl() {
         if constexpr (!std::is_trivial_v<T>) {
             auto p = ptr + s;
             while (p-- != ptr) {

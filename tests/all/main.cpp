@@ -6,26 +6,26 @@
 #include <stdcorelib/path.h>
 #include <stdcorelib/vla.h>
 
-using namespace stdc;
+using stdc::u8printf;
 
 static void tst_CommandLine() {
-    auto args = System::commandLineArguments();
+    auto args = stdc::system::command_line_arguments();
     for (int i = 0; i < args.size(); ++i) {
         u8printf("%d - %s\n", i, args[i].c_str());
     }
 }
 
 static void tst_AppInfo() {
-    u8printf("File path: %s\n", path::to_utf8(System::applicationPath()).c_str());
-    u8printf("Directory: %s\n", path::to_utf8(System::applicationDirectory()).c_str());
-    u8printf("File name: %s\n", path::to_utf8(System::applicationFileName()).c_str());
-    u8printf("Name: %s\n", System::applicationName().c_str());
+    u8printf("File path: %s\n", stdc::path::to_utf8(stdc::system::application_path()).c_str());
+    u8printf("Directory: %s\n", stdc::path::to_utf8(stdc::system::application_directory()).c_str());
+    u8printf("File name: %s\n", stdc::path::to_utf8(stdc::system::application_filename()).c_str());
+    u8printf("Name: %s\n", stdc::system::application_name().c_str());
 }
 
 static STDCORELIB_NOINLINE void tst_VLA() {
-    auto args = System::commandLineArguments();
+    auto args = stdc::system::command_line_arguments();
     VLA_NEW(std::string_view, vla_args_1, args.size());
-    VarLengthArray<std::string_view> vla_args_2(args.size());
+    stdc::vlarray<std::string_view> vla_args_2(args.size());
     for (int i = 0; i < args.size(); ++i) {
         vla_args_1[i] = std::string_view(args[i].data(), args[i].size());
         vla_args_2[i] = std::string_view(args[i].data(), args[i].size());
@@ -37,9 +37,10 @@ static STDCORELIB_NOINLINE void tst_VLA() {
 }
 
 static void tst_ConsoleColor() {
-    Console::printf(Console::Red, Console::White | Console::Intensified, " Red in white ");
+    using stdc::console::color;
+    stdc::console::printf(color::red, color::white | color::intensified, " Red in white ");
     u8printf("\n");
-    Console::printf(Console::Yellow, Console::Blue, " Yellow in blue ");
+    stdc::console::printf(color::yellow, color::blue, " Yellow in blue ");
     u8printf("\n");
 }
 
@@ -73,6 +74,5 @@ int main(int /* argc */, char * /* argv */[]) {
     }
 
     u8printf("OK\n");
-
     return 0;
 }

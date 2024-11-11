@@ -10,8 +10,6 @@
 
 #include <stdcorelib/global.h>
 
-// This file is a supplement to the standard library and use the STL naming convention.
-
 namespace stdc {
 
     namespace strings {

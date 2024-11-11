@@ -6,8 +6,6 @@
 
 #include <stdcorelib/strings.h>
 
-// This file is a supplement to the standard library and use the STL naming convention.
-
 namespace stdc {
 
     namespace path {
@@ -25,6 +23,14 @@ namespace stdc {
             return wstring_conv::to_utf8(path.wstring());
 #else
             return path.string();
+#endif
+        }
+
+        inline std::string to_utf8(const std::filesystem::path::string_type &path) {
+#ifdef _WIN32
+            return wstring_conv::to_utf8(path);
+#else
+            return path;
 #endif
         }
 

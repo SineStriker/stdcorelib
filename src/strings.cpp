@@ -142,7 +142,7 @@ namespace stdc {
                 const char *data;
                 size_t size;
             };
-            VarLengthArray<Part> parts(8);
+            vlarray<Part> parts(8);
 
             int parts_count = 0;
             const auto &push_back = [&parts, &parts_count](const char *data, size_t size) {

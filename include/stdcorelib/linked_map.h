@@ -11,8 +11,6 @@
 #  include <QVector>
 #endif
 
-// This file is a supplement to the standard library and use the STL naming convention.
-
 namespace stdc {
 
     template <class K, class V, template <class, class, class...> class Map = std::unordered_map>

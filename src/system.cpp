@@ -17,7 +17,7 @@
 
 #include <algorithm>
 
-#include "strings.h"
+#include "path.h"
 
 #ifdef _WIN32
 using PathChar = wchar_t;
@@ -69,7 +69,7 @@ namespace stdc {
 
 #endif
 
-    PathString __application_path() {
+    PathString sys_application_path() {
         static const auto res = []() -> PathString {
 #ifdef _WIN32
             return winGetFullModuleFileName(nullptr);
@@ -86,8 +86,8 @@ namespace stdc {
         return res;
     }
 
-    static PathString __application_filename() {
-        auto appName = __application_path();
+    static PathString sys_application_filename() {
+        auto appName = sys_application_path();
         auto slashIdx = appName.find_last_of(PathSeparator);
         if (slashIdx != std::string::npos) {
             appName = appName.substr(slashIdx + 1);
@@ -95,8 +95,8 @@ namespace stdc {
         return appName;
     }
 
-    PathString __application_dir() {
-        auto appDir = __application_path();
+    PathString sys_application_directory() {
+        auto appDir = sys_application_path();
         auto slashIdx = appDir.find_last_of(PathSeparator);
         if (slashIdx != std::string::npos) {
             appDir = appDir.substr(0, slashIdx);
@@ -104,8 +104,8 @@ namespace stdc {
         return appDir;
     }
 
-    PathString __application_name() {
-        auto appName = __application_filename();
+    PathString sys_application_name() {
+        auto appName = sys_application_filename();
 #ifdef _WIN32
         auto dotIdx = appName.find_last_of(L'.');
         if (dotIdx != PathString::npos) {
@@ -119,15 +119,7 @@ namespace stdc {
         return appName;
     }
 
-    static inline std::string __path2str(const PathString &s) {
-#ifdef _WIN32
-        return wstring_conv::to_utf8(s);
-#else
-        return s;
-#endif
-    }
-
-    static std::vector<std::string> __command_line_arguments() {
+    static std::vector<std::string> sys_command_line_arguments() {
         std::vector<std::string> res;
 #ifdef _WIN32
         int argc;
@@ -157,44 +149,53 @@ namespace stdc {
         return res;
     }
 
-    /*!
-        Returns the application file path.
+    /*！
+        \namespace system
+        \brief Namespace of system related functions.
     */
-    std::filesystem::path System::applicationPath() {
-        static std::filesystem::path result = __application_path();
-        return result;
-    }
 
-    /*!
-        Returns the application directory.
-    */
-    std::filesystem::path System::applicationDirectory() {
-        static std::filesystem::path result = __application_dir();
-        return result;
-    }
+    namespace system {
 
-    /*!
-        Returns the application file name.
-    */
-    std::filesystem::path System::applicationFileName() {
-        static std::filesystem::path result = __application_filename();
-        return result;
-    }
+        /*!
+            Returns the application file path.
+        */
+        std::filesystem::path application_path() {
+            static std::filesystem::path result = sys_application_path();
+            return result;
+        }
 
-    /*!
-        Returns the application name in UTF-8 encoding.
-    */
-    std::string System::applicationName() {
-        static std::string result = __path2str(__application_name());
-        return result;
-    }
+        /*!
+            Returns the application directory.
+        */
+        std::filesystem::path application_directory() {
+            static std::filesystem::path result = sys_application_directory();
+            return result;
+        }
 
-    /*!
-        Returns the command line arguments in UTF-8 encoding.
-    */
-    std::vector<std::string> System::commandLineArguments() {
-        static auto result = __command_line_arguments();
-        return result;
+        /*!
+            Returns the application file name.
+        */
+        std::filesystem::path application_filename() {
+            static std::filesystem::path result = sys_application_filename();
+            return result;
+        }
+
+        /*!
+            Returns the application name in UTF-8 encoding.
+        */
+        std::string application_name() {
+            static std::string result = path::to_utf8(sys_application_name());
+            return result;
+        }
+
+        /*!
+            Returns the command line arguments in UTF-8 encoding.
+        */
+        std::vector<std::string> command_line_arguments() {
+            static auto result = sys_command_line_arguments();
+            return result;
+        }
+
     }
 
     /*

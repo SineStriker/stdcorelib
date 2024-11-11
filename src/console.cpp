@@ -18,7 +18,7 @@ namespace stdc {
         }
 
         explicit PrintScopeGuard(int foreground, int background)
-            : consoleChanged(!(foreground == Console::Default && background == Console::Default)) {
+            : consoleChanged(!(foreground == console::plain && background == console::plain)) {
             global_mtx().lock();
 #ifdef _WIN32
             _codepage = ::GetConsoleOutputCP();
@@ -26,55 +26,55 @@ namespace stdc {
 
             if (consoleChanged) {
                 WORD winColor = 0;
-                if (foreground != Console::Default) {
-                    winColor |= (foreground & Console::Intensified) ? FOREGROUND_INTENSITY : 0;
+                if (foreground != console::plain) {
+                    winColor |= (foreground & console::intensified) ? FOREGROUND_INTENSITY : 0;
                     switch (foreground & 0xF) {
-                        case Console::Red:
+                        case console::red:
                             winColor |= FOREGROUND_RED;
                             break;
-                        case Console::Green:
+                        case console::green:
                             winColor |= FOREGROUND_GREEN;
                             break;
-                        case Console::Blue:
+                        case console::blue:
                             winColor |= FOREGROUND_BLUE;
                             break;
-                        case Console::Yellow:
+                        case console::yellow:
                             winColor |= FOREGROUND_RED | FOREGROUND_GREEN;
                             break;
-                        case Console::Purple:
+                        case console::purple:
                             winColor |= FOREGROUND_RED | FOREGROUND_BLUE;
                             break;
-                        case Console::Cyan:
+                        case console::cyan:
                             winColor |= FOREGROUND_GREEN | FOREGROUND_BLUE;
                             break;
-                        case Console::White:
+                        case console::white:
                             winColor |= FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
                         default:
                             break;
                     }
                 }
-                if (background != Console::Default) {
-                    winColor |= (background & Console::Intensified) ? BACKGROUND_INTENSITY : 0;
+                if (background != console::plain) {
+                    winColor |= (background & console::intensified) ? BACKGROUND_INTENSITY : 0;
                     switch (background & 0xF) {
-                        case Console::Red:
+                        case console::red:
                             winColor |= BACKGROUND_RED;
                             break;
-                        case Console::Green:
+                        case console::green:
                             winColor |= BACKGROUND_GREEN;
                             break;
-                        case Console::Blue:
+                        case console::blue:
                             winColor |= BACKGROUND_BLUE;
                             break;
-                        case Console::Yellow:
+                        case console::yellow:
                             winColor |= BACKGROUND_RED | BACKGROUND_GREEN;
                             break;
-                        case Console::Purple:
+                        case console::purple:
                             winColor |= BACKGROUND_RED | BACKGROUND_BLUE;
                             break;
-                        case Console::Cyan:
+                        case console::cyan:
                             winColor |= BACKGROUND_GREEN | BACKGROUND_BLUE;
                             break;
-                        case Console::White:
+                        case console::white:
                             winColor |= BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE;
                         default:
                             break;
@@ -88,29 +88,29 @@ namespace stdc {
             if (consoleChanged) {
                 const char *strList[3];
                 int strListSize = 0;
-                if (foreground != Console::Default) {
-                    bool light = foreground & Console::Intensified;
+                if (foreground != console::plain) {
+                    bool light = foreground & console::intensified;
                     const char *colorStr = nullptr;
                     switch (foreground & 0xF) {
-                        case Console::Red:
+                        case console::red:
                             colorStr = light ? "91" : "31";
                             break;
-                        case Console::Green:
+                        case console::green:
                             colorStr = light ? "92" : "32";
                             break;
-                        case Console::Blue:
+                        case console::blue:
                             colorStr = light ? "94" : "34";
                             break;
-                        case Console::Yellow:
+                        case console::yellow:
                             colorStr = light ? "93" : "33";
                             break;
-                        case Console::Purple:
+                        case console::purple:
                             colorStr = light ? "95" : "35";
                             break;
-                        case Console::Cyan:
+                        case console::cyan:
                             colorStr = light ? "96" : "36";
                             break;
-                        case Console::White:
+                        case console::white:
                             colorStr = light ? "97" : "37";
                             break;
                         default:
@@ -121,29 +121,29 @@ namespace stdc {
                         strListSize++;
                     }
                 }
-                if (background != Console::Default) {
-                    bool light = background & Console::Intensified;
+                if (background != console::plain) {
+                    bool light = background & console::intensified;
                     const char *colorStr = nullptr;
                     switch (background & 0xF) {
-                        case Console::Red:
+                        case console::red:
                             colorStr = light ? "101" : "41";
                             break;
-                        case Console::Green:
+                        case console::green:
                             colorStr = light ? "102" : "42";
                             break;
-                        case Console::Blue:
+                        case console::blue:
                             colorStr = light ? "104" : "44";
                             break;
-                        case Console::Yellow:
+                        case console::yellow:
                             colorStr = light ? "103" : "43";
                             break;
-                        case Console::Purple:
+                        case console::purple:
                             colorStr = light ? "105" : "45";
                             break;
-                        case Console::Cyan:
+                        case console::cyan:
                             colorStr = light ? "106" : "46";
                             break;
-                        case Console::White:
+                        case console::white:
                             colorStr = light ? "107" : "47";
                             break;
                         default:
@@ -202,52 +202,69 @@ namespace stdc {
 #endif
     };
 
-    /*!
-        Print formatted string in UTF-8 encoding with specified colors.
-    */
-    int Console::printf(int foreground, int background, const char *fmt, ...) {
-        PrintScopeGuard _guard(foreground, background);
-
-        va_list args;
-        va_start(args, fmt);
-        int res = std::vprintf(fmt, args);
-        va_end(args);
-        return res;
-    }
-
-    /*!
-        Print formatted string in UTF-8 encoding with specified colors.
-    */
-    int Console::vprintf(int foreground, int background, const char *fmt, va_list args) {
-        PrintScopeGuard _guard(foreground, background);
-        return std::vprintf(fmt, args);
-    }
-
-    /*!
-        \fn void print(int foreground, int background, const std::string &format, Args &&...args)
-
-        Print formatted string in UTF-8 encoding with specified colors.
+    /*！
+        \namespace console
+        \brief Namespace of console related functions.
     */
 
-    /*!
-        Print formatted string in UTF-8 encoding with default colors.
-    */
-    int u8printf(const char *fmt, ...) {
-        PrintScopeGuard _guard(Console::Default, Console::Default);
+    namespace console {
 
-        va_list args;
-        va_start(args, fmt);
-        int res = std::vprintf(fmt, args);
-        va_end(args);
-        return res;
-    }
+        /*!
+            Print formatted string in UTF-8 encoding with specified colors.
+        */
+        int printf(int foreground, int background, const char *fmt, ...) {
+            PrintScopeGuard _guard(foreground, background);
 
-    /*!
-        Print formatted string in UTF-8 encoding with default colors.
-    */
-    int u8vprintf(const char *fmt, va_list args) {
-        PrintScopeGuard _guard(Console::Default, Console::Default);
-        return std::vprintf(fmt, args);
+            va_list args;
+            va_start(args, fmt);
+            int res = std::vprintf(fmt, args);
+            va_end(args);
+            return res;
+        }
+
+        /*!
+            Print formatted string in UTF-8 encoding with specified colors.
+        */
+        int vprintf(int foreground, int background, const char *fmt, va_list args) {
+            PrintScopeGuard _guard(foreground, background);
+            return std::vprintf(fmt, args);
+        }
+
+        /*!
+            \fn void print(int foreground, int background, const std::string &format, Args
+           &&...args)
+
+            Print formatted string in UTF-8 encoding with specified colors.
+        */
+
+        /*!
+            \fn void println(int foreground, int background, const std::string &format, Args
+           &&...args)
+
+            Print formatted string in UTF-8 encoding with specified colors and start a new line.
+        */
+
+        /*!
+            Print formatted string in UTF-8 encoding with default colors.
+        */
+        int u8printf(const char *fmt, ...) {
+            PrintScopeGuard _guard(console::plain, console::plain);
+
+            va_list args;
+            va_start(args, fmt);
+            int res = std::vprintf(fmt, args);
+            va_end(args);
+            return res;
+        }
+
+        /*!
+            Print formatted string in UTF-8 encoding with default colors.
+        */
+        int u8vprintf(const char *fmt, va_list args) {
+            PrintScopeGuard _guard(console::plain, console::plain);
+            return std::vprintf(fmt, args);
+        }
+
     }
 
 }

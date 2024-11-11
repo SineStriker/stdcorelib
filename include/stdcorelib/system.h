@@ -9,15 +9,15 @@
 
 namespace stdc {
 
-    class STDCORELIB_EXPORT System {
-    public:
-        static std::filesystem::path applicationPath();
-        static std::filesystem::path applicationDirectory();
-        static std::filesystem::path applicationFileName();
-        static std::string applicationName();
+    namespace system {
 
-        static std::vector<std::string> commandLineArguments();
-    };
+        STDCORELIB_EXPORT std::filesystem::path application_path();
+        STDCORELIB_EXPORT std::filesystem::path application_directory();
+        STDCORELIB_EXPORT std::filesystem::path application_filename();
+        STDCORELIB_EXPORT std::string application_name();
+        STDCORELIB_EXPORT std::vector<std::string> command_line_arguments();
+
+    }
 
 }
 

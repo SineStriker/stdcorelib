@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE(test_construct) {
 
     // construct with size
     {
-        VarLengthArray<CC1> v(4);
+        vlarray<CC1> v(4);
         BOOST_CHECK_EQUAL(v[2].i, 0);
         BOOST_CHECK_EQUAL(CC1::g_count, 4);
     }
@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE(test_construct) {
 
     // construct with initializer list
     {
-        VarLengthArray<CC1> v = {0, 1, 2, 3};
+        vlarray<CC1> v = {0, 1, 2, 3};
         BOOST_CHECK_EQUAL(v.size(), 4);
         BOOST_CHECK_EQUAL(v[2].i, 2);
         BOOST_CHECK_EQUAL(CC1::g_count, 4);
@@ -50,8 +50,8 @@ BOOST_AUTO_TEST_CASE(test_construct) {
 
     // copy construct
     {
-        VarLengthArray<CC1, 256> v0 = {0, 1, 2, 3};
-        VarLengthArray<CC1> v(v0);
+        vlarray<CC1, 256> v0 = {0, 1, 2, 3};
+        vlarray<CC1> v(v0);
         BOOST_CHECK_EQUAL(v[2].i, 2);
         BOOST_CHECK_EQUAL(CC1::g_count, 8);
     }
@@ -59,8 +59,8 @@ BOOST_AUTO_TEST_CASE(test_construct) {
 
     // move construct
     {
-        VarLengthArray<CC1, 256> v0 = {0, 1, 2, 3};
-        VarLengthArray<CC1> v(std::move(v0));
+        vlarray<CC1, 256> v0 = {0, 1, 2, 3};
+        vlarray<CC1> v(std::move(v0));
         BOOST_CHECK_EQUAL(v[2].i, 2);
         BOOST_CHECK_EQUAL(CC1::g_count, 8);
     }
@@ -68,8 +68,8 @@ BOOST_AUTO_TEST_CASE(test_construct) {
 
     // copy assign
     {
-        VarLengthArray<CC1, 256> v0 = {0, 1, 2, 3};
-        VarLengthArray<CC1> v;
+        vlarray<CC1, 256> v0 = {0, 1, 2, 3};
+        vlarray<CC1> v;
         v = v0;
         BOOST_CHECK_EQUAL(v[2].i, 2);
         BOOST_CHECK_EQUAL(CC1::g_count, 8);
@@ -78,8 +78,8 @@ BOOST_AUTO_TEST_CASE(test_construct) {
 
     // move assign
     {
-        VarLengthArray<CC1, 256> v0 = {0, 1, 2, 3};
-        VarLengthArray<CC1> v;
+        vlarray<CC1, 256> v0 = {0, 1, 2, 3};
+        vlarray<CC1> v;
         v = std::move(v0);
         BOOST_CHECK_EQUAL(v[2].i, 2);
         BOOST_CHECK_EQUAL(CC1::g_count, 8);
@@ -90,8 +90,8 @@ BOOST_AUTO_TEST_CASE(test_construct) {
 
     // move construct
     {
-        VarLengthArray<CC2, 256> v0 = {0, 1, 2, 3};
-        VarLengthArray<CC2> v(std::move(v0));
+        vlarray<CC2, 256> v0 = {0, 1, 2, 3};
+        vlarray<CC2> v(std::move(v0));
         BOOST_CHECK_EQUAL(v[2].i, 2);
         BOOST_CHECK_EQUAL(CC2::g_count, 4);
     }
@@ -99,8 +99,8 @@ BOOST_AUTO_TEST_CASE(test_construct) {
 
     // move assign
     {
-        VarLengthArray<CC2, 256> v0 = {0, 1, 2, 3};
-        VarLengthArray<CC2> v;
+        vlarray<CC2, 256> v0 = {0, 1, 2, 3};
+        vlarray<CC2> v;
         v = std::move(v0);
         BOOST_CHECK_EQUAL(v[2].i, 2);
         BOOST_CHECK_EQUAL(CC2::g_count, 4);
@@ -113,7 +113,7 @@ BOOST_AUTO_TEST_CASE(test_resize) {
 
     auto &gc = CC3::g_count;
 
-    VarLengthArray<CC3> v = {0, 1, 2, 3};
+    vlarray<CC3> v = {0, 1, 2, 3};
     BOOST_CHECK_EQUAL(CC3::g_count, 4);
 
     // stack shrink to stack
@@ -147,10 +147,10 @@ BOOST_AUTO_TEST_CASE(test_resize) {
 }
 
 BOOST_AUTO_TEST_CASE(test_operators) {
-    VarLengthArray<int> v1{1, 2, 3, 4};
-    VarLengthArray<int> v2{1, 2, 3, 4};
-    VarLengthArray<int, 4> v3{1, 2, 3, 4};
-    VarLengthArray<int, 4> v4{1, 2, 3};
+    vlarray<int> v1{1, 2, 3, 4};
+    vlarray<int> v2{1, 2, 3, 4};
+    vlarray<int, 4> v3{1, 2, 3, 4};
+    vlarray<int, 4> v4{1, 2, 3};
     BOOST_CHECK(v1 == v2);
     BOOST_CHECK(v2 == v3);
     BOOST_CHECK(v2 != v4);
