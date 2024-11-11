@@ -8,7 +8,6 @@ C++ additional core library, as a supplement to the standard library.
 + Cross-platform string encoding and print functions
 + Get command line arguments
 + Shared library loader
-+ Simple plugin framework
 + Application information
 + String utilities and formater
 + PIMPL and VLA syntactic sugar
