@@ -25,7 +25,7 @@
 #  define VLA_ALLOC(TYPE, NAME, SIZE)                                                              \
       TYPE *NAME = (TYPE *) _STDCORELIB_ALLOCA((SIZE) * sizeof(TYPE))
 
-namespace stdc_private::vla {
+namespace stdc::vla::_private_ {
 
     template <class T>
     struct ScopeGuard {
@@ -56,7 +56,7 @@ namespace stdc_private::vla {
 #  define VLA_NEW(TYPE, NAME, SIZE)                                                                \
       const size_t NAME##_VLA_SIZE__ = (SIZE);                                                     \
       VLA_ALLOC(TYPE, NAME, NAME##_VLA_SIZE__);                                                    \
-      ::stdc_private::vla::ScopeGuard<TYPE> NAME##_VLA_GUARD__(NAME, NAME##_VLA_SIZE__);
+      ::stdc::vla::_private_::ScopeGuard<TYPE> NAME##_VLA_GUARD__(NAME, NAME##_VLA_SIZE__);
 
 #endif
 
