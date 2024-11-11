@@ -45,11 +45,6 @@ namespace stdc::pimpl {
         }
 
         // Used by macros
-        template <class T, class _ThisType>
-        inline auto get_impl(_ThisType _this) {
-            return get_impl_helper<typename T::Impl>(static_cast<T *>(_this)->_impl);
-        }
-
         template <class _ThisType>
         struct get_decl_trait {
             using _ImplType = typename std::remove_pointer_t<_ThisType>;
@@ -59,31 +54,10 @@ namespace stdc::pimpl {
 
     }
 
-    template <class T>
-    inline auto acquire_impl(T *decl) {
-        return static_cast<typename T::Impl *>(
-            _private_::get_impl_helper<typename T::Impl>(decl->_impl));
-    }
-
-    template <class T>
-    inline auto acquire_impl(const T *decl) {
-        return static_cast<const typename T::Impl *>(
-            _private_::get_impl_helper<const typename T::Impl>(decl->_impl));
-    }
-
-    template <class T>
-    inline auto acquire_decl(T *impl) {
-        return static_cast<typename T::Decl *>(impl->_decl);
-    }
-
-    template <class T>
-    inline auto acquire_decl(const T *impl) {
-        return static_cast<const typename T::Decl *>(impl->_decl);
-    }
-
 }
 
-#define __stdc_impl_get(T) ::stdc::pimpl::_private_::get_impl<T>(this)
+#define __stdc_impl_get(T)                                                                         \
+    ::stdc::pimpl::_private_::get_impl_helper<typename T::Impl>(static_cast<T *>(this)->_impl)
 #define __stdc_decl_get(T) static_cast<T *>(_decl)
 
 #define __stdc_impl(T) auto &impl = *__stdc_impl_get(T)
