@@ -26,6 +26,34 @@ BOOST_AUTO_TEST_CASE(test_format) {
     }
 }
 
+BOOST_AUTO_TEST_CASE(test_parse_expr) {
+    {
+        std::map<std::string, std::string> vars{
+            {"FOO", "Hello"}
+        };
+        std::string actual = strings::parse_expr("${FOO} World!", vars);
+        std::string expect = "Hello World!";
+        BOOST_CHECK(actual == expect);
+    }
+
+    {
+        std::map<std::string, std::string> vars{
+            {"FOO", "A"    },
+            {"BAR", "B"    },
+            {"A_B", "Hello"}
+        };
+        std::string actual = strings::parse_expr("${${FOO}_${BAR}} World!", vars);
+        std::string expect = "Hello World!";
+        BOOST_CHECK(actual == expect);
+    }
+
+    {
+        std::string actual = formatN("%10 %12", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+        std::string expect = "10 12";
+        BOOST_CHECK(actual == expect);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(test_codec_convert) {
     {
         std::wstring actual = wstring_conv::from_utf8("HelloWorld");

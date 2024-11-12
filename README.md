@@ -19,11 +19,9 @@ C++ additional core library, as a supplement to the standard library.
 ```cpp
 #include <stdcorelib/system.h>
 
-using namespace stdc;
-
 int main(int /* argc */, char * /* argv */[]) {
     // No need to use main entry arguments
-    auto args = System::commandLineArguments();
+    auto args = stdc::system::command_line_arguments();
     for (int i = 0; i < args.size(); ++i) {
         u8printf("%d - %s\n", i, args[i].data());
     }

@@ -5,7 +5,7 @@
 #  error "Unsupported system"
 #endif
 
-#include <Windows.h>
+#include <windows.h>
 
 #include <string>
 #include <string_view>

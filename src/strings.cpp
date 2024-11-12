@@ -222,6 +222,58 @@ namespace stdc {
             \a args.
         */
 
+        /*!
+            Replace occurrences of \c ${VAR} in \a s with the corresponding variable from \a
+            vars.
+        */
+        std::string parse_expr(const std::string_view &s,
+                               const std::map<std::string, std::string> &vars) {
+            std::string result;
+            for (size_t i = 0; i < s.size();) {
+                if (s[i] == '$' && i + 1 < s.size() && s[i + 1] == '{') {
+                    size_t start = i + 2;
+                    size_t j = start;
+
+                    int braceCount = 1;
+                    while (j < s.size() && braceCount > 0) {
+                        if (s[j] == '{')
+                            braceCount++;
+                        if (s[j] == '}')
+                            braceCount--;
+                        j++;
+                    }
+
+                    if (braceCount == 0) {
+                        std::string_view varName = s.substr(start, j - start - 1);
+                        std::string innerValue = parse_expr(varName, vars);
+                        auto it = vars.find(innerValue);
+                        if (it != vars.end()) {
+                            result += it->second;
+                        }
+                        i = j;
+                    } else {
+                        // Invalid expression
+                        return {};
+                    }
+                } else {
+                    result += s[i];
+                    i++;
+                }
+            }
+
+            // Replace "$$" with "$"
+            std::string finalResult;
+            for (size_t i = 0; i < result.size(); ++i) {
+                if (result[i] == '$' && i + 1 < result.size() && result[i + 1] == '$') {
+                    finalResult += '$';
+                    ++i;
+                } else {
+                    finalResult += result[i];
+                }
+            }
+            return finalResult;
+        }
+
     }
 
 }

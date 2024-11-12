@@ -7,6 +7,7 @@
 #include <vector>
 #include <type_traits>
 #include <filesystem>
+#include <map>
 
 #include <stdcorelib/global.h>
 
@@ -91,7 +92,7 @@ namespace stdc {
 #ifdef _WIN32
                 return normalize_separators(conv<std::wstring>::to_utf8(path.wstring()), true);
 #else
-                return normalize_separators(path.string());
+                return normalize_separators(path.string(), true);
 #endif
             }
 
@@ -137,6 +138,9 @@ namespace stdc {
         auto formatN(const std::string_view &fmt, Args &&...args) {
             return format(fmt, {to_string(std::forward<decltype(args)>(args))...});
         }
+
+        STDCORELIB_EXPORT std::string parse_expr(const std::string_view &s,
+                                                 const std::map<std::string, std::string> &vars);
 
     }
 
