@@ -34,6 +34,14 @@ namespace stdc {
 #endif
         }
 
+        inline std::filesystem::path canonical(const std::filesystem::path &path) {
+            try {
+                return std::filesystem::canonical(path);
+            } catch (...) {
+            }
+            return {};
+        }
+
         STDCORELIB_EXPORT std::filesystem::path clean_path(const std::filesystem::path &path);
 
         inline std::string normalize_separators(const std::filesystem::path &path,
