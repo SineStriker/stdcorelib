@@ -1,9 +1,7 @@
-#include "strings.h"
+#include "stdcorelib/strings.h"
 
 #ifdef _WIN32
 #  include "windows_utils.h"
-#else
-#  include <filesystem>
 #endif
 
 #include <cstring>

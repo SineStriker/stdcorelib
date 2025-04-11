@@ -258,19 +258,19 @@ namespace stdc {
             return res;
         }
 #ifdef QT_CORE_LIB
-        QList<K> keys_qlist() const {
-            QList<K> res;
+        QList<V> values_qlist() const {
+            QList<V> res;
             res.reserve(m_list.size());
             for (const auto &item : std::as_const(m_list)) {
-                res.push_back(item.first);
+                res.push_back(item.second);
             }
             return res;
         }
-        QVector<K> keys_qvector() const {
-            QVector<K> res;
+        QVector<V> values_qvector() const {
+            QVector<V> res;
             res.reserve(m_list.size());
             for (const auto &item : std::as_const(m_list)) {
-                res.push_back(item.first);
+                res.push_back(item.second);
             }
             return res;
         }
@@ -314,7 +314,7 @@ namespace stdc {
                                               const V &val) {
             auto res = m_map.insert(std::make_pair(key, m_list.end()));
             auto &org_it = res.first->second;
-            if (!res.second) {
+            if (res.second) {
                 // key doesn't exist
                 auto new_it = m_list.emplace(it, key, val);
                 org_it = new_it;

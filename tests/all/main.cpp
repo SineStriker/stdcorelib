@@ -37,10 +37,20 @@ static STDCORELIB_NOINLINE void tst_VLA() {
 }
 
 static void tst_ConsoleColor() {
-    using stdc::console::color;
-    stdc::console::printf(color::red, color::white | color::intensified, " Red in white ");
+    using namespace stdc::console;
+    stdc::console::printf(nostyle, red, lightwhite, " Red in white ");
     u8printf("\n");
-    stdc::console::printf(color::yellow, color::blue, " Yellow in blue ");
+    stdc::console::printf(nostyle, yellow, blue, " Yellow in blue ");
+    u8printf("\n");
+
+
+    stdc::console::printf(bold, lightwhite, nocolor, "Bold");
+    u8printf("\n");
+    stdc::console::printf(italic, lightwhite, nocolor, "Italic");
+    u8printf("\n");
+    stdc::console::printf(underline, lightwhite, nocolor, "Underline");
+    u8printf("\n");
+    stdc::console::printf(strikethrough, lightwhite, nocolor, "Strikethrough");
     u8printf("\n");
 }
 
