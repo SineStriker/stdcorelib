@@ -4,7 +4,7 @@
 #include <string>
 #include <filesystem>
 
-#include <stdcorelib/strings.h>
+#include <stdcorelib/str.h>
 
 namespace stdc {
 
@@ -46,7 +46,7 @@ namespace stdc {
 
         inline std::string normalize_separators(const std::filesystem::path &path,
                                                 bool native = false) {
-            return strings::conv<std::filesystem::path>::normalize_separators(to_utf8(path),
+            return str::conv<std::filesystem::path>::normalize_separators(to_utf8(path),
                                                                               native);
         }
 

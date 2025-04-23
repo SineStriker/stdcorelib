@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(stdcorelib VERSION 0.0.1.1 LANGUAGES CXX)
+project(stdcorelib VERSION 0.0.1.2 LANGUAGES CXX)
 
 # ----------------------------------
 # Build Options
@@ -84,15 +84,10 @@ target_include_directories(${PROJECT_NAME} INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-if (MSVC)
-    target_include_directories(${PROJECT_NAME} PRIVATE include/stdcorelib)
-else()
-    target_compile_options(${PROJECT_NAME} PRIVATE -idirafter ${CMAKE_CURRENT_SOURCE_DIR}/include/stdcorelib)
-endif()
 target_include_directories(${PROJECT_NAME} PRIVATE
     src
     include
-    include/stdcorelib/private
+    include/stdcorelib
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 set_target_properties(${PROJECT_NAME} PROPERTIES

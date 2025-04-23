@@ -1,5 +1,5 @@
-#ifndef STDCORELIB_STRINGS_H
-#define STDCORELIB_STRINGS_H
+#ifndef STDCORELIB_STR_H
+#define STDCORELIB_STR_H
 
 #include <string>
 #include <string_view>
@@ -13,7 +13,7 @@
 
 namespace stdc {
 
-    namespace strings {
+    namespace str {
 
         template <class T>
         struct conv;
@@ -106,7 +106,7 @@ namespace stdc {
             if constexpr (std::is_pointer_v<T1>) {
                 using T2 =
                     std::add_pointer_t<std::decay_t<std::remove_cv_t<std::remove_pointer_t<T1>>>>;
-                return strings::conv<T2>()(t);
+                return str::conv<T2>()(t);
             } else {
                 using T2 = std::decay_t<std::remove_cv_t<T1>>;
                 if constexpr (std::is_same_v<T2, bool>) {
@@ -120,7 +120,7 @@ namespace stdc {
                     oss << std::noshowpoint << t;
                     return oss.str();
                 } else {
-                    return strings::conv<T2>()(t);
+                    return str::conv<T2>()(t);
                 }
             }
         }
@@ -144,14 +144,14 @@ namespace stdc {
 
     }
 
-    using strings::format;
-    using strings::formatN;
-    using strings::join;
-    using strings::split;
-    using strings::to_string;
+    using str::format;
+    using str::formatN;
+    using str::join;
+    using str::split;
+    using str::to_string;
 
-    using wstring_conv = strings::conv<std::wstring>;
+    using wstring_conv = str::conv<std::wstring>;
 
 }
 
-#endif // STDCORELIB_STRINGS_H
+#endif // STDCORELIB_STR_H

@@ -3,7 +3,7 @@
 
 #include <cstdarg>
 
-#include <stdcorelib/strings.h>
+#include <stdcorelib/str.h>
 
 
 namespace stdc {

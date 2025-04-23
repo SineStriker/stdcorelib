@@ -11,7 +11,7 @@
 #  include <string.h>
 #endif
 
-#include "stdcorelib/strings.h"
+#include "stdcorelib/str.h"
 
 #ifdef __APPLE__
 #  define PRIOR_LIBRARY_PATH_KEY "DYLD_LIBRARY_PATH"

@@ -1,10 +1,10 @@
-#include <stdcorelib/strings.h>
+#include <stdcorelib/str.h>
 
 #include <boost/test/unit_test.hpp>
 
 using namespace stdc;
 
-BOOST_AUTO_TEST_SUITE(test_strings)
+BOOST_AUTO_TEST_SUITE(test_str)
 
 BOOST_AUTO_TEST_CASE(test_format) {
     {
@@ -31,7 +31,7 @@ BOOST_AUTO_TEST_CASE(test_parse_expr) {
         std::map<std::string, std::string> vars{
             {"FOO", "Hello"}
         };
-        std::string actual = strings::parse_expr("${FOO} World!", vars);
+        std::string actual = str::parse_expr("${FOO} World!", vars);
         std::string expect = "Hello World!";
         BOOST_CHECK(actual == expect);
     }
@@ -42,7 +42,7 @@ BOOST_AUTO_TEST_CASE(test_parse_expr) {
             {"BAR", "B"    },
             {"A_B", "Hello"}
         };
-        std::string actual = strings::parse_expr("${${FOO}_${BAR}} World!", vars);
+        std::string actual = str::parse_expr("${${FOO}_${BAR}} World!", vars);
         std::string expect = "Hello World!";
         BOOST_CHECK(actual == expect);
     }

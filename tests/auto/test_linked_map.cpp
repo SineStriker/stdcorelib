@@ -41,10 +41,6 @@ BOOST_AUTO_TEST_CASE(test_linked_map_append) {
         }
     }
 
-    std::unordered_map<std::string, int> map2;
-    map2["1"] = 1;
-
-    map2.emplace("1", 2);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

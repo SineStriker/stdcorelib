@@ -1,4 +1,4 @@
-#include "stdcorelib/strings.h"
+#include "str.h"
 
 #ifdef _WIN32
 #  include "windows_utils.h"
@@ -12,11 +12,11 @@
 namespace stdc {
 
     /*！
-        \namespace strings
+        \namespace str
         \brief Namespace of string algorithms.
     */
 
-    namespace strings {
+    namespace str {
 
         /*!
             \fn std::string to_string(T &&t)
@@ -25,7 +25,7 @@ namespace stdc {
         */
 
         /*!
-            Joins all the string list's strings into a single string.
+            Joins all the string list's str into a single string.
         */
         std::string join(const std::vector<std::string> &v, const std::string_view &delimiter) {
             if (v.empty())
@@ -140,14 +140,11 @@ namespace stdc {
                 const char *data;
                 size_t size;
             };
-            vlarray<Part> parts(8);
+            std::vector<Part> parts;
 
             int parts_count = 0;
             const auto &push_back = [&parts, &parts_count](const char *data, size_t size) {
-                if (parts_count == parts.size()) {
-                    parts.resize(parts.size() * 2);
-                }
-                parts[parts_count++] = {data, size};
+                parts.push_back({data, size});
             };
 
             auto segment_start = fmt.data();
