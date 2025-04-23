@@ -196,48 +196,65 @@ namespace stdc {
             return result;
         }
 
-    }
-
-    /*
-        Converts a command line string to a vector of arguments.
-    */
-    std::vector<std::string> split_command_line(const std::string &command) {
-        std::vector<std::string> args;
-        std::string tmp;
-        int quoteCount = 0;
-        bool inQuote = false;
-
-        // handle quoting. tokens can be surrounded by double quotes
-        // "hello world". three consecutive double quotes represent
-        // the quote character itself.
-        for (int i = 0; i < command.size(); ++i) {
-            if (command.at(i) == u'"') {
-                ++quoteCount;
-                if (quoteCount == 3) {
-                    // third consecutive quote
+        /*
+            Splits a command line string to a vector of arguments.
+        */
+        std::vector<std::string> split_command_line(const std::string &command) {
+            std::vector<std::string> args;
+            std::string tmp;
+            int quoteCount = 0;
+            bool inQuote = false;
+    
+            // handle quoting. tokens can be surrounded by double quotes
+            // "hello world". three consecutive double quotes represent
+            // the quote character itself.
+            for (int i = 0; i < command.size(); ++i) {
+                if (command.at(i) == u'"') {
+                    ++quoteCount;
+                    if (quoteCount == 3) {
+                        // third consecutive quote
+                        quoteCount = 0;
+                        tmp += command.at(i);
+                    }
+                    continue;
+                }
+                if (quoteCount) {
+                    if (quoteCount == 1)
+                        inQuote = !inQuote;
                     quoteCount = 0;
+                }
+                if (!inQuote && std::isspace(command.at(i))) {
+                    if (!tmp.empty()) {
+                        args.push_back(tmp);
+                        tmp.clear();
+                    }
+                } else {
                     tmp += command.at(i);
                 }
-                continue;
             }
-            if (quoteCount) {
-                if (quoteCount == 1)
-                    inQuote = !inQuote;
-                quoteCount = 0;
+            if (!tmp.empty()) {
+                args.push_back(tmp);
             }
-            if (!inQuote && std::isspace(command.at(i))) {
-                if (!tmp.empty()) {
-                    args.push_back(tmp);
-                    tmp.clear();
+            return args;
+        }
+
+        /*!
+            Joins the list of arguments into a single command line.
+        */
+        std::string join_command_line(const std::vector<std::string> &args) {
+            std::string cmdLine;
+            for (size_t i = 0; i < args.size(); ++i) {
+                if (i != 0)
+                    cmdLine += ' ';
+                if (args[i].find(' ') != std::wstring::npos) {
+                    cmdLine += '"' + args[i] + '"';
+                } else {
+                    cmdLine += args[i];
                 }
-            } else {
-                tmp += command.at(i);
             }
+            return cmdLine;
         }
-        if (!tmp.empty()) {
-            args.push_back(tmp);
-        }
-        return args;
+
     }
 
     /*
