@@ -5,6 +5,7 @@
 #include <vector>
 #include <unordered_map>
 #include <utility>
+#include <cstddef>
 
 #ifdef QT_CORE_LIB
 #  include <QList>

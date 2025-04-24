@@ -30,7 +30,9 @@ namespace stdc {
 
             void leave() {
                 leaveImpl();
+#ifdef _WIN32
                 ::SetConsoleOutputCP(_codepage);
+#endif
                 global_mtx().unlock();
             }
 
