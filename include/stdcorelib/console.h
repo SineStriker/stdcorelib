@@ -46,13 +46,15 @@ namespace stdc {
         STDCORELIB_EXPORT int vprintf(int style, int fg, int bg, const char *fmt, va_list args);
 
         template <class... Args>
-        static inline void print(int fg, int bg, const std::string &format, Args &&...args) {
-            printf(fg, bg, "%s", formatN(format, args...).c_str());
+        static inline void print(int style, int fg, int bg, const std::string &format,
+                                 Args &&...args) {
+            printf(style, fg, bg, "%s", formatN(format, args...).c_str());
         }
 
         template <class... Args>
-        static inline void println(int fg, int bg, const std::string &format, Args &&...args) {
-            printf(fg, bg, "%s\n", formatN(format, args...).c_str());
+        static inline void println(int style, int fg, int bg, const std::string &format,
+                                   Args &&...args) {
+            printf(style, fg, bg, "%s\n", formatN(format, args...).c_str());
         }
 
         STDCORELIB_EXPORT int u8printf(const char *fmt, ...) STDCORELIB_PRINTF_FORMAT(1, 2);

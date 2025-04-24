@@ -1,12 +1,13 @@
 #include "str.h"
 
+#include "3rdparty/llvm/smallvector.h"
+
 #ifdef _WIN32
 #  include "windows_utils.h"
 #endif
 
 #include <cstring>
 
-#include "vla.h"
 #include "path.h"
 
 namespace stdc {
@@ -140,10 +141,9 @@ namespace stdc {
                 const char *data;
                 size_t size;
             };
-            std::vector<Part> parts;
+            llvm::SmallVector<Part> parts(8);
 
-            int parts_count = 0;
-            const auto &push_back = [&parts, &parts_count](const char *data, size_t size) {
+            const auto &push_back = [&parts](const char *data, size_t size) {
                 parts.push_back({data, size});
             };
 
@@ -194,7 +194,7 @@ namespace stdc {
             }
 
             size_t total_length = 0;
-            for (int i = 0; i < parts_count; i++) {
+            for (int i = 0; i < parts.size(); i++) {
                 total_length += parts[i].size;
             }
 
@@ -203,7 +203,7 @@ namespace stdc {
             res.resize(total_length);
 
             auto dest = res.data();
-            for (int i = 0; i < parts_count; i++) {
+            for (int i = 0; i < parts.size(); i++) {
                 memcpy(dest, parts[i].data, parts[i].size);
                 dest += parts[i].size;
             }

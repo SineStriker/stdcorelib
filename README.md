@@ -40,25 +40,3 @@ int main(int /* argc */, char * /* argv */[]) {
 5 - 😀
 6 - こんにちは
 ```
-
-## VLA
-
-```cpp
-#include <string_view>
-
-#include <stdcorelib/vla.h>
-
-// I need the command line in `string_view` array
-extern void foo(const std::string_view cmdline[], int count);
-
-int main(int argc, char *argv[]) {
-    // No need to allocate memory on heap
-    // Allocating on stack is a lot more effecient
-    VLA_NEW(std::string_view, stack_argv, argc);
-    for (int i = 0; i < argc; ++i) {
-        stack_argv[i] = std::string_view(argv[i]);
-    }
-    process_command_lines(stack_argv, argc);
-    return 0;
-}
-```

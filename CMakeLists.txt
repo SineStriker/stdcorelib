@@ -64,6 +64,29 @@ if(NOT WIN32)
             continue()
         endif()
 
+        if(_name MATCHES ".+_win\..+")
+            continue()
+        endif()
+
+        list(APPEND _temp ${_item})
+    endforeach()
+
+    set(_src ${_temp})
+    unset(_temp)
+else()
+    set(_temp)
+
+    foreach(_item IN LISTS _src)
+        get_filename_component(_name ${_item} NAME)
+
+        if(_name MATCHES "^unix_.+")
+            continue()
+        endif()
+
+        if(_name MATCHES ".+_unix\..+")
+            continue()
+        endif()
+
         list(APPEND _temp ${_item})
     endforeach()
 

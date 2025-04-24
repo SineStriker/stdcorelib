@@ -2,8 +2,6 @@
 
 #include <algorithm>
 
-#include "global.h"
-
 namespace fs = std::filesystem;
 
 namespace stdc {

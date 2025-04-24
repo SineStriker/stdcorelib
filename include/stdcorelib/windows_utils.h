@@ -11,7 +11,7 @@
 #include <string_view>
 #include <cstdarg>
 
-#include <stdcorelib/global.h>
+#include <stdcorelib/stdc_global.h>
 
 namespace stdc {
 

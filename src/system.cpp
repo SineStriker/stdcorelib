@@ -246,7 +246,7 @@ namespace stdc {
             for (size_t i = 0; i < args.size(); ++i) {
                 if (i != 0)
                     cmdLine += ' ';
-                if (args[i].find(' ') != std::wstring::npos) {
+                if (args[i].find_first_of(" \t") != std::wstring::npos) {
                     cmdLine += '"' + args[i] + '"';
                 } else {
                     cmdLine += args[i];
