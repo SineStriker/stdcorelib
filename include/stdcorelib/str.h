@@ -120,7 +120,7 @@ namespace stdc {
                     oss << std::noshowpoint << t;
                     return oss.str();
                 } else {
-                    return str::conv<T2>()(t);
+                    return str::conv<T2>()(std::forward<T>(t));
                 }
             }
         }
@@ -136,7 +136,7 @@ namespace stdc {
 
         template <class... Args>
         auto formatN(const std::string_view &fmt, Args &&...args) {
-            return format(fmt, {to_string(std::forward<decltype(args)>(args))...});
+            return format(fmt, {to_string(std::forward<Args>(args))...});
         }
 
         STDCORELIB_EXPORT std::string parse_expr(const std::string_view &s,
