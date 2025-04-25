@@ -199,7 +199,7 @@ namespace stdc {
         /*
             Splits a command line string to a vector of arguments.
         */
-        std::vector<std::string> split_command_line(const std::string &command) {
+        std::vector<std::string> split_command_line(const std::string_view &command) {
             std::vector<std::string> args;
             std::string tmp;
             int quoteCount = 0;

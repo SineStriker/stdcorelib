@@ -24,6 +24,15 @@ namespace stdc {
         return size_t(key & (~0U)) ^ seed;
     }
 
+    template <class Container, class T>
+    inline bool contains(const Container &container, const T &key) {
+#if __cplusplus >= 202002L
+        return container.contains(key);
+#else
+        return container.count(key) != 0;
+#endif
+    }
+
 }
 
 #endif // STDCORELIB_ALGORITHMS_H

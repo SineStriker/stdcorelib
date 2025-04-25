@@ -10,7 +10,7 @@ namespace stdc {
 
     namespace path {
 
-        inline std::filesystem::path from_utf8(const std::string &s) {
+        inline std::filesystem::path from_utf8(const std::string_view &s) {
 #ifdef _WIN32
             return wstring_conv::from_utf8(s);
 #else

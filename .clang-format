@@ -123,6 +123,9 @@ AlignArrayOfStructures: Left
 # 不对头文件排序
 SortIncludes: Never
 
+# 不对 using 语句排序
+SortUsingDeclarations: false
+
 FixNamespaceComments: false
 
 StatementMacros: ['__qas_attr__', '__qas_exclude__', '__qas_include__']

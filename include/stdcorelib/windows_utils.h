@@ -5,6 +5,9 @@
 #  error "Unsupported system"
 #endif
 
+// Disable min/max macros in windows headers
+#define NOMINMAX
+
 #include <windows.h>
 
 #include <string>

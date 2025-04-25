@@ -141,7 +141,7 @@ namespace stdc {
                 const char *data;
                 size_t size;
             };
-            llvm::SmallVector<Part> parts(8);
+            llvm::SmallVector<Part> parts;
 
             const auto &push_back = [&parts](const char *data, size_t size) {
                 parts.push_back({data, size});
