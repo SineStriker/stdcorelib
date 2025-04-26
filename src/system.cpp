@@ -15,9 +15,8 @@
 #  include <fstream>
 #endif
 
-#include <algorithm>
-
 #include "path.h"
+#include "str.h"
 
 #ifdef _WIN32
 using PathChar = wchar_t;
@@ -109,8 +108,7 @@ namespace stdc {
 #ifdef _WIN32
         auto dotIdx = appName.find_last_of(L'.');
         if (dotIdx != PathString::npos) {
-            auto suffix = appName.substr(dotIdx + 1);
-            std::transform(suffix.begin(), suffix.end(), suffix.begin(), ::tolower);
+            auto suffix = stdc::to_lower(appName.substr(dotIdx + 1));
             if (suffix == L"exe") {
                 appName = appName.substr(0, dotIdx);
             }

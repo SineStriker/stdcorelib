@@ -5,12 +5,12 @@ C++ auxiliary core library.
 ## Features
 
 + Console color
-+ Cross-platform string encoding and print functions
-+ Get command line arguments
-+ Shared library loader
-+ Application information
++ Cross-platform string encoding and printing functions
++ Program information
++ Shared library
 + String utilities and formatter
 + PIMPL and VLA syntactic sugar
++ Simple subprocess utility (Experimental)
 
 ## Example
 

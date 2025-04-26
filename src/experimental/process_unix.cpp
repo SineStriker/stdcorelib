@@ -8,6 +8,8 @@
 #include <cstring>
 #include <iostream>
 
+#include "3rdparty/llvm/smallvector.h"
+
 namespace stdc::experimental {
 
     /*!
@@ -75,18 +77,6 @@ namespace stdc::experimental {
             }
         }
 
-        // 构建参数数组
-        auto argv = new char *[args.size() + 2];
-        {
-            argv[0] = const_cast<char *>(command.c_str());
-            auto p = argv + 1;
-            for (const auto &arg : args) {
-                *p = const_cast<char *>(arg.c_str());
-                p++;
-            }
-            *p = nullptr;
-        }
-
         // 创建子进程
         pid_t pid = fork();
         if (pid == -1) {
@@ -135,12 +125,19 @@ namespace stdc::experimental {
             std::cout.flush();
             std::cerr.flush();
 
+            // 构建参数数组
+            llvm::SmallVector<char *> argv;
+            argv.reserve(args.size() + 2);
+            argv.push_back(const_cast<char *>(command.c_str()));
+            for (const auto &arg : args) {
+                argv.push_back(const_cast<char *>(arg.c_str()));
+            }
+            argv.push_back(nullptr);
+
             // 执行程序
-            execvp(command.c_str(), argv);
+            execvp(command.c_str(), argv.data());
             exit(127); // exec失败时的退出码
         }
-
-        delete[] argv;
 
         // 父进程
         if (stdoutFd != -1)

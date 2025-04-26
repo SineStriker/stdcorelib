@@ -179,8 +179,8 @@ namespace stdc::experimental {
                        const std::filesystem::path &cwd, const std::string &stdoutFile,
                        const std::string &stderrFile) {
         int ret = ExecuteProcessImpl(command, ToWideArgs(args), cwd, nullptr,
-                                     stdc::wstring_conv::from_utf8(strout),
-                                     stdc::wstring_conv::from_utf8(strerr));
+                                     stdc::wstring_conv::from_utf8(stdoutFile),
+                                     stdc::wstring_conv::from_utf8(stderrFile));
         return ret;
     }
 

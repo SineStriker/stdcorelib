@@ -29,6 +29,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <stdcorelib/stdc_global.h>
+
 namespace llvm {
 
 // template <typename T> class ArrayRef;

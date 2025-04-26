@@ -12,8 +12,6 @@
 
 #include "3rdparty/llvm/smallvector.h"
 
-#include "stdc_global.h"
-
 #include <string>
 
 #define LLVM_ENABLE_EXCEPTIONS
