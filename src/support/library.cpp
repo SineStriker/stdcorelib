@@ -4,7 +4,7 @@
 #include <cctype>
 
 #ifdef _WIN32
-#  include "windows_utils.h"
+#  include "osapi_win.h"
 #else
 #  include <dlfcn.h>
 #  include <limits.h>

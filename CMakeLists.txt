@@ -113,6 +113,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src
     include
     include/stdcorelib
+    include/stdcorelib/experimental
+    include/stdcorelib/platform
+    include/stdcorelib/support
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -123,7 +126,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # Add platform specific
 if(WIN32)
-    set(RC_DESCRIPTION "C++ Additional Core Library")
+    set(RC_DESCRIPTION "C++ Auxiliary Core Library")
     set(RC_COPYRIGHT "Copyright (C) 2022-2024 SineStriker")
     include("cmake/winrc.cmake")
 endif()

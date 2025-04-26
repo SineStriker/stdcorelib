@@ -10,7 +10,9 @@
 #include <type_traits>
 #include <algorithm>
 
+// ==============================================================================
 // NOTICE: Use `3rdparty/llvm/smallvector` instead.
+// ==============================================================================
 
 #if defined(_MSC_VER)
 #  define _STDCORELIB_ALLOCA(size) _alloca(size)

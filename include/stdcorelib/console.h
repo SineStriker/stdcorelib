@@ -5,7 +5,6 @@
 
 #include <stdcorelib/str.h>
 
-
 namespace stdc {
 
     namespace console {
@@ -31,7 +30,7 @@ namespace stdc {
             white = red | green | blue,
             black = 0x8,
             lightred = intensified | red,
-            lightgreen = intensified | red,
+            lightgreen = intensified | green,
             lightblue = intensified | blue,
             lightyellow = intensified | yellow,
             lightpurple = intensified | purple,
@@ -73,6 +72,26 @@ namespace stdc {
 
         inline void u8println() {
             u8printf("\n");
+        }
+
+        template <class... Args>
+        inline void debug(const std::string &format, Args &&...args) {
+            println(nostyle, lightblue, nocolor, format, std::forward<Args>(args)...);
+        }
+
+        template <class... Args>
+        inline void success(const std::string &format, Args &&...args) {
+            println(nostyle, lightgreen, nocolor, format, std::forward<Args>(args)...);
+        }
+
+        template <class... Args>
+        inline void warning(const std::string &format, Args &&...args) {
+            println(nostyle, yellow, nocolor, format, std::forward<Args>(args)...);
+        }
+
+        template <class... Args>
+        inline void critical(const std::string &format, Args &&...args) {
+            println(nostyle, red, nocolor, format, std::forward<Args>(args)...);
         }
 
     }

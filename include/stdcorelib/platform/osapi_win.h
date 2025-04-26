@@ -1,9 +1,5 @@
-#ifndef STDCORELIB_WINDOWS_UTILS_H
-#define STDCORELIB_WINDOWS_UTILS_H
-
-#ifndef _WIN32
-#  error "Unsupported system"
-#endif
+#ifndef STDCORELIB_OSAPI_WIN_H
+#define STDCORELIB_OSAPI_WIN_H
 
 // Disable min/max macros in windows headers
 #define NOMINMAX
@@ -33,4 +29,4 @@ namespace stdc {
 
 }
 
-#endif // STDCORELIB_WINDOWS_UTILS_H
+#endif // STDCORELIB_OSAPI_WIN_H

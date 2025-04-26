@@ -46,13 +46,13 @@ namespace stdc {
 
         inline std::string normalize_separators(const std::filesystem::path &path,
                                                 bool native = false) {
-            return str::conv<std::filesystem::path>::normalize_separators(to_utf8(path),
-                                                                              native);
+            return str::conv<std::filesystem::path>::normalize_separators(to_utf8(path), native);
         }
 
     }
 
     using path::clean_path;
+    using path::normalize_separators;
 
 }
 

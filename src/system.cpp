@@ -1,7 +1,7 @@
 #include "system.h"
 
 #ifdef _WIN32
-#  include "windows_utils.h"
+#  include "osapi_win.h"
 // ...
 #  include <Psapi.h>
 #elif defined(__APPLE__)

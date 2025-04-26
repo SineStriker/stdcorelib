@@ -129,14 +129,22 @@ namespace stdc {
         STDCORELIB_EXPORT std::string join(const std::vector<std::string> &v,
                                            const std::string_view &delimiter);
 
+        // @overload: join
+        STDCORELIB_EXPORT std::string join(const std::vector<std::string_view> &v,
+                                           const std::string_view &delimiter);
+
         STDCORELIB_EXPORT std::vector<std::string_view> split(const std::string_view &s,
                                                               const std::string_view &delimiter);
+
+        // @overload: split
+        STDCORELIB_EXPORT std::vector<std::string> split(std::string &&s,
+                                                         const std::string_view &delimiter);
 
         STDCORELIB_EXPORT std::string format(const std::string_view &fmt,
                                              const std::vector<std::string> &args);
 
         template <class... Args>
-        auto formatN(const std::string_view &fmt, Args &&...args) {
+        std::string formatN(const std::string_view &fmt, Args &&...args) {
             return format(fmt, {to_string(std::forward<Args>(args))...});
         }
 
@@ -211,7 +219,17 @@ namespace stdc {
             return s.substr(N);
         }
 
+        // @overload: drop_front
+        inline std::string drop_front(std::string &&s, size_t N = 1) {
+            return s.substr(N);
+        }
+
         inline std::string_view drop_back(const std::string_view &s, size_t N = 1) {
+            return s.substr(0, s.size() - N);
+        }
+
+        // @overload: drop_back
+        inline std::string drop_back(std::string &&s, size_t N = 1) {
             return s.substr(0, s.size() - N);
         }
 
@@ -219,27 +237,61 @@ namespace stdc {
             return drop_front(s, std::min(s.size(), s.find_first_not_of(Char)));
         }
 
+        // @overload: ltrim(string, char)
+        inline std::string ltrim(std::string &&s, char Char) {
+            return std::string(
+                drop_front(std::string_view(s), std::min(s.size(), s.find_first_not_of(Char))));
+        }
+
         inline std::string_view ltrim(const std::string_view &s,
-                                      std::string_view Chars = " \t\n\v\f\r") {
+                                      const std::string_view &Chars = " \t\n\v\f\r") {
             return drop_front(s, std::min(s.size(), s.find_first_not_of(Chars)));
+        }
+
+        // @overload: ltrim(string, string)
+        inline std::string ltrim(std::string &&s, const std::string_view &Chars = " \t\n\v\f\r") {
+            return std::string(
+                drop_front(std::string_view(s), std::min(s.size(), s.find_first_not_of(Chars))));
         }
 
         inline std::string_view rtrim(const std::string_view &s, char Char) {
             return drop_back(s, s.size() - std::min(s.size(), s.find_last_not_of(Char) + 1));
         }
 
+        // @overload: rtrim(string, char)
+        inline std::string rtrim(std::string &&s, char Char) {
+            return std::string(drop_back(
+                std::string_view(s), s.size() - std::min(s.size(), s.find_last_not_of(Char) + 1)));
+        }
+
         inline std::string_view rtrim(const std::string_view &s,
-                                      std::string_view Chars = " \t\n\v\f\r") {
+                                      const std::string_view &Chars = " \t\n\v\f\r") {
             return drop_back(s, s.size() - std::min(s.size(), s.find_last_not_of(Chars) + 1));
+        }
+
+        // @overload: rtrim(string, string)
+        inline std::string rtrim(std::string &&s, const std::string_view &Chars = " \t\n\v\f\r") {
+            return std::string(drop_back(
+                std::string_view(s), s.size() - std::min(s.size(), s.find_last_not_of(Chars) + 1)));
         }
 
         inline std::string_view trim(const std::string_view &s, char Char) {
             return rtrim(ltrim(s, Char), Char);
         }
 
+        // @overload: trim(string, char)
+        inline std::string trim(std::string &&s, char Char) {
+            return std::string(rtrim(ltrim(std::string_view(s), Char), Char));
+        }
+
         inline std::string_view trim(const std::string_view &s,
                                      std::string_view Chars = " \t\n\v\f\r") {
             return rtrim(ltrim(s, Chars), Chars);
+        }
+
+        // @overload: trim(string, string)
+        inline std::string trim(std::string &&s, std::string_view Chars = " \t\n\v\f\r") {
+            return std::string(rtrim(ltrim(std::string_view(s), Chars), Chars));
         }
 
     }

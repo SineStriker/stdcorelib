@@ -1,6 +1,6 @@
 # STDCORELIB
 
-C++ additional core library, as a supplement to the standard library.
+C++ auxiliary core library.
 
 ## Features
 
