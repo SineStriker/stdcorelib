@@ -5,13 +5,16 @@
 #include <fcntl.h>
 
 #include <stdexcept>
+#include <cstring>
+#include <iostream>
 
 namespace stdc::experimental {
 
     /*!
         \internal
     */
-    static int ExecuteProcessImpl(const std::vector<std::string> &args, std::string *output,
+    static int ExecuteProcessImpl(const std::string &command, const std::vector<std::string> &args,
+                                  const std::string &cwd, std::string *output,
                                   const std::string &stdoutFile = {},
                                   const std::string &stderrFile = {}) {
         // 标准输出处理相关描述符
@@ -73,11 +76,16 @@ namespace stdc::experimental {
         }
 
         // 构建参数数组
-        std::vector<const char *> argv;
-        for (const auto &arg : args) {
-            argv.push_back(arg.c_str());
+        auto argv = new char *[args.size() + 2];
+        {
+            argv[0] = const_cast<char *>(command.c_str());
+            auto p = argv + 1;
+            for (const auto &arg : args) {
+                *p = const_cast<char *>(arg.c_str());
+                p++;
+            }
+            *p = nullptr;
         }
-        argv.push_back(nullptr);
 
         // 创建子进程
         pid_t pid = fork();
@@ -108,7 +116,7 @@ namespace stdc::experimental {
                 dup2(stdoutFd, STDOUT_FILENO);
                 close(stdoutFd);
             } else if (captureOutput) {
-                close(stdoutPipe[0]);
+                close(stdoutPipe[0]); // 关闭读端
                 dup2(stdoutPipe[1], STDOUT_FILENO);
                 close(stdoutPipe[1]);
             }
@@ -119,10 +127,20 @@ namespace stdc::experimental {
                 close(stderrFd);
             }
 
+            // 刷新所有 C 标准流缓冲区
+            fflush(stdout);
+            fflush(stderr);
+
+            // 刷新 C++ 标准流缓冲区
+            std::cout.flush();
+            std::cerr.flush();
+
             // 执行程序
-            execvp(argv[0], const_cast<char *const *>(argv.data()));
+            execvp(command.c_str(), argv);
             exit(127); // exec失败时的退出码
         }
+
+        delete[] argv;
 
         // 父进程
         if (stdoutFd != -1)
@@ -135,10 +153,12 @@ namespace stdc::experimental {
             close(stdoutPipe[1]); // 关闭写端
             char buffer[4096];
             ssize_t bytesRead;
+            std::string childOutput;
 
             while ((bytesRead = read(stdoutPipe[0], buffer, sizeof(buffer))) > 0) {
-                output->append(buffer, bytesRead);
+                childOutput.append(buffer, bytesRead);
             }
+            *output = childOutput;
             close(stdoutPipe[0]);
         }
 
@@ -152,14 +172,17 @@ namespace stdc::experimental {
         return -1; // 非正常退出
     }
 
-    int Process::start(const std::vector<std::string> &args, const std::string &strout,
-                       const std::string &strerr) {
-        int ret = ExecuteProcessImpl(args, nullptr, strout, strerr);
+    int Process::start(const std::filesystem::path &command, const std::vector<std::string> &args,
+                       const std::filesystem::path &cwd, const std::string &stdoutFile,
+                       const std::string &stderrFile) {
+        int ret = ExecuteProcessImpl(command, args, cwd, nullptr, stdoutFile, stderrFile);
         return ret;
     }
 
-    int Process::checkOptput(const std::vector<std::string> &args, std::string &output) {
-        return ExecuteProcessImpl(args, &output);
+    int Process::checkOptput(const std::filesystem::path &command,
+                             const std::vector<std::string> &args, const std::filesystem::path &cwd,
+                             std::string &output) {
+        return ExecuteProcessImpl(command, args, cwd, &output);
     }
 
 }

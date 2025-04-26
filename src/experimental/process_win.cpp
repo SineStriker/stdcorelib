@@ -147,12 +147,12 @@ namespace stdc::experimental {
 
             char buffer[4096];
             DWORD bytesRead;
-            std::string ansiOutput;
+            std::string childOutput;
             while (ReadFile(hChildStdoutRd, buffer, sizeof(buffer), &bytesRead, nullptr) &&
                    bytesRead > 0) {
-                ansiOutput.append(buffer, bytesRead);
+                childOutput.append(buffer, bytesRead);
             }
-            *output = ansiOutput;
+            *output = childOutput;
             CloseHandle(hChildStdoutRd);
         }
 
@@ -176,8 +176,8 @@ namespace stdc::experimental {
     }
 
     int Process::start(const std::filesystem::path &command, const std::vector<std::string> &args,
-                       const std::filesystem::path &cwd, const std::string &strout,
-                       const std::string &strerr) {
+                       const std::filesystem::path &cwd, const std::string &stdoutFile,
+                       const std::string &stderrFile) {
         int ret = ExecuteProcessImpl(command, ToWideArgs(args), cwd, nullptr,
                                      stdc::wstring_conv::from_utf8(strout),
                                      stdc::wstring_conv::from_utf8(strerr));

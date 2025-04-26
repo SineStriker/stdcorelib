@@ -9,7 +9,7 @@ C++ auxiliary core library.
 + Get command line arguments
 + Shared library loader
 + Application information
-+ String utilities and formater
++ String utilities and formatter
 + PIMPL and VLA syntactic sugar
 
 ## Example
