@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "path.h"
+#include "str_p.h"
 
 namespace stdc {
 
@@ -16,6 +17,92 @@ namespace stdc {
         \namespace str
         \brief Namespace of string algorithms.
     */
+
+    namespace str {
+
+        /*!
+            \internal
+        */
+        bool varexp_split(const std::string_view &s, llvm::SmallVectorImpl<varexp_part> &result) {
+            varexp_part buf{
+                varexp_part_type::literal,
+                s.data(),
+                0,
+            };
+            for (size_t i = 0; i < s.size();) {
+                if (s[i] == '$' && i + 1 < s.size()) {
+                    if (s[i + 1] == '{') {
+                        size_t start = i + 2;
+                        size_t j = start;
+
+                        bool nested = false;
+                        int braceCount = 1;
+                        while (j < s.size() && braceCount > 0) {
+                            if (s[j] == '{' && j + 1 < s.size() && s[j + 1] == '$') {
+                                braceCount++;
+                                nested = true;
+                                j += 2;
+                                continue;
+                            }
+                            if (s[j] == '}') {
+                                braceCount--;
+                            }
+                            j++;
+                        }
+
+                        if (braceCount != 0) {
+                            return false; // Invalid expression
+                        }
+
+                        if (buf.size > 0) {
+                            result.push_back(buf);
+                            buf.size = 0;
+                        }
+                        result.push_back({
+                            nested ? varexp_part_type::nested_variable : varexp_part_type::variable,
+                            s.data() + start,
+                            j - 1 - start,
+                        });
+                        buf.data = s.data() + j; // even if j == s.size(), it will be fine
+                        buf.type = varexp_part_type::literal;
+                        i = j;
+                        continue;
+                    }
+                    if (s[i] == '$') {
+                        buf.type = varexp_part_type::literal_with_dollar;
+                        buf.size += 2;
+                        i += 2;
+                    }
+                } else {
+                    buf.size++;
+                    i++;
+                }
+            }
+
+            if (buf.size > 0) {
+                result.push_back(buf);
+            }
+            return true;
+        }
+
+        /*!
+            \internal
+        */
+        std::string varexp_post(const std::string_view &s) {
+            std::string result;
+            result.reserve(s.size());
+            for (size_t i = 0; i < s.size(); ++i) {
+                if (s[i] == '$' && i + 1 < s.size() && s[i + 1] == '$') {
+                    result += '$';
+                    ++i;
+                } else {
+                    result += s[i];
+                }
+            }
+            return result;
+        }
+
+    }
 
     namespace str {
 
@@ -175,7 +262,7 @@ namespace stdc {
                 const char *data;
                 size_t size;
             };
-            llvm::SmallVector<Part> parts;
+            llvm::SmallVector<Part, 10> parts;
 
             const auto &push_back = [&parts](const char *data, size_t size) {
                 parts.push_back({data, size});
@@ -252,55 +339,31 @@ namespace stdc {
         */
 
         /*!
-            Replace occurrences of \c ${VAR} in \a s with the corresponding variable from \a
-            vars.
+            Replace occurrences of \c ${VAR} in \a s with the corresponding variable.
         */
-        std::string parse_expr(const std::string_view &s,
-                               const std::map<std::string, std::string> &vars) {
+        std::string varexp(const std::string_view &s,
+                           const std::function<std::string(const std::string_view &)> &find) {
+            llvm::SmallVector<varexp_part, 10> parts;
+            if (!varexp_split(s, parts)) {
+                return {};
+            }
+
             std::string result;
-            for (size_t i = 0; i < s.size();) {
-                if (s[i] == '$' && i + 1 < s.size() && s[i + 1] == '{') {
-                    size_t start = i + 2;
-                    size_t j = start;
-
-                    int braceCount = 1;
-                    while (j < s.size() && braceCount > 0) {
-                        if (s[j] == '{')
-                            braceCount++;
-                        if (s[j] == '}')
-                            braceCount--;
-                        j++;
-                    }
-
-                    if (braceCount == 0) {
-                        std::string_view varName = s.substr(start, j - start - 1);
-                        std::string innerValue = parse_expr(varName, vars);
-                        auto it = vars.find(innerValue);
-                        if (it != vars.end()) {
-                            result += it->second;
-                        }
-                        i = j;
-                    } else {
-                        // Invalid expression
-                        return {};
-                    }
-                } else {
-                    result += s[i];
-                    i++;
+            for (const auto &part : parts) {
+                switch (part.type) {
+                    case varexp_part_type::literal:
+                    case varexp_part_type::literal_with_dollar:
+                        result += std::string_view(part.data, part.size);
+                        break;
+                    case varexp_part_type::variable:
+                        result += find(std::string_view(part.data, part.size));
+                        break;
+                    case varexp_part_type::nested_variable:
+                        result += varexp(std::string_view(part.data, part.size), find);
+                        break;
                 }
             }
-
-            // Replace "$$" with "$"
-            std::string finalResult;
-            for (size_t i = 0; i < result.size(); ++i) {
-                if (result[i] == '$' && i + 1 < result.size() && result[i + 1] == '$') {
-                    finalResult += '$';
-                    ++i;
-                } else {
-                    finalResult += result[i];
-                }
-            }
-            return finalResult;
+            return varexp_post(result);
         }
 
     }

@@ -8,16 +8,15 @@
 #include <cstring>
 #include <iostream>
 
-#include "3rdparty/llvm/smallvector.h"
-
 namespace stdc::experimental {
 
     /*!
         \internal
     */
     static int ExecuteProcessImpl(const std::string &command, const std::vector<std::string> &args,
-                                  const std::string &cwd, std::string *output,
-                                  const std::string &stdoutFile = {},
+                                  const std::string &cwd,
+                                  const std::map<std::string, std::string> &env,
+                                  std::string *output, const std::string &stdoutFile = {},
                                   const std::string &stderrFile = {}) {
         // 标准输出处理相关描述符
         int stdoutFd = -1;
@@ -126,7 +125,7 @@ namespace stdc::experimental {
             std::cerr.flush();
 
             // 构建参数数组
-            llvm::SmallVector<char *> argv;
+            std::vector<char *> argv;
             argv.reserve(args.size() + 2);
             argv.push_back(const_cast<char *>(command.c_str()));
             for (const auto &arg : args) {
@@ -135,7 +134,23 @@ namespace stdc::experimental {
             argv.push_back(nullptr);
 
             // 执行程序
-            execvp(command.c_str(), argv.data());
+            if (env.empty()) {
+                execvp(command.c_str(), argv.data());
+            } else {
+                std::vector<std::string> envbuf;
+                envbuf.reserve(env.size());
+                for (const auto &item : env) {
+                    envbuf.push_back(item.first + "=" + item.second);
+                }
+
+                std::vector<char *> envp;
+                envp.reserve(envbuf.size() + 1);
+                for (const auto &entry : envbuf) {
+                    envp.push_back(const_cast<char *>(entry.c_str()));
+                }
+                envp.push_back(nullptr);
+                execvpe(command.c_str(), argv.data(), envp.data());
+            }
             exit(127); // exec失败时的退出码
         }
 
@@ -170,16 +185,34 @@ namespace stdc::experimental {
     }
 
     int Process::start(const std::filesystem::path &command, const std::vector<std::string> &args,
-                       const std::filesystem::path &cwd, const std::string &stdoutFile,
+                       const std::filesystem::path &cwd,
+                       const std::map<std::string, std::string> &env, const std::string &stdoutFile,
                        const std::string &stderrFile) {
-        int ret = ExecuteProcessImpl(command, args, cwd, nullptr, stdoutFile, stderrFile);
+        int ret = ExecuteProcessImpl(command, args, cwd, env, nullptr, stdoutFile, stderrFile);
         return ret;
     }
 
     int Process::checkOptput(const std::filesystem::path &command,
                              const std::vector<std::string> &args, const std::filesystem::path &cwd,
-                             std::string &output) {
-        return ExecuteProcessImpl(command, args, cwd, &output);
+                             const std::map<std::string, std::string> &env, std::string &output) {
+        return ExecuteProcessImpl(command, args, cwd, env, &output);
     }
+
+#ifndef __APPLE__
+    std::map<std::string, std::string> Process::systemEnvironment() {
+        std::map<std::string, std::string> env;
+        const char *entry;
+        for (int count = 0; (entry = environ[count]); ++count) {
+            const char *equal = strchr(entry, '=');
+            if (!equal)
+                continue;
+
+            std::string name(entry, equal - entry);
+            std::string value(equal + 1);
+            env.insert(std::make_pair(name, value));
+        }
+        return env;
+    }
+#endif
 
 }

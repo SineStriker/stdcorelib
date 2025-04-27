@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <map>
 #include <algorithm>
+#include <functional>
 
 #include <stdcorelib/stdc_global.h>
 
@@ -114,6 +115,8 @@ namespace stdc {
                     return t ? "true" : "false";
                 } else if constexpr (std::is_same_v<T2, char>) {
                     return std::string(t);
+                } else if constexpr (std::is_same_v<T2, wchar_t>) {
+                    return conv<std::wstring>::to_utf8(&t, 1);
                 } else if constexpr (std::is_integral_v<T2>) {
                     return std::to_string(t);
                 } else if constexpr (std::is_floating_point_v<T2>) {
@@ -143,13 +146,37 @@ namespace stdc {
         STDCORELIB_EXPORT std::string format(const std::string_view &fmt,
                                              const std::vector<std::string> &args);
 
-        template <class... Args>
-        std::string formatN(const std::string_view &fmt, Args &&...args) {
-            return format(fmt, {to_string(std::forward<Args>(args))...});
+        template <class Arg1, class... Args>
+        std::string formatN(const std::string_view &fmt, Arg1 &&arg1, Args &&...args) {
+            return format(fmt, {
+                                   to_string(std::forward<Arg1>(arg1)),
+                                   to_string(std::forward<Args>(args))...,
+                               });
         }
 
-        STDCORELIB_EXPORT std::string parse_expr(const std::string_view &s,
-                                                 const std::map<std::string, std::string> &vars);
+        // @overload: formatN
+        inline std::string_view formatN(const std::string_view &fmt) {
+            return fmt;
+        }
+
+        // @overload: formatN
+        inline std::string formatN(std::string &&fmt) {
+            return fmt;
+        }
+
+        STDCORELIB_EXPORT std::string
+            varexp(const std::string_view &s,
+                   const std::function<std::string(const std::string_view &)> &find);
+
+        template <class MAP>
+        inline std::string varexp(const std::string_view &s, const MAP &vars) {
+            return varexp(s, [&vars](const std::string_view &name) -> std::string {
+                auto it = vars.find(name);
+                if (it == vars.end())
+                    return std::string();
+                return it->second;
+            });
+        }
 
     }
 
@@ -191,12 +218,20 @@ namespace stdc {
 #endif
         }
 
+        inline bool starts_with(const std::string_view &s, char prefix) {
+            return s.size() >= 1 && s.front() == prefix;
+        }
+
         inline bool ends_with(const std::string_view &s, const std::string_view &suffix) {
 #if __cplusplus >= 202002L
             return s.ends_with(suffix);
 #else
             return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
 #endif
+        }
+
+        inline bool ends_with(const std::string_view &s, char suffix) {
+            return s.size() >= 1 && s.back() == suffix;
         }
 
         inline bool starts_with(const std::wstring_view &s, const std::wstring_view &prefix) {
@@ -207,12 +242,20 @@ namespace stdc {
 #endif
         }
 
+        inline bool starts_with(const std::wstring_view &s, wchar_t prefix) {
+            return s.size() >= 1 && s.front() == prefix;
+        }
+
         inline bool ends_with(const std::wstring_view &s, const std::wstring_view &suffix) {
 #if __cplusplus >= 202002L
             return s.ends_with(suffix);
 #else
             return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
 #endif
+        }
+
+        inline bool ends_with(const std::wstring_view &s, wchar_t suffix) {
+            return s.size() >= 1 && s.back() == suffix;
         }
 
         inline std::string_view drop_front(const std::string_view &s, size_t N = 1) {

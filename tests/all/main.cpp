@@ -7,6 +7,7 @@
 #include <stdcorelib/vla.h>
 
 using stdc::u8printf;
+using stdc::u8println;
 
 static void tst_CommandLine() {
     auto args = stdc::system::command_line_arguments();
@@ -39,19 +40,24 @@ static STDCORELIB_NOINLINE void tst_VLA() {
 static void tst_ConsoleColor() {
     using namespace stdc::console;
     stdc::console::printf(nostyle, red, lightwhite, " Red in white ");
-    u8printf("\n");
+    u8println();
     stdc::console::printf(nostyle, yellow, blue, " Yellow in blue ");
-    u8printf("\n");
+    u8println();
 
 
     stdc::console::printf(bold, lightwhite, nocolor, "Bold");
-    u8printf("\n");
+    u8println();
     stdc::console::printf(italic, lightwhite, nocolor, "Italic");
-    u8printf("\n");
+    u8println();
     stdc::console::printf(underline, lightwhite, nocolor, "Underline");
-    u8printf("\n");
+    u8println();
     stdc::console::printf(strikethrough, lightwhite, nocolor, "Strikethrough");
-    u8printf("\n");
+    u8println();
+
+    cprintln("${yellow}yellow ${green}green ${blue}blue ${cyan}cyan ${magenta}magenta "
+             "${white}white ${lightred}lightred ${strikethrough}strikethrough "
+             "${underline}underline ${bold}bold ${italic}italic $$");
+    u8println();
 }
 
 int main(int /* argc */, char * /* argv */[]) {
@@ -59,28 +65,28 @@ int main(int /* argc */, char * /* argv */[]) {
     {
         u8printf("[Command line arguments]\n");
         tst_CommandLine();
-        u8printf("\n");
+        u8println();
     }
 
     // 2 app info
     {
         u8printf("[Application info]\n");
         tst_AppInfo();
-        u8printf("\n");
+        u8println();
     }
 
     // 3 vla
     {
         u8printf("[VLA]\n");
         tst_VLA();
-        u8printf("\n");
+        u8println();
     }
 
     // 4 console color
     {
         u8printf("[Console color]\n");
         tst_ConsoleColor();
-        u8printf("\n");
+        u8println();
     }
 
     u8printf("OK\n");

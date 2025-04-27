@@ -1,6 +1,7 @@
 #ifndef STDCORELIB_EXPERIMENTAL_PROCESS_H
 #define STDCORELIB_EXPERIMENTAL_PROCESS_H
 
+#include <map>
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -23,8 +24,9 @@ namespace stdc::experimental {
          * @return int      Exit code of the child process.
          */
         static int start(const std::filesystem::path &command, const std::vector<std::string> &args,
-                         const std::filesystem::path &cwd, const std::string &stdoutFile = {},
-                         const std::string &stderrFile = {});
+                         const std::filesystem::path &cwd,
+                         const std::map<std::string, std::string> &env,
+                         const std::string &stdoutFile = {}, const std::string &stderrFile = {});
 
         /**
          * @brief Check the output of a process.
@@ -38,7 +40,15 @@ namespace stdc::experimental {
          */
         static int checkOptput(const std::filesystem::path &command,
                                const std::vector<std::string> &args,
-                               const std::filesystem::path &cwd, std::string &output);
+                               const std::filesystem::path &cwd,
+                               const std::map<std::string, std::string> &env, std::string &output);
+
+        /**
+         * @brief Get the system environment variables.
+         *
+         * @return std::map<std::string, std::string> System environment variable map.
+         */
+        static std::map<std::string, std::string> systemEnvironment();
     };
 
 }

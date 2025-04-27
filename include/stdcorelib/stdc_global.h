@@ -12,9 +12,11 @@
 #ifdef _WIN32
 #  define STDCORELIB_DECL_EXPORT __declspec(dllexport)
 #  define STDCORELIB_DECL_IMPORT __declspec(dllimport)
+#  define STDCORELIB_DECL_HIDDEN
 #else
 #  define STDCORELIB_DECL_EXPORT __attribute__((visibility("default")))
 #  define STDCORELIB_DECL_IMPORT __attribute__((visibility("default")))
+#  define STDCORELIB_DECL_HIDDEN __attribute__((visibility("hidden")))
 #endif
 
 #ifndef STDCORELIB_EXPORT

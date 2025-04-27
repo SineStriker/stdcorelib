@@ -26,12 +26,12 @@ BOOST_AUTO_TEST_CASE(test_format) {
     }
 }
 
-BOOST_AUTO_TEST_CASE(test_parse_expr) {
+BOOST_AUTO_TEST_CASE(test_varexp) {
     {
         std::map<std::string, std::string> vars{
             {"FOO", "Hello"}
         };
-        std::string actual = str::parse_expr("${FOO} World!", vars);
+        std::string actual = str::varexp("${FOO} World!", vars);
         std::string expect = "Hello World!";
         BOOST_CHECK(actual == expect);
     }
@@ -42,7 +42,7 @@ BOOST_AUTO_TEST_CASE(test_parse_expr) {
             {"BAR", "B"    },
             {"A_B", "Hello"}
         };
-        std::string actual = str::parse_expr("${${FOO}_${BAR}} World!", vars);
+        std::string actual = str::varexp("${${FOO}_${BAR}} World!", vars);
         std::string expect = "Hello World!";
         BOOST_CHECK(actual == expect);
     }

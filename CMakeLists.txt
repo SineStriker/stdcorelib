@@ -52,39 +52,38 @@ set(STDCORELIB_INSTALL_NAME ${PROJECT_NAME})
 # ----------------------------------
 # Main Project
 # ----------------------------------
-file(GLOB_RECURSE _src include/*.h src/*.h src/*.cpp)
+file(GLOB_RECURSE _src include/*.h src/*.h src/*.cpp src/*.mm)
 
-if(NOT WIN32)
+if(TRUE)
     set(_temp)
 
     foreach(_item IN LISTS _src)
         get_filename_component(_name ${_item} NAME)
 
-        if(_name MATCHES "^windows_.+")
-            continue()
+        if(WIN32)
+            if(_name MATCHES ".+_(unix|darwin|mac|linux)\..+" OR _name MATCHES "^unix_.+")
+                continue()
+            endif()
+        else()
+            if(_name MATCHES "^windows_.+" OR _name MATCHES "^win_.+")
+                continue()
+            endif()
+
+            if(APPLE)
+                if(_name MATCHES ".+_linux\..+")
+                    continue()
+                endif()
+            else()
+                if(_name MATCHES ".+_(darwin|mac)\..+")
+                    continue()
+                endif()
+            endif()
         endif()
 
-        if(_name MATCHES ".+_win\..+")
-            continue()
-        endif()
-
-        list(APPEND _temp ${_item})
-    endforeach()
-
-    set(_src ${_temp})
-    unset(_temp)
-else()
-    set(_temp)
-
-    foreach(_item IN LISTS _src)
-        get_filename_component(_name ${_item} NAME)
-
-        if(_name MATCHES "^unix_.+")
-            continue()
-        endif()
-
-        if(_name MATCHES ".+_unix\..+")
-            continue()
+        if(NOT APPLE)
+            if(_name MATCHES ".+\.mm$")
+                continue()
+            endif()
         endif()
 
         list(APPEND _temp ${_item})
@@ -127,7 +126,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # Add platform specific
 if(WIN32)
     set(RC_DESCRIPTION "C++ Auxiliary Core Library")
-    set(RC_COPYRIGHT "Copyright (C) 2022-2024 SineStriker")
+    set(RC_COPYRIGHT "Copyright (C) 2022-2025 SineStriker")
     include("cmake/winrc.cmake")
 endif()
 
