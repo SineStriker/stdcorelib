@@ -21,22 +21,6 @@ namespace stdc {
         static inline const Handle InvalidHandle = -1;
 #endif
 
-        static inline int handle_to_fd(Handle handle) {
-#ifdef _WIN32
-            return (intptr_t) handle;
-#else
-            return (int) handle;
-#endif
-        }
-
-        static inline Handle fd_to_handle(int fd) {
-#ifdef _WIN32
-            return (Handle) (intptr_t) fd;
-#else
-            return handle;
-#endif
-        }
-
         Impl();
         ~Impl();
 
@@ -65,7 +49,7 @@ namespace stdc {
         int process_group = 0;
 
 #ifdef _WIN32
-        const STARTUPINFO *startupinfo = nullptr;
+        const StartupInfo *startupinfo = nullptr;
         int creationflags = 0;
 #else
         std::function<void()> preexec_fn;
@@ -109,6 +93,7 @@ namespace stdc {
 
 #ifdef _WIN32
         Handle _handle = InvalidHandle;
+        int tid = -1;
 #endif
 
         std::error_code error_code;
@@ -124,21 +109,20 @@ namespace stdc {
 
         std::tuple<Handle, Handle, Handle, Handle, Handle, Handle> _get_handles();
 
-        void _close_pipe_fds(Handle p2cread, Handle p2cwrite, Handle c2pread, Handle c2pwrite,
-                             Handle errread, Handle errwrite);
+        void _close_pipe_fds(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
+                             int errread, Handle errwrite);
 
         // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1050
         // close but not set _closed_child_pipe_fds, why?
-        void _close_pipe_fds_1(Handle p2cread, Handle p2cwrite, Handle c2pread, Handle c2pwrite,
-                               Handle errread, Handle errwrite);
+        void _close_pipe_fds_1(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
+                               int errread, Handle errwrite);
 
 #ifdef _WIN32
-        void _execute_child(Handle p2cread, Handle p2cwrite, Handle c2pread, Handle c2pwrite,
-                            Handle errread, Handle errwrite);
+        void _execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite, int errread,
+                            Handle errwrite);
 #else
-        void _execute_child(Handle p2cread, Handle p2cwrite, Handle c2pread, Handle c2pwrite,
-                            Handle errread, Handle errwrite, int gid, const std::vector<int> &gids,
-                            int uid);
+        void _execute_child(int p2cread, int p2cwrite, int c2pread, int c2pwrite, int errread,
+                            int errwrite, int gid, const std::vector<int> &gids, int uid);
 #endif
         bool _internal_poll();
         bool _wait(int timeout = -1);

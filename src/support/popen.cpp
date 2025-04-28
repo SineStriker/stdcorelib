@@ -72,27 +72,32 @@ namespace stdc {
         // when not redirecting.
         //
         // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1003
-        auto [p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite] = _get_handles();
 #ifdef _WIN32
-        if (p2cwrite != InvalidHandle) {
-            p2cwrite = fd_to_handle(_open_osfhandle((intptr_t) p2cwrite, 0));
-        }
-        if (c2pread != InvalidHandle) {
-            c2pread = fd_to_handle(_open_osfhandle((intptr_t) c2pread, 0));
-        }
-        if (errread != InvalidHandle) {
-            errread = fd_to_handle(_open_osfhandle((intptr_t) errread, 0));
-        }
-#endif
+        auto [p2cread, p2cwrite_h, c2pread_h, c2pwrite, errread_h, errwrite] = _get_handles();
 
-        if (p2cwrite != InvalidHandle) {
-            stdin_file = _fdopen(handle_to_fd(p2cwrite), text ? "w" : "wb");
+        // Convert to file descriptors
+        int p2cwrite = -1, c2pread = -1, errread = -1;
+        if (p2cwrite_h != InvalidHandle) {
+            p2cwrite = _open_osfhandle((intptr_t) p2cwrite_h, 0);
         }
-        if (c2pread != InvalidHandle) {
-            stdout_file = _fdopen(handle_to_fd(c2pread), text ? "r" : "rb");
+        if (c2pread_h != InvalidHandle) {
+            c2pread = _open_osfhandle((intptr_t) c2pread_h, 0);
         }
-        if (errread != InvalidHandle) {
-            stderr_file = _fdopen(handle_to_fd(errread), text ? "r" : "rb");
+        if (errread_h != InvalidHandle) {
+            errread = _open_osfhandle((intptr_t) errread_h, 0);
+        }
+#else
+        auto [p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite] = _get_handles();
+#endif
+        // open C File objects
+        if (p2cwrite != -1) {
+            stdin_file = _fdopen(p2cwrite, text ? "w" : "wb");
+        }
+        if (c2pread != -1) {
+            stdout_file = _fdopen(c2pread, text ? "r" : "rb");
+        }
+        if (errread != -1) {
+            stderr_file = _fdopen(errread, text ? "r" : "rb");
         }
 
         try {
@@ -218,7 +223,7 @@ namespace stdc {
     }
 
 #ifdef _WIN32
-    Popen &Popen::startupinfo(const STARTUPINFO *startupinfo) {
+    Popen &Popen::startupinfo(const StartupInfo *startupinfo) {
         __stdc_impl_t;
         impl.startupinfo = startupinfo;
         return *this;

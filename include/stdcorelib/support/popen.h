@@ -34,7 +34,7 @@ namespace stdc {
             }
             IODev(int fd) : kind(FD) {
                 data.fd = fd;
-            };
+            }
             IODev(FILE *file) : kind(CFile) {
                 data.file = file;
             }
@@ -47,7 +47,7 @@ namespace stdc {
         };
 
 #ifdef _WIN32
-        struct STARTUPINFO {
+        struct StartupInfo {
             // winapi members
             uint32_t dwFlags;
             void *hStdInput;
@@ -88,7 +88,7 @@ namespace stdc {
         Popen &process_group(int process_group);
 
 #ifdef _WIN32
-        Popen &startupinfo(const STARTUPINFO *startupinfo); // windows only
+        Popen &startupinfo(const StartupInfo *startupinfo); // windows only
         Popen &creationflags(int creationflags);            // windows only
 #else
         Popen &preexec_fn(const std::function<void()> &preexec_fn); // unix only

@@ -287,14 +287,14 @@ namespace stdc {
     }
 
 
-    void Popen::Impl::_close_pipe_fds(Handle p2cread, Handle p2cwrite, Handle c2pread,
-                                      Handle c2pwrite, Handle errread, Handle errwrite) {
+    void Popen::Impl::_close_pipe_fds(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
+                                      int errread, Handle errwrite) {
         _close_pipe_fds_1(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
         _closed_child_pipe_fds = true;
     }
 
-    void Popen::Impl::_close_pipe_fds_1(Handle p2cread, Handle p2cwrite, Handle c2pread,
-                                        Handle c2pwrite, Handle errread, Handle errwrite) {
+    void Popen::Impl::_close_pipe_fds_1(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
+                                        int errread, Handle errwrite) {
         if (p2cread != InvalidHandle) {
             CloseHandle(p2cread);
         }
@@ -333,8 +333,8 @@ namespace stdc {
     }
 
     // https://github.com/qt/qtbase/blob/6.8.0/src/corelib/io/qprocess_win.cpp#L371
-    static std::string _qt_create_commandline(const std::string &program,
-                                              const std::vector<std::string> &arguments) {
+    static std::string qt_create_commandline(const std::string &program,
+                                             const std::vector<std::string> &arguments) {
         std::string args;
         if (!program.empty()) {
             std::string programName = program;
@@ -477,9 +477,9 @@ namespace stdc {
     }
 
     // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1449
-    void Popen::Impl::_execute_child(Handle p2cread, Handle p2cwrite, Handle c2pread,
-                                     Handle c2pwrite, Handle errread, Handle errwrite) {
-        std::string arg_str = _qt_create_commandline({}, args);
+    void Popen::Impl::_execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
+                                     int errread, Handle errwrite) {
+        std::string arg_str = qt_create_commandline({}, args);
 
         STARTUPINFOEXW siex;
         ZeroMemory(&siex, sizeof(siex));
@@ -592,6 +592,7 @@ namespace stdc {
         _handle = pi.hProcess;
         CloseHandle(pi.hThread);
         pid = pi.dwProcessId;
+        tid = pi.dwThreadId;
 
         _child_created = true;
 
@@ -627,6 +628,8 @@ namespace stdc {
                 }
                 returncode = exitCode;
                 close_std_files();
+                CloseHandle(_handle);
+                _handle = nullptr;
                 return true;
             }
             case WAIT_FAILED: {
@@ -670,14 +673,12 @@ namespace stdc {
         }
         returncode = exitCode;
         close_std_files();
+        CloseHandle(_handle);
+        _handle = nullptr;
         return true;
     }
 
     bool Popen::Impl::kill_impl() {
-        return terminate_impl();
-    }
-
-    bool Popen::Impl::terminate_impl() {
         error_code.clear();
 
         if (returncode) {
@@ -696,10 +697,40 @@ namespace stdc {
                 error_code.assign(err, std::system_category());
                 return false;
             }
+            returncode = exitCode;
+            close_std_files();
+            CloseHandle(_handle);
+            _handle = nullptr;
             return true;
         }
         error_code.assign(err, std::system_category());
         return false;
+    }
+
+    static BOOL CALLBACK qt_terminateApp(HWND hwnd, LPARAM procId) {
+        DWORD currentProcId = 0;
+        GetWindowThreadProcessId(hwnd, &currentProcId);
+        if (currentProcId == (DWORD) procId)
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        return TRUE;
+    }
+
+    // https://github.com/qt/qtbase/blob/6.8.0/src/corelib/io/qprocess_win.cpp#L641
+    bool Popen::Impl::terminate_impl() {
+        error_code.clear();
+
+        if (returncode) {
+            return true;
+        }
+        if (!EnumWindows(qt_terminateApp, (LPARAM) pid)) {
+            error_code.assign(GetLastError(), std::system_category());
+            return false;
+        }
+        if (!PostThreadMessageW(tid, WM_CLOSE, 0, 0)) {
+            error_code.assign(GetLastError(), std::system_category());
+            return false;
+        }
+        return true;
     }
 
     bool Popen::Impl::send_signal_impl(int sig) {
