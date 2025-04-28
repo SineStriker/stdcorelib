@@ -76,6 +76,11 @@ namespace stdc {
                            Args &&...args) {
             return console::puts(style, fg, bg, formatN(format, std::forward<Args>(args)...));
         }
+        
+        // @overload: println
+        inline int println() {
+            return std::putchar('\n');
+        }
 
         //
         // Plain APIs (Use UTF-8 as prefix)

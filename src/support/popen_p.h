@@ -127,6 +127,8 @@ namespace stdc {
         void _close_pipe_fds(Handle p2cread, Handle p2cwrite, Handle c2pread, Handle c2pwrite,
                              Handle errread, Handle errwrite);
 
+        // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1050
+        // close but not set _closed_child_pipe_fds, why?
         void _close_pipe_fds_1(Handle p2cread, Handle p2cwrite, Handle c2pread, Handle c2pwrite,
                                Handle errread, Handle errwrite);
 

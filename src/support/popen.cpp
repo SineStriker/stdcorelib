@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "pimpl.h"
+#include "str.h"
 
 namespace stdc {
 
@@ -37,7 +38,7 @@ namespace stdc {
 
 #ifndef _WIN32
         if (!pass_fds.empty() && !close_fds) {
-            fprintf(stderr, "pass_fds overriding close_fds.\n");
+            fprintf(stderr, "stdc::Popen: %s\n", "pass_fds overriding close_fds.");
             close_fds = true;
         }
 #endif
@@ -298,7 +299,11 @@ namespace stdc {
             impl.error_code = e.code();
             fprintf(stderr, "stdc::Popen(): %s\n", e.what());
         } catch (const std::system_error &e) {
+#ifdef _WIN32
+            impl.error_code = std::error_code(e.code().value(), windows_utf8_category());
+#else
             impl.error_code = e.code();
+#endif
             fprintf(stderr, "stdc::Popen(): %s\n", e.what());
         } catch (const std::exception &e) {
             impl.error_code = std::error_code(9999, std::system_category());

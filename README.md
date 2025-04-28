@@ -5,12 +5,12 @@ C++ auxiliary core library.
 ## Features
 
 + Console color
-+ Cross-platform string encoding and printing functions
++ Cross-platform string encoding
 + Program information
 + Shared library
 + String utilities and formatter
 + PIMPL and VLA syntactic sugar
-+ Simple subprocess utility (Experimental)
++ Python **Popen** re-implementation (Experimental)
 
 ## Example
 
@@ -39,4 +39,51 @@ int main(int /* argc */, char * /* argv */[]) {
 4 - ◆
 5 - 😀
 6 - こんにちは
+```
+
+### Popen
+
+```cpp
+#include <fstream>
+
+#include <stdcorelib/console.h>
+#include <stdcorelib/support/popen.h>
+
+int main(int argc, char *argv[]) {
+    stdc::Popen proc;
+    proc.args({"git", "--version"})
+        .text(true)
+        .stdout_(stdc::Popen::PIPE)
+        .stderr_(stdc::Popen::STDOUT);
+    if (!proc.start()) {
+        stdc::u8println("Failed to start process: %1", proc.error_code().message());
+        return -1;
+    }
+
+    FILE *out = proc.stdout_();
+    std::filebuf buf(out);
+    std::istream is(&buf);
+    std::string line;
+    while (std::getline(is, line)) {
+        stdc::u8println(line);
+    }
+    stdc::u8println();
+    proc.wait();
+
+    int code = proc.returncode().value_or(-1);
+    if (code == 0) {
+        stdc::console::success("Process exit with code %1", code);
+    } else {
+        stdc::console::critical("Process exit with code %1", code);
+    }
+    return 0;
+}
+```
+
+```sh
+> g++ -O2 main.cpp -o test_git.exe
+> test_git.exe
+git version 2.47.1.windows.1
+
+Process exit with code 0
 ```

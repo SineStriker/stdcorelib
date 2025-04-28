@@ -524,8 +524,8 @@ namespace stdc {
             handle_list = _filter_handle_list(handle_list);
 
             if (!handle_list.empty() && !close_fds) {
-                fprintf(stderr, "startupinfo.lpAttributeList['handle_list'] "
-                                "overriding close_fds\n");
+                fprintf(stderr, "stdc::Popen: %s\n", //
+                        "startupinfo.lpAttributeList['handle_list'] overriding close_fds");
             }
 
             // When using the handle_list we always request to inherit

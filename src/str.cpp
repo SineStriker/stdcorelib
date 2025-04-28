@@ -368,4 +368,34 @@ namespace stdc {
 
     }
 
+#ifdef _WIN32
+    struct windows_utf8_category_impl : std::error_category {
+    public:
+        const char *name() const noexcept override {
+            return "system_utf8";
+        }
+
+        std::string message(int ev) const override {
+            return wstring_conv::to_utf8(winFormatError(ev, 0));
+        }
+
+        std::error_condition default_error_condition(int ev) const noexcept override {
+            return std::system_category().default_error_condition(ev);
+        }
+
+        bool equivalent(int ev, const std::error_condition &cond) const noexcept override {
+            return std::system_category().equivalent(ev, cond);
+        }
+
+        bool equivalent(const std::error_code &code, int ev) const noexcept override {
+            return std::system_category().equivalent(code, ev);
+        }
+    };
+
+    const std::error_category &windows_utf8_category() noexcept {
+        static windows_utf8_category_impl instance;
+        return instance;
+    }
+#endif
+
 }

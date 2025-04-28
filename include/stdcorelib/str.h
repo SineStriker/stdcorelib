@@ -10,6 +10,7 @@
 #include <map>
 #include <algorithm>
 #include <functional>
+#include <system_error>
 
 #include <stdcorelib/stdc_global.h>
 
@@ -377,6 +378,10 @@ namespace stdc {
     using str::ltrim;
     using str::rtrim;
     using str::trim;
+
+#ifdef _WIN32
+    const std::error_category &windows_utf8_category() noexcept;
+#endif
 
 }
 
