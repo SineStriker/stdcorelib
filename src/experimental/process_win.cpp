@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <iostream>
+#include <cstring>
 
 #include <stdcorelib/platform/osapi_win.h>
 #include <stdcorelib/str.h>

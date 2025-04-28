@@ -25,6 +25,8 @@ namespace stdc {
 
     STDCORELIB_EXPORT std::string winWideTo8bit(const std::wstring_view &s, UINT cp, DWORD flags);
 
+    STDCORELIB_EXPORT std::wstring winGetEnvironmentVariable(const wchar_t *name, bool *ok);
+
     STDCORELIB_EXPORT RTL_OSVERSIONINFOW winSystemVersion();
 
 }

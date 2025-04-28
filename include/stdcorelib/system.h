@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <map>
 
 #include <stdcorelib/stdc_global.h>
 
@@ -19,6 +20,8 @@ namespace stdc {
 
         STDCORELIB_EXPORT std::vector<std::string> split_command_line(const std::string_view &command);
         STDCORELIB_EXPORT std::string join_command_line(const std::vector<std::string> &args);
+
+        static std::map<std::string, std::string> environment();
 
     }
 

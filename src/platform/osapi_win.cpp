@@ -113,6 +113,25 @@ namespace stdc {
         return res;
     }
 
+    std::wstring winGetEnvironmentVariable(const wchar_t *name, bool *ok) {
+        DWORD size = GetEnvironmentVariableW(name, nullptr, 0);
+        if (size == 0) {
+            if (ok)
+                *ok = GetLastError() == ERROR_ENVVAR_NOT_FOUND;
+            return {};
+        }
+        std::wstring buffer;
+        buffer.resize(size - 1);
+        if (GetEnvironmentVariableW(name, buffer.data(), size) == 0) {
+            if (ok)
+                *ok = false;
+            return {};
+        }
+        if (ok)
+            *ok = true;
+        return buffer;
+    }
+
     static RTL_OSVERSIONINFOW static_get_real_os_version() {
         HMODULE hMod = ::GetModuleHandleW(L"ntdll.dll");
         using RtlGetVersionPtr = NTSTATUS(WINAPI *)(PRTL_OSVERSIONINFOW);

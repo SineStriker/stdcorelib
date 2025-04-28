@@ -25,6 +25,11 @@ namespace stdc {
             inline std::string operator()(const std::string &s) const {
                 return s;
             }
+
+            // ##FIXME: remove?
+            inline std::string operator()(std::string &&s) const {
+                return s;
+            }
         };
 
         template <>
@@ -132,14 +137,14 @@ namespace stdc {
         STDCORELIB_EXPORT std::string join(const std::vector<std::string> &v,
                                            const std::string_view &delimiter);
 
-        // @overload: join
+        // @overload: join(vector<string_view>, string_view)
         STDCORELIB_EXPORT std::string join(const std::vector<std::string_view> &v,
                                            const std::string_view &delimiter);
 
         STDCORELIB_EXPORT std::vector<std::string_view> split(const std::string_view &s,
                                                               const std::string_view &delimiter);
 
-        // @overload: split
+        // @overload: split(string &&, string_view)
         STDCORELIB_EXPORT std::vector<std::string> split(std::string &&s,
                                                          const std::string_view &delimiter);
 
@@ -154,13 +159,18 @@ namespace stdc {
                                });
         }
 
-        // @overload: formatN
+        // @overload: formatN(string_view)
         inline std::string_view formatN(const std::string_view &fmt) {
             return fmt;
         }
 
-        // @overload: formatN
+        // @overload: formatN(string &&)
         inline std::string formatN(std::string &&fmt) {
+            return fmt;
+        }
+
+        // @overload: formatN(const char *)
+        inline const char *formatN(const char *fmt) {
             return fmt;
         }
 
@@ -168,6 +178,7 @@ namespace stdc {
             varexp(const std::string_view &s,
                    const std::function<std::string(const std::string_view &)> &find);
 
+        // @overload: varexp(string, map<string, string>)
         template <class MAP>
         inline std::string varexp(const std::string_view &s, const MAP &vars) {
             return varexp(s, [&vars](const std::string_view &name) -> std::string {
@@ -195,16 +206,18 @@ namespace stdc {
             return s;
         }
 
-        inline std::string to_lower(std::string s) {
-            std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-            return s;
-        }
-
+        // @overload: to_upper(wstring)
         inline std::wstring to_upper(std::wstring s) {
             std::transform(s.begin(), s.end(), s.begin(), ::toupper);
             return s;
         }
 
+        inline std::string to_lower(std::string s) {
+            std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+            return s;
+        }
+
+        // @overload: to_lower(wstring)
         inline std::wstring to_lower(std::wstring s) {
             std::transform(s.begin(), s.end(), s.begin(), ::tolower);
             return s;
@@ -218,7 +231,22 @@ namespace stdc {
 #endif
         }
 
+        // @overload: starts_with(string, char)
         inline bool starts_with(const std::string_view &s, char prefix) {
+            return s.size() >= 1 && s.front() == prefix;
+        }
+
+        // @overload: starts_with(wstring_view, wstring_view)
+        inline bool starts_with(const std::wstring_view &s, const std::wstring_view &prefix) {
+#if __cplusplus >= 202002L
+            return s.starts_with(prefix);
+#else
+            return s.size() >= prefix.size() && s.substr(0, prefix.size()) == prefix;
+#endif
+        }
+
+        // @overload: starts_with(wstring_view, wchar_t)
+        inline bool starts_with(const std::wstring_view &s, wchar_t prefix) {
             return s.size() >= 1 && s.front() == prefix;
         }
 
@@ -230,22 +258,12 @@ namespace stdc {
 #endif
         }
 
+        // @overload: ends_with(string_view, char)
         inline bool ends_with(const std::string_view &s, char suffix) {
             return s.size() >= 1 && s.back() == suffix;
         }
 
-        inline bool starts_with(const std::wstring_view &s, const std::wstring_view &prefix) {
-#if __cplusplus >= 202002L
-            return s.starts_with(prefix);
-#else
-            return s.size() >= prefix.size() && s.substr(0, prefix.size()) == prefix;
-#endif
-        }
-
-        inline bool starts_with(const std::wstring_view &s, wchar_t prefix) {
-            return s.size() >= 1 && s.front() == prefix;
-        }
-
+        // @overload: ends_with(wstring_view, wstring_view)
         inline bool ends_with(const std::wstring_view &s, const std::wstring_view &suffix) {
 #if __cplusplus >= 202002L
             return s.ends_with(suffix);
@@ -254,6 +272,7 @@ namespace stdc {
 #endif
         }
 
+        // @overload: ends_with(wstring_view, wchar_t)
         inline bool ends_with(const std::wstring_view &s, wchar_t suffix) {
             return s.size() >= 1 && s.back() == suffix;
         }
@@ -262,7 +281,7 @@ namespace stdc {
             return s.substr(N);
         }
 
-        // @overload: drop_front
+        // @overload: drop_front(string &&, size_t)
         inline std::string drop_front(std::string &&s, size_t N = 1) {
             return s.substr(N);
         }
@@ -271,7 +290,7 @@ namespace stdc {
             return s.substr(0, s.size() - N);
         }
 
-        // @overload: drop_back
+        // @overload: drop_back(string &&, size_t)
         inline std::string drop_back(std::string &&s, size_t N = 1) {
             return s.substr(0, s.size() - N);
         }
@@ -280,18 +299,19 @@ namespace stdc {
             return drop_front(s, std::min(s.size(), s.find_first_not_of(Char)));
         }
 
-        // @overload: ltrim(string, char)
+        // @overload: ltrim(string &&, char)
         inline std::string ltrim(std::string &&s, char Char) {
             return std::string(
                 drop_front(std::string_view(s), std::min(s.size(), s.find_first_not_of(Char))));
         }
 
+        // @overload: ltrim(string_view, string_view)
         inline std::string_view ltrim(const std::string_view &s,
                                       const std::string_view &Chars = " \t\n\v\f\r") {
             return drop_front(s, std::min(s.size(), s.find_first_not_of(Chars)));
         }
 
-        // @overload: ltrim(string, string)
+        // @overload: ltrim(string &&, string_view)
         inline std::string ltrim(std::string &&s, const std::string_view &Chars = " \t\n\v\f\r") {
             return std::string(
                 drop_front(std::string_view(s), std::min(s.size(), s.find_first_not_of(Chars))));
@@ -301,18 +321,19 @@ namespace stdc {
             return drop_back(s, s.size() - std::min(s.size(), s.find_last_not_of(Char) + 1));
         }
 
-        // @overload: rtrim(string, char)
+        // @overload: rtrim(string &&, char)
         inline std::string rtrim(std::string &&s, char Char) {
             return std::string(drop_back(
                 std::string_view(s), s.size() - std::min(s.size(), s.find_last_not_of(Char) + 1)));
         }
 
+        // @overload: rtrim(string_view, string_view)
         inline std::string_view rtrim(const std::string_view &s,
                                       const std::string_view &Chars = " \t\n\v\f\r") {
             return drop_back(s, s.size() - std::min(s.size(), s.find_last_not_of(Chars) + 1));
         }
 
-        // @overload: rtrim(string, string)
+        // @overload: rtrim(string &&, string)
         inline std::string rtrim(std::string &&s, const std::string_view &Chars = " \t\n\v\f\r") {
             return std::string(drop_back(
                 std::string_view(s), s.size() - std::min(s.size(), s.find_last_not_of(Chars) + 1)));
@@ -322,19 +343,29 @@ namespace stdc {
             return rtrim(ltrim(s, Char), Char);
         }
 
-        // @overload: trim(string, char)
+        // @overload: trim(string &&, char)
         inline std::string trim(std::string &&s, char Char) {
             return std::string(rtrim(ltrim(std::string_view(s), Char), Char));
         }
 
+        // @overload: trim(string_view, string_view)
         inline std::string_view trim(const std::string_view &s,
                                      std::string_view Chars = " \t\n\v\f\r") {
             return rtrim(ltrim(s, Chars), Chars);
         }
 
-        // @overload: trim(string, string)
+        // @overload: trim(string &&, string)
         inline std::string trim(std::string &&s, std::string_view Chars = " \t\n\v\f\r") {
             return std::string(rtrim(ltrim(std::string_view(s), Chars), Chars));
+        }
+
+        inline bool contains(const std::string_view &s, const std::string_view &sub) {
+            return s.find(sub) != std::string_view::npos;
+        }
+
+        // @overload: contains(string_view, char)
+        inline bool contains(const std::string_view &s, char c) {
+            return s.find(c) != std::string_view::npos;
         }
 
     }

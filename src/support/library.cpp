@@ -222,7 +222,7 @@ namespace stdc {
         Returns the error message of the last failed library operation.
     */
     std::string Library::lastError() const {
-        return _impl->sysErrorMessage(false);
+        return _impl->sysErrorMessage(true);
     }
 
 #if !defined(_WIN32) && !defined(__APPLE__)

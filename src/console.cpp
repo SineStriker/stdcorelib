@@ -193,7 +193,9 @@ namespace stdc {
         public:
             WindowsLegacyOutput() {
                 _hConsole = ::GetStdHandle(STD_OUTPUT_HANDLE);
-                ::GetConsoleScreenBufferInfo(_hConsole, &_csbi);
+                if (_hConsole != INVALID_HANDLE_VALUE) {
+                    ::GetConsoleScreenBufferInfo(_hConsole, &_csbi);
+                }
             }
             void change(int style, int fg, int bg) override {
                 (void) style;
@@ -271,14 +273,16 @@ namespace stdc {
                     }
                 }
 
-                if (needSet) {
+                if (needSet && _hConsole != INVALID_HANDLE_VALUE) {
                     ::SetConsoleTextAttribute(_hConsole, winColor);
                 }
             }
 
             void reset() override {
                 if (_fg != _fg_init || _bg != _bg_init) {
-                    ::SetConsoleTextAttribute(_hConsole, _csbi.wAttributes);
+                    if (_hConsole != INVALID_HANDLE_VALUE) {
+                        ::SetConsoleTextAttribute(_hConsole, _csbi.wAttributes);
+                    }
 
                     _fg = _fg_init;
                     _bg = _bg_init;

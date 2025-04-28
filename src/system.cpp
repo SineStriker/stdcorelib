@@ -196,18 +196,20 @@ namespace stdc {
 
         /*
             Splits a command line string to a vector of arguments.
+
+            https://github.com/qt/qtbase/blob/6.8.0/src/corelib/io/qprocess.cpp#L2428
         */
         std::vector<std::string> split_command_line(const std::string_view &command) {
             std::vector<std::string> args;
             std::string tmp;
             int quoteCount = 0;
             bool inQuote = false;
-    
+
             // handle quoting. tokens can be surrounded by double quotes
             // "hello world". three consecutive double quotes represent
             // the quote character itself.
             for (int i = 0; i < command.size(); ++i) {
-                if (command.at(i) == u'"') {
+                if (command.at(i) == '"') {
                     ++quoteCount;
                     if (quoteCount == 3) {
                         // third consecutive quote
@@ -244,8 +246,18 @@ namespace stdc {
             for (size_t i = 0; i < args.size(); ++i) {
                 if (i != 0)
                     cmdLine += ' ';
+
                 if (args[i].find_first_of(" \t") != std::wstring::npos) {
-                    cmdLine += '"' + args[i] + '"';
+                    std::string tmp = "\"";
+                    for (const auto &c : args[i]) {
+                        if (c == '"') {
+                            tmp += "\"\"\"";
+                        } else {
+                            tmp += c;
+                        }
+                    }
+                    tmp += "\"";
+                    cmdLine += tmp;
                 } else {
                     cmdLine += args[i];
                 }
@@ -253,6 +265,42 @@ namespace stdc {
             return cmdLine;
         }
 
+#ifdef _WIN32
+        std::map<std::string, std::string> environment() {
+            std::map<std::string, std::string> env;
+            if (wchar_t *envStrings = GetEnvironmentStringsW()) {
+                for (const wchar_t *entry = envStrings; *entry;) {
+                    const int entryLen = int(wcslen(entry));
+                    // + 1 to permit magic cmd variable names starting with =
+                    if (const wchar_t *equal = wcschr(entry + 1, L'=')) {
+                        int nameLen = equal - entry;
+                        std::string name = wstring_conv::to_utf8(entry, nameLen);
+                        std::string value =
+                            wstring_conv::to_utf8(equal + 1, entryLen - nameLen - 1);
+                        env.insert(std::make_pair(name, value));
+                    }
+                    entry += entryLen + 1;
+                }
+                FreeEnvironmentStringsW(envStrings);
+            }
+            return env;
+        }
+#elif !defined(__APPLE__)
+        std::map<std::string, std::string> environment() {
+            std::map<std::string, std::string> env;
+            const char *entry;
+            for (int count = 0; (entry = environ[count]); ++count) {
+                const char *equal = strchr(entry, '=');
+                if (!equal)
+                    continue;
+
+                std::string name(entry, equal - entry);
+                std::string value(equal + 1);
+                env.insert(std::make_pair(name, value));
+            }
+            return env;
+        }
+#endif
     }
 
     /*
