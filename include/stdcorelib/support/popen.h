@@ -59,6 +59,11 @@ namespace stdc {
             //     handle_list: INVALID_HANDLE_VALUE terminated list of HANDLE to be inherited
             std::map<std::string, void *> lpAttributeList;
         };
+
+        enum WindowsSignal {
+            WS_CTRL_C_EVENT = 0,
+            WS_CTRL_BREAK_EVENT = 1,
+        };
 #endif
 
         Popen();

@@ -4,10 +4,13 @@
 #include <fcntl.h>
 #include <io.h>
 
+#include <array>
 #include <algorithm>
 
 #include "osapi_win.h"
 #include "str.h"
+#include "scope_guard.h"
+#include "pimpl.h"
 
 #include "3rdparty/llvm/smallvector.h"
 
@@ -17,8 +20,7 @@ namespace stdc {
 
     constexpr UINT KillProcessExitCode = 0xf291;
 
-
-    void Popen::Impl::cleanup() {
+    void Popen::Impl::_cleanup() {
         close_std_files();
 
         CloseHandle(_handle);
@@ -71,56 +73,39 @@ namespace stdc {
             return true;
         }
 
-        struct ErrorCloseHandles {
-            ErrorCloseHandles(Handle &devnull) : devnull(devnull) {
+        //
+        // helpers and guards
+        //
+
+        // handles that should be closed if error occurs
+        std::array<HANDLE, 10> err_close_handles;
+        int err_close_handles_cnt = 0;
+        auto err_close_handle_guard = make_scope_guard([&]() {
+            for (int i = 0; i < err_close_handles_cnt; i++) {
+                CloseHandle(err_close_handles[i]);
             }
-
-            ~ErrorCloseHandles() {
-                if (!ok) {
-                    free();
-                }
+            if (_devnull != InvalidHandle) {
+                CloseHandle(_devnull);
+                _devnull = InvalidHandle;
             }
-
-            void free() {
-                for (int i = 0; i < error_close_handles_count; i++) {
-                    CloseHandle(error_close_handles[i]);
-                }
-                if (devnull != InvalidHandle) {
-                    CloseHandle(devnull);
-                    devnull = InvalidHandle;
-                }
-            }
-
-            void push(HANDLE handle) {
-                error_close_handles[error_close_handles_count++] = handle;
-            }
-
-            bool ok = false;
-
-            HANDLE error_close_handles[10];
-            Handle &devnull;
-            int error_close_handles_count = 0;
+        });
+        const auto &push_err_close_handle = [&](HANDLE handle) {
+            err_close_handles[err_close_handles_cnt++] = handle;
         };
 
-        struct DuplicatedHandles {
-        public:
-            void push(HANDLE handle) {
-                duplicated_close_handles[duplicated_close_handles_count++] = handle;
+        // handles that should be closed anyway
+        std::array<HANDLE, 10> dup_close_handles;
+        int dup_close_handles_cnt = 0;
+        auto dup_close_handle_guard = make_scope_guard([&]() {
+            for (int i = 0; i < dup_close_handles_cnt; i++) {
+                CloseHandle(dup_close_handles[i]);
             }
-
-            void free() {
-                for (int i = 0; i < duplicated_close_handles_count; i++) {
-                    CloseHandle(duplicated_close_handles[i]);
-                }
-            }
-
-            HANDLE duplicated_close_handles[10];
-            int duplicated_close_handles_count = 0;
+        });
+        const auto &push_dup_close_handle = [&](HANDLE handle) {
+            dup_close_handles[dup_close_handles_cnt++] = handle;
         };
 
-        ErrorCloseHandles err_close_handles(_devnull);
-        DuplicatedHandles dup_handles;
-
+        // duplicate the handle that needs to be inherited
         const auto &make_inheritable = [this](HANDLE &handle) {
             HANDLE target_handle;
             if (!DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(), &target_handle,
@@ -133,6 +118,7 @@ namespace stdc {
             return true;
         };
 
+        // convert a file descriptor to a handle
         const auto &convert_from_fd = [this](HANDLE &handle, int fd) {
             auto tmp_handle = (HANDLE) _get_osfhandle(fd);
             if (tmp_handle == INVALID_HANDLE_VALUE) {
@@ -144,6 +130,7 @@ namespace stdc {
             return true;
         };
 
+        // create a pipe
         const auto &create_pipe = [this](HANDLE &read_handle, HANDLE &write_handle) {
             if (!CreatePipe(&read_handle, &write_handle, nullptr, 0)) {
                 error_code = make_last_error_code();
@@ -152,6 +139,19 @@ namespace stdc {
             }
             return true;
         };
+
+        // open or return devnull
+        const auto &open_devnull = [this](HANDLE &handle) {
+            if (_devnull == InvalidHandle && !_get_devnull()) {
+                return false;
+            }
+            handle = _devnull;
+            return true;
+        };
+
+        //
+        // transaction start
+        //
 
         // stdin
         switch (stdin_dev.kind) {
@@ -162,8 +162,7 @@ namespace stdc {
                     if (!create_pipe(p2cread, tmp_pipe)) {
                         return false;
                     }
-                    err_close_handles.push(p2cread);
-                    dup_handles.push(p2cread);
+                    push_dup_close_handle(p2cread);
                     CloseHandle(tmp_pipe);
                 }
                 break;
@@ -174,16 +173,14 @@ namespace stdc {
                         if (!create_pipe(p2cread, p2cwrite)) {
                             return false;
                         }
-                        err_close_handles.push(p2cread);
-                        err_close_handles.push(p2cwrite);
-                        dup_handles.push(p2cread);
+                        push_dup_close_handle(p2cread);
+                        push_err_close_handle(p2cwrite);
                         break;
                     };
                     case DEVNULL: {
-                        if (_devnull == InvalidHandle && !_get_devnull()) {
+                        if (!open_devnull(p2cread)) {
                             return false;
                         }
-                        p2cread = _devnull;
                         break;
                     };
                     default: {
@@ -212,7 +209,7 @@ namespace stdc {
         if (!make_inheritable(p2cread)) {
             return false;
         }
-        err_close_handles.push(p2cread);
+        push_err_close_handle(p2cread);
 
         // stdout
         switch (stdout_dev.kind) {
@@ -223,8 +220,7 @@ namespace stdc {
                     if (!create_pipe(tmp_pipe, c2pwrite)) {
                         return false;
                     }
-                    err_close_handles.push(c2pwrite);
-                    dup_handles.push(c2pwrite);
+                    push_dup_close_handle(c2pwrite);
                     CloseHandle(tmp_pipe);
                 }
                 break;
@@ -235,16 +231,14 @@ namespace stdc {
                         if (!create_pipe(c2pread, c2pwrite)) {
                             return false;
                         }
-                        err_close_handles.push(c2pread);
-                        err_close_handles.push(c2pwrite);
-                        dup_handles.push(c2pwrite);
+                        push_err_close_handle(c2pread);
+                        push_dup_close_handle(c2pwrite);
                         break;
                     };
                     case DEVNULL: {
-                        if (_devnull == InvalidHandle && !_get_devnull()) {
+                        if (!open_devnull(c2pwrite)) {
                             return false;
                         }
-                        c2pwrite = _devnull;
                         break;
                     };
                     default: {
@@ -274,7 +268,7 @@ namespace stdc {
         if (!make_inheritable(c2pwrite)) {
             return false;
         }
-        err_close_handles.push(c2pwrite);
+        push_err_close_handle(c2pwrite);
 
         // stderr
         switch (stderr_dev.kind) {
@@ -285,8 +279,7 @@ namespace stdc {
                     if (!create_pipe(tmp_pipe, errwrite)) {
                         return false;
                     }
-                    err_close_handles.push(errwrite);
-                    dup_handles.push(errwrite);
+                    push_dup_close_handle(errwrite);
                     CloseHandle(tmp_pipe);
                 }
                 break;
@@ -297,16 +290,14 @@ namespace stdc {
                         if (!create_pipe(errread, errwrite)) {
                             return false;
                         }
-                        err_close_handles.push(errread);
-                        err_close_handles.push(errwrite);
-                        dup_handles.push(errwrite);
+                        push_err_close_handle(errread);
+                        push_dup_close_handle(errwrite);
                         break;
                     };
                     case DEVNULL: {
-                        if (_devnull == InvalidHandle && !_get_devnull()) {
+                        if (!open_devnull(errwrite)) {
                             return false;
                         }
-                        errwrite = _devnull;
                         break;
                     };
                     case STDOUT: {
@@ -334,17 +325,15 @@ namespace stdc {
         if (!make_inheritable(errwrite)) {
             return false;
         }
-        err_close_handles.push(errwrite);
+
+        //
+        // transaction end
+        //
 
         // release guard
-        err_close_handles.ok = true;
-
-        // close newly-created handles but duplicated
-        dup_handles.free();
-
+        err_close_handle_guard.dismiss();
         return true;
     }
-
 
     void Popen::Impl::_close_pipe_fds(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                                       int errread, Handle errwrite) {
@@ -354,6 +343,10 @@ namespace stdc {
 
     void Popen::Impl::_close_pipe_fds_1(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                                         int errread, Handle errwrite) {
+        (void) p2cwrite;
+        (void) c2pread;
+        (void) errread;
+
         if (p2cread != InvalidHandle) {
             CloseHandle(p2cread);
         }
@@ -369,17 +362,19 @@ namespace stdc {
         }
     }
 
-    static fs::path _get_command_prompt_path(std::string &errorMessage) {
+    static fs::path _get_command_prompt_path(std::string &err_msg) {
         auto comspec = winGetEnvironmentVariable(L"ComSpec", nullptr);
         fs::path comspec_path;
         if (comspec.empty()) {
             auto system_root = winGetEnvironmentVariable(L"SystemRoot", nullptr);
             if (system_root.empty()) {
-                return "shell not found: neither %ComSpec% nor %SystemRoot% is set";
+                err_msg = "shell not found: neither %ComSpec% nor %SystemRoot% is set";
+                return {};
             }
             comspec_path = fs::path(system_root) / L"System32" / L"cmd.exe";
             if (!comspec_path.is_absolute()) {
-                return "shell not found: constructed path is not absolute";
+                err_msg = "shell not found: constructed path is not absolute";
+                return {};
             }
         } else {
             comspec_path = comspec;
@@ -457,10 +452,6 @@ namespace stdc {
         LPHANDLE handle_list;
     };
 
-    struct GetAttrListResult {
-        std::error_code ec;
-        const char *where;
-    };
 
     // https://github.com/python/cpython/blob/3.13/Modules/_winapi.c#L1210
     static void _free_attribute_list(AttributeList *attribute_list) {
@@ -473,10 +464,11 @@ namespace stdc {
     }
 
     // https://github.com/python/cpython/blob/3.13/Modules/_winapi.c#L1223
-    static GetAttrListResult _get_attribute_list(const llvm::SmallVector<HANDLE, 10> &handles,
-                                                 AttributeList *attribute_list) {
+    static std::tuple<std::error_code, const char *>
+        _get_attribute_list(const llvm::SmallVector<HANDLE, 10> &handles,
+                            AttributeList *attribute_list) {
         DWORD err;
-        const char *where = nullptr;
+        const char *err_api = nullptr;
         BOOL result;
 
         SIZE_T handle_list_size;
@@ -492,16 +484,16 @@ namespace stdc {
         /* Get how many bytes we need for the attribute list */
         result = InitializeProcThreadAttributeList(NULL, attribute_count, 0, &attribute_list_size);
         if (result || ((err = GetLastError()) != ERROR_INSUFFICIENT_BUFFER)) {
-            where = "InitializeProcThreadAttributeList";
-            goto cleanup;
+            err_api = "InitializeProcThreadAttributeList";
+            goto _cleanup;
         }
 
         attribute_list->attribute_list =
             (LPPROC_THREAD_ATTRIBUTE_LIST) HeapAlloc(GetProcessHeap(), 0, attribute_list_size);
         if (!attribute_list->attribute_list) {
             err = GetLastError();
-            where = "HeapAlloc";
-            goto cleanup;
+            err_api = "HeapAlloc";
+            goto _cleanup;
         }
 
         result = InitializeProcThreadAttributeList(attribute_list->attribute_list, attribute_count,
@@ -513,8 +505,8 @@ namespace stdc {
             HeapFree(GetProcessHeap(), 0, attribute_list->attribute_list);
             attribute_list->attribute_list = NULL;
 
-            where = "InitializeProcThreadAttributeList";
-            goto cleanup;
+            err_api = "InitializeProcThreadAttributeList";
+            goto _cleanup;
         }
 
         if (attribute_list->handle_list != NULL) {
@@ -523,15 +515,15 @@ namespace stdc {
                 attribute_list->handle_list, handle_list_size, NULL, NULL);
             if (!result) {
                 err = GetLastError();
-                where = "UpdateProcThreadAttribute";
-                goto cleanup;
+                err_api = "UpdateProcThreadAttribute";
+                goto _cleanup;
             }
         }
 
-    cleanup:
-        if (where) {
+    _cleanup:
+        if (err_api) {
             _free_attribute_list(attribute_list);
-            return {std::error_code(err, std::system_category()), where};
+            return {std::error_code(err, std::system_category()), err_api};
         }
         return {{}, {}};
     }
@@ -539,7 +531,7 @@ namespace stdc {
     // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1449
     bool Popen::Impl::_execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                                      int errread, Handle errwrite) {
-        std::string arg_str = qt_create_commandline({}, args);
+        std::string args_str = qt_create_commandline({}, args);
 
         STARTUPINFOEXW siex;
         ZeroMemory(&siex, sizeof(siex));
@@ -600,31 +592,31 @@ namespace stdc {
             si.dwFlags |= STARTF_USESHOWWINDOW;
             si.wShowWindow = SW_HIDE;
             if (executable.empty()) {
-                std::string err;
-                executable = _get_command_prompt_path(err);
-                if (!err.empty()) {
+                std::string err_msg;
+                executable = _get_command_prompt_path(err_msg);
+                if (!err_msg.empty()) {
                     error_code = std::make_error_code(std::errc::no_such_file_or_directory);
-                    error_msg = err;
+                    error_msg = err_msg;
                     return false;
                 }
             }
-            arg_str = formatN(R"(%1 /c "%2")", executable, arg_str);
+            args_str = formatN(R"(%1 /c "%2")", executable, args_str);
         }
 
-        std::wstring applicationName = executable;
-        std::wstring commandLine = wstring_conv::from_utf8(arg_str);
+        std::wstring application_name = executable;
+        std::wstring command_line = wstring_conv::from_utf8(args_str);
 
         // https://github.com/python/cpython/blob/3.13/Modules/_winapi.c#L1373
         // prepare environment variables
-        std::vector<wchar_t> envStr;
+        std::vector<wchar_t> env_str;
         if (!env.empty()) {
             for (const auto &item : env) {
-                envStr.insert(envStr.end(), item.first.begin(), item.first.end());
-                envStr.push_back(L'=');
-                envStr.insert(envStr.end(), item.second.begin(), item.second.end());
-                envStr.push_back(L'\0');
+                env_str.insert(env_str.end(), item.first.begin(), item.first.end());
+                env_str.push_back(L'=');
+                env_str.insert(env_str.end(), item.second.begin(), item.second.end());
+                env_str.push_back(L'\0');
             }
-            envStr.push_back(L'\0');
+            env_str.push_back(L'\0');
         }
 
         DWORD dwCreationFlags;
@@ -632,30 +624,30 @@ namespace stdc {
 
         // https://github.com/python/cpython/blob/3.13/Modules/_winapi.c#L1380
         AttributeList attribute_list = {0};
-        if (GetAttrListResult res = _get_attribute_list(handle_list, &attribute_list);
-            res.ec.value() != 0) {
-            error_code = res.ec;
-            error_api = res.where;
-            goto cleanup;
+        if (auto [ec, err_api] = _get_attribute_list(handle_list, &attribute_list);
+            ec.value() != 0) {
+            error_code = ec;
+            error_api = err_api;
+            goto _cleanup;
         }
 
         dwCreationFlags = creationflags | EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
 
         // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1551
-        if (!CreateProcessW(applicationName.empty() ? NULL : applicationName.data(), //
-                            commandLine.data(),                                      //
-                            nullptr,                                                 //
-                            nullptr,                                                 //
-                            !close_fds,                                              //
-                            dwCreationFlags,                                         //
-                            envStr.empty() ? NULL : envStr.data(),                   //
+        if (!CreateProcessW(application_name.empty() ? NULL : application_name.data(), //
+                            command_line.data(),                                       //
+                            nullptr,                                                   //
+                            nullptr,                                                   //
+                            !close_fds,                                                //
+                            dwCreationFlags,                                           //
+                            env_str.empty() ? NULL : env_str.data(),                   //
                             cwd.empty() ? NULL : cwd.c_str(),
                             (LPSTARTUPINFOW) &siex, //
                             &pi                     //
                             )) {
             error_code = make_last_error_code();
             error_api = "CreateProcessW";
-            goto cleanup;
+            goto _cleanup;
         }
 
         _handle = pi.hProcess;
@@ -665,7 +657,7 @@ namespace stdc {
 
         _child_created = true;
 
-    cleanup:
+    _cleanup:
         _free_attribute_list(&attribute_list);
 
         // Child is launched. Close the parent's copy of those pipe
@@ -676,10 +668,7 @@ namespace stdc {
         // ReadFile will hang.
         _close_pipe_fds(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
 
-        if (error_code.value() != ERROR_SUCCESS) {
-            return false;
-        }
-        return true;
+        return error_code.value() == 0;
     }
 
     bool Popen::Impl::_internal_poll() {
@@ -693,21 +682,21 @@ namespace stdc {
             case WAIT_OBJECT_0: {
                 DWORD exitCode;
                 if (!GetExitCodeProcess(_handle, &exitCode)) {
-                    error_code.assign(GetLastError(), std::system_category());
+                    error_code = make_last_error_code();
                     return false;
                 }
                 returncode = exitCode;
-                cleanup();
+                _cleanup();
                 return true;
             }
             case WAIT_FAILED: {
-                error_code.assign(GetLastError(), std::system_category());
+                error_code = make_last_error_code();
                 return false;
             }
             default:
                 break;
         }
-        error_code.assign(GetLastError(), std::system_category());
+        error_code = make_last_error_code();
         return false;
     }
 
@@ -727,7 +716,7 @@ namespace stdc {
                 return false;
             }
             case WAIT_FAILED: {
-                error_code.assign(GetLastError(), std::system_category());
+                error_code = make_last_error_code();
                 return false;
             }
             default:
@@ -736,11 +725,11 @@ namespace stdc {
 
         DWORD exitCode;
         if (!GetExitCodeProcess(_handle, &exitCode)) {
-            error_code.assign(GetLastError(), std::system_category());
+            error_code = make_last_error_code();
             return false;
         }
         returncode = exitCode;
-        cleanup();
+        _cleanup();
         return true;
     }
 
@@ -764,7 +753,7 @@ namespace stdc {
                 return false;
             }
             returncode = exitCode;
-            cleanup();
+            _cleanup();
             return true;
         }
         error_code.assign(err, std::system_category());
@@ -787,18 +776,31 @@ namespace stdc {
             return true;
         }
         if (!EnumWindows(qt_terminateApp, (LPARAM) pid)) {
-            error_code.assign(GetLastError(), std::system_category());
+            error_code = make_last_error_code();
             return false;
         }
         if (!PostThreadMessageW(tid, WM_CLOSE, 0, 0)) {
-            error_code.assign(GetLastError(), std::system_category());
+            error_code = make_last_error_code();
             return false;
         }
         return true;
     }
 
     bool Popen::Impl::send_signal_impl(int sig) {
-        // TODO
+        error_code.clear();
+
+        if (returncode) {
+            return true;
+        }
+
+        if (sig == CTRL_C_EVENT || sig == CTRL_BREAK_EVENT) {
+            if (GenerateConsoleCtrlEvent(sig, pid)) {
+                return true;
+            }
+            error_code = make_last_error_code();
+            return false;
+        }
+        error_code = std::make_error_code(std::errc::invalid_argument);
         return false;
     }
 

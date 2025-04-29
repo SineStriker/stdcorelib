@@ -17,7 +17,7 @@ namespace stdc {
             std::ignore = kill_impl();
             std::ignore = _wait();
         }
-        cleanup();
+        _cleanup();
     }
 
     bool Popen::Impl::done() {
@@ -131,16 +131,16 @@ namespace stdc {
     }
 
     void Popen::Impl::close_std_files() {
-        if (stdin_file) {
-            fclose(stdin_file);
-            stdin_file = nullptr;
-        }
         if (stdout_file) {
             fclose(stdout_file);
             stdin_file = nullptr;
         }
         if (stderr_file) {
             fclose(stderr_file);
+            stdin_file = nullptr;
+        }
+        if (stdin_file) {
+            fclose(stdin_file);
             stdin_file = nullptr;
         }
     }
@@ -356,6 +356,7 @@ namespace stdc {
 
     bool Popen::wait(int timeout) {
         __stdc_impl_t;
+        // we don't wait for the next Ctrl+C like python
         return impl._wait(timeout);
     }
 

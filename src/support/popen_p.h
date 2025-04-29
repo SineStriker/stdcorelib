@@ -105,7 +105,8 @@ namespace stdc {
         //
         bool done();
         void close_std_files();
-        void cleanup();
+
+        void _cleanup();
 
         bool _get_devnull();
         bool _get_handles(Handle &p2cread, Handle &p2cwrite, Handle &c2pread, Handle &c2pwrite,
@@ -123,7 +124,7 @@ namespace stdc {
         bool _execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite, int errread,
                             Handle errwrite);
 #else
-        void _execute_child(int p2cread, int p2cwrite, int c2pread, int c2pwrite, int errread,
+        bool _execute_child(int p2cread, int p2cwrite, int c2pread, int c2pwrite, int errread,
                             int errwrite, int gid, const std::vector<int> &gids, int uid);
 #endif
         bool _internal_poll();

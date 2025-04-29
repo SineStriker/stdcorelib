@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
         .stderr_(stdc::Popen::STDOUT);
     std::string err_msg;
     if (!proc.start(&err_msg)) {
-        stdc::u8println("Failed to start process: %1", err_msg);
+        stdc::console::critical("Failed to start process: %1", err_msg);
         return -1;
     }
 
