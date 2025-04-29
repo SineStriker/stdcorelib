@@ -4,8 +4,6 @@
 #include <fcntl.h>
 #include <io.h>
 
-#include <stdexcept>
-
 #include "pimpl.h"
 #include "str.h"
 
@@ -15,25 +13,30 @@ namespace stdc {
 
     Popen::Impl::~Impl() {
         if (!returncode) {
+            // ###FIXME: we cannot run detached process now.
             std::ignore = kill_impl();
             std::ignore = _wait();
         }
-        close_std_files();
+        cleanup();
     }
 
-    void Popen::Impl::done() {
+    bool Popen::Impl::done() {
         if (_child_created) {
-            return;
+            return true;
         }
 
         // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L847
         if (stdout_dev.kind == 1 && stdout_dev.data.builtin == IOType::STDOUT) {
-            throw std::invalid_argument("STDOUT can only be used for stderr");
+            error_code = std::make_error_code(std::errc::invalid_argument);
+            error_msg = "STDOUT can only be used for stderr";
+            return false;
         }
 
         // ###FIXME: do we need to check?
         if (stdin_dev.kind == 1 && stdin_dev.data.builtin == IOType::STDOUT) {
-            throw std::invalid_argument("STDOUT can only be used for stderr");
+            error_code = std::make_error_code(std::errc::invalid_argument);
+            error_msg = "STDOUT can only be used for stderr";
+            return false;
         }
 
 #ifndef _WIN32
@@ -73,9 +76,14 @@ namespace stdc {
         //
         // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1003
 #ifdef _WIN32
-        auto [p2cread, p2cwrite_h, c2pread_h, c2pwrite, errread_h, errwrite] = _get_handles();
+        Handle p2cread = InvalidHandle, p2cwrite_h = InvalidHandle;
+        Handle c2pread_h = InvalidHandle, c2pwrite = InvalidHandle;
+        Handle errread_h = InvalidHandle, errwrite = InvalidHandle;
+        if (!_get_handles(p2cread, p2cwrite_h, c2pread_h, c2pwrite, errread_h, errwrite)) {
+            return false;
+        }
 
-        // Convert to file descriptors
+        // convert to file descriptors
         int p2cwrite = -1, c2pread = -1, errread = -1;
         if (p2cwrite_h != InvalidHandle) {
             p2cwrite = _open_osfhandle((intptr_t) p2cwrite_h, 0);
@@ -87,7 +95,12 @@ namespace stdc {
             errread = _open_osfhandle((intptr_t) errread_h, 0);
         }
 #else
-        auto [p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite] = _get_handles();
+        Handle p2cread = InvalidHandle, p2cwrite = InvalidHandle;
+        Handle c2pread = InvalidHandle, c2pwrite = InvalidHandle;
+        Handle errread = InvalidHandle, errwrite = InvalidHandle;
+        if (!_get_handles(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite)) {
+            return false;
+        }
 #endif
         // open C File objects
         if (p2cwrite != -1) {
@@ -100,20 +113,21 @@ namespace stdc {
             stderr_file = _fdopen(errread, text ? "r" : "rb");
         }
 
-        try {
 #ifdef _WIN32
-            _execute_child(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
+        bool result = _execute_child(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
 #else
-            _execute_child(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite, gid, gids, uid);
+        bool result = _execute_child(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite, //
+                                     gid, gids, uid);
 #endif
-        } catch (...) {
+
+        if (!result) {
             // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1049
             close_std_files();
             if (!_closed_child_pipe_fds) {
                 _close_pipe_fds_1(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
             }
-            throw;
         }
+        return result;
     }
 
     void Popen::Impl::close_std_files() {
@@ -149,7 +163,6 @@ namespace stdc {
         return *this;
     }
 
-    // input
     Popen &Popen::executable(const std::filesystem::path &executable) {
         __stdc_impl_t;
         impl.executable = executable;
@@ -213,12 +226,6 @@ namespace stdc {
     Popen &Popen::pipesize(int pipesize) {
         __stdc_impl_t;
         impl.pipesize = pipesize;
-        return *this;
-    }
-
-    Popen &Popen::process_group(int process_group) {
-        __stdc_impl_t;
-        impl.process_group = process_group;
         return *this;
     }
 
@@ -290,33 +297,53 @@ namespace stdc {
         impl.umask = umask;
         return *this;
     }
+
+    Popen &Popen::process_group(int process_group) {
+        __stdc_impl_t;
+        impl.process_group = process_group;
+        return *this;
+    }
 #endif
 
-    bool Popen::start() {
+    /*!
+        Starts the process. If a failure occurs, the error code will be set and the detailed error
+        message will be stored into \a err_msg.
+    */
+    bool Popen::start(std::string *err_msg) {
         __stdc_impl_t;
-        try {
-            impl.done();
+
+        bool result = impl.done();
+        if (result) {
             return true;
-        } catch (const std::invalid_argument &e) {
-            impl.error_code = std::make_error_code(std::errc::invalid_argument);
-            fprintf(stderr, "stdc::Popen(): %s\n", e.what());
-        } catch (const std::filesystem::filesystem_error &e) {
-            impl.error_code = e.code();
-            fprintf(stderr, "stdc::Popen(): %s\n", e.what());
-        } catch (const std::system_error &e) {
+        }
+
+        // system api error
+        if (impl.error_api) {
 #ifdef _WIN32
-            impl.error_code = std::error_code(e.code().value(), windows_utf8_category());
+            impl.error_code = std::error_code(impl.error_code.value(), windows_utf8_category());
 #else
             impl.error_code = e.code();
 #endif
-            fprintf(stderr, "stdc::Popen(): %s\n", e.what());
-        } catch (const std::exception &e) {
-            impl.error_code = std::error_code(9999, std::system_category());
-            fprintf(stderr, "stdc::Popen(): unknown error: %s\n", e.what());
+            if (err_msg)
+                *err_msg = formatN("%1: %2", impl.error_api, impl.error_code.message());
+            return false;
         }
+
+        // invalid argument, file no found, etc.
+        if (!impl.error_msg.empty()) {
+            if (err_msg)
+                *err_msg = impl.error_msg;
+            return false;
+        }
+        // unknown error
+        if (err_msg)
+            *err_msg = "unknown error";
         return false;
     }
 
+    /*!
+        Returns the error code of the last operation.
+    */
     std::error_code Popen::error_code() const {
         __stdc_impl_t;
         return impl.error_code;

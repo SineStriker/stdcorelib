@@ -17,31 +17,37 @@ namespace stdc {
 
     constexpr UINT KillProcessExitCode = 0xf291;
 
-    Popen::Impl::Handle Popen::Impl::_get_devnull() {
-        if (_devnull) {
-            return _devnull;
-        }
 
+    void Popen::Impl::cleanup() {
+        close_std_files();
+
+        CloseHandle(_handle);
+        _handle = InvalidHandle;
+
+        pid = -1;
+        tid = -1;
+    }
+
+    static inline std::error_code make_last_error_code() {
+        return std::error_code(GetLastError(), std::system_category());
+    }
+
+    bool Popen::Impl::_get_devnull() {
         // Create a null device handle
         auto handle =
             CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
                         nullptr, OPEN_EXISTING, 0, nullptr);
         if (handle == INVALID_HANDLE_VALUE) {
-            throw std::system_error(GetLastError(), std::system_category(), "CreateFileW");
+            error_code = make_last_error_code();
+            error_api = "CreateFileW";
+            return false;
         }
         _devnull = handle;
         return handle;
     }
 
-    static HANDLE _make_inheritable(HANDLE handle) {
-        HANDLE target_handle;
-        if (!DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(), &target_handle, 0, 1,
-                             DUPLICATE_SAME_ACCESS)) {
-            throw std::system_error(GetLastError(), std::system_category(), "DuplicateHandle");
-        }
-        return target_handle;
-    }
-
+    // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1436
+    //
     // Filter out console handles that can't be used
     // in lpAttributeList["handle_list"] and make sure the list
     // isn't empty. This also removes duplicate handles.
@@ -59,15 +65,11 @@ namespace stdc {
     }
 
     // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1348
-    std::tuple<void *, void *, void *, void *, void *, void *> Popen::Impl::_get_handles() {
+    bool Popen::Impl::_get_handles(HANDLE &p2cread, HANDLE &p2cwrite, HANDLE &c2pread,
+                                   HANDLE &c2pwrite, HANDLE &errread, HANDLE &errwrite) {
         if (stdin_dev.kind == 0 && stdout_dev.kind == 0 && stderr_dev.kind == 0) {
-            return {InvalidHandle, InvalidHandle, InvalidHandle,
-                    InvalidHandle, InvalidHandle, InvalidHandle};
+            return true;
         }
-
-        HANDLE p2cread = INVALID_HANDLE_VALUE, p2cwrite = INVALID_HANDLE_VALUE;
-        HANDLE c2pread = INVALID_HANDLE_VALUE, c2pwrite = INVALID_HANDLE_VALUE;
-        HANDLE errread = INVALID_HANDLE_VALUE, errwrite = INVALID_HANDLE_VALUE;
 
         struct ErrorCloseHandles {
             ErrorCloseHandles(Handle &devnull) : devnull(devnull) {
@@ -83,8 +85,9 @@ namespace stdc {
                 for (int i = 0; i < error_close_handles_count; i++) {
                     CloseHandle(error_close_handles[i]);
                 }
-                if (devnull) {
+                if (devnull != InvalidHandle) {
                     CloseHandle(devnull);
+                    devnull = InvalidHandle;
                 }
             }
 
@@ -118,15 +121,46 @@ namespace stdc {
         ErrorCloseHandles err_close_handles(_devnull);
         DuplicatedHandles dup_handles;
 
+        const auto &make_inheritable = [this](HANDLE &handle) {
+            HANDLE target_handle;
+            if (!DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(), &target_handle,
+                                 0, 1, DUPLICATE_SAME_ACCESS)) {
+                error_code = make_last_error_code();
+                error_api = "DuplicateHandle";
+                return false;
+            }
+            handle = target_handle;
+            return true;
+        };
+
+        const auto &convert_from_fd = [this](HANDLE &handle, int fd) {
+            auto tmp_handle = (HANDLE) _get_osfhandle(fd);
+            if (tmp_handle == INVALID_HANDLE_VALUE) {
+                error_code = std::error_code(ERROR_INVALID_HANDLE, std::system_category());
+                error_api = "_get_osfhandle";
+                return false;
+            };
+            handle = tmp_handle;
+            return true;
+        };
+
+        const auto &create_pipe = [this](HANDLE &read_handle, HANDLE &write_handle) {
+            if (!CreatePipe(&read_handle, &write_handle, nullptr, 0)) {
+                error_code = make_last_error_code();
+                error_api = "CreatePipe";
+                return false;
+            }
+            return true;
+        };
+
         // stdin
         switch (stdin_dev.kind) {
-            case IODev::Null: {
+            case IODev::None: {
                 p2cread = GetStdHandle(STD_INPUT_HANDLE);
                 if (p2cread == INVALID_HANDLE_VALUE) {
                     HANDLE tmp_pipe;
-                    if (!CreatePipe(&p2cread, &tmp_pipe, nullptr, 0)) {
-                        throw std::system_error(GetLastError(), std::system_category(),
-                                                "CreatePipe");
+                    if (!create_pipe(p2cread, tmp_pipe)) {
+                        return false;
                     }
                     err_close_handles.push(p2cread);
                     dup_handles.push(p2cread);
@@ -137,9 +171,8 @@ namespace stdc {
             case IODev::Builtin: {
                 switch (stdin_dev.data.builtin) {
                     case PIPE: {
-                        if (!CreatePipe(&p2cread, &p2cwrite, nullptr, 0)) {
-                            throw std::system_error(GetLastError(), std::system_category(),
-                                                    "CreatePipe");
+                        if (!create_pipe(p2cread, p2cwrite)) {
+                            return false;
                         }
                         err_close_handles.push(p2cread);
                         err_close_handles.push(p2cwrite);
@@ -147,39 +180,48 @@ namespace stdc {
                         break;
                     };
                     case DEVNULL: {
-                        p2cread = _get_devnull();
+                        if (_devnull == InvalidHandle && !_get_devnull()) {
+                            return false;
+                        }
+                        p2cread = _devnull;
                         break;
                     };
                     default: {
-                        throw std::invalid_argument(
-                            formatN("invalid stdin type: %1", int(stdin_dev.data.builtin)));
+                        error_code = std::make_error_code(std::errc::invalid_argument);
+                        error_msg = formatN("invalid stdin type: %1", int(stdin_dev.data.builtin));
+                        return false;
                     }
                 }
                 break;
             }
             case IODev::FD: {
-                p2cread = (HANDLE) _get_osfhandle(stdin_dev.data.fd);
+                if (!convert_from_fd(p2cread, stdin_dev.data.fd)) {
+                    return false;
+                }
                 break;
             }
             case IODev::CFile: {
-                p2cread = (HANDLE) _get_osfhandle(_fileno(stdin_dev.data.file));
+                if (!convert_from_fd(p2cread, _fileno(stdin_dev.data.file))) {
+                    return false;
+                }
                 break;
             }
             default:
                 break;
         }
-        p2cread = _make_inheritable(p2cread);
+        if (!make_inheritable(p2cread)) {
+            return false;
+        }
         err_close_handles.push(p2cread);
 
         // stdout
         switch (stdout_dev.kind) {
-            case IODev::Null: {
+            case IODev::None: {
                 c2pwrite = GetStdHandle(STD_OUTPUT_HANDLE);
                 if (c2pwrite == INVALID_HANDLE_VALUE) {
                     HANDLE tmp_pipe;
-                    if (!CreatePipe(&tmp_pipe, &c2pwrite, nullptr, 0)) {
-                        throw std::system_error(GetLastError(), std::system_category(),
-                                                "CreatePipe");
+                    if (!create_pipe(tmp_pipe, c2pwrite)) {
+                        return false;
                     }
                     err_close_handles.push(c2pwrite);
                     dup_handles.push(c2pwrite);
@@ -190,9 +232,8 @@ namespace stdc {
             case IODev::Builtin: {
                 switch (stdout_dev.data.builtin) {
                     case PIPE: {
-                        if (!CreatePipe(&c2pread, &c2pwrite, nullptr, 0)) {
-                            throw std::system_error(GetLastError(), std::system_category(),
-                                                    "CreatePipe");
+                        if (!create_pipe(c2pread, c2pwrite)) {
+                            return false;
                         }
                         err_close_handles.push(c2pread);
                         err_close_handles.push(c2pwrite);
@@ -200,39 +241,49 @@ namespace stdc {
                         break;
                     };
                     case DEVNULL: {
-                        c2pwrite = _get_devnull();
+                        if (_devnull == InvalidHandle && !_get_devnull()) {
+                            return false;
+                        }
+                        c2pwrite = _devnull;
                         break;
                     };
                     default: {
-                        throw std::invalid_argument(
-                            formatN("invalid stdout type: %1", int(stdout_dev.data.builtin)));
+                        error_code = std::make_error_code(std::errc::invalid_argument);
+                        error_msg =
+                            formatN("invalid stdout type: %1", int(stdout_dev.data.builtin));
+                        return false;
                     }
                 }
                 break;
             }
             case IODev::FD: {
-                c2pwrite = (HANDLE) _get_osfhandle(stdout_dev.data.fd);
+                if (!convert_from_fd(c2pwrite, stdout_dev.data.fd)) {
+                    return false;
+                }
                 break;
             }
             case IODev::CFile: {
-                c2pwrite = (HANDLE) _get_osfhandle(_fileno(stdout_dev.data.file));
+                if (!convert_from_fd(c2pwrite, _fileno(stdout_dev.data.file))) {
+                    return false;
+                }
                 break;
             }
             default:
                 break;
         }
-        c2pwrite = _make_inheritable(c2pwrite);
+        if (!make_inheritable(c2pwrite)) {
+            return false;
+        }
         err_close_handles.push(c2pwrite);
 
         // stderr
         switch (stderr_dev.kind) {
-            case IODev::Null: {
+            case IODev::None: {
                 errwrite = GetStdHandle(STD_ERROR_HANDLE);
                 if (errwrite == INVALID_HANDLE_VALUE) {
                     HANDLE tmp_pipe;
-                    if (!CreatePipe(&tmp_pipe, &errwrite, nullptr, 0)) {
-                        throw std::system_error(GetLastError(), std::system_category(),
-                                                "CreatePipe");
+                    if (!create_pipe(tmp_pipe, errwrite)) {
+                        return false;
                     }
                     err_close_handles.push(errwrite);
                     dup_handles.push(errwrite);
@@ -243,9 +294,8 @@ namespace stdc {
             case IODev::Builtin: {
                 switch (stderr_dev.data.builtin) {
                     case PIPE: {
-                        if (!CreatePipe(&errread, &errwrite, nullptr, 0)) {
-                            throw std::system_error(GetLastError(), std::system_category(),
-                                                    "CreatePipe");
+                        if (!create_pipe(errread, errwrite)) {
+                            return false;
                         }
                         err_close_handles.push(errread);
                         err_close_handles.push(errwrite);
@@ -253,7 +303,10 @@ namespace stdc {
                         break;
                     };
                     case DEVNULL: {
-                        errwrite = _get_devnull();
+                        if (_devnull == InvalidHandle && !_get_devnull()) {
+                            return false;
+                        }
+                        errwrite = _devnull;
                         break;
                     };
                     case STDOUT: {
@@ -264,17 +317,23 @@ namespace stdc {
                 break;
             }
             case IODev::FD: {
-                errwrite = (HANDLE) _get_osfhandle(stderr_dev.data.fd);
+                if (!convert_from_fd(errwrite, stderr_dev.data.fd)) {
+                    return false;
+                }
                 break;
             }
             case IODev::CFile: {
-                errwrite = (HANDLE) _get_osfhandle(_fileno(stderr_dev.data.file));
+                if (!convert_from_fd(errwrite, _fileno(stderr_dev.data.file))) {
+                    return false;
+                }
                 break;
             }
             default:
                 break;
         }
-        errwrite = _make_inheritable(errwrite);
+        if (!make_inheritable(errwrite)) {
+            return false;
+        }
         err_close_handles.push(errwrite);
 
         // release guard
@@ -283,7 +342,7 @@ namespace stdc {
         // close newly-created handles but duplicated
         dup_handles.free();
 
-        return {p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite};
+        return true;
     }
 
 
@@ -304,27 +363,23 @@ namespace stdc {
         if (errwrite != InvalidHandle) {
             CloseHandle(errwrite);
         }
-        if (_devnull) {
+        if (_devnull != InvalidHandle) {
             CloseHandle(_devnull);
-            _devnull = nullptr;
+            _devnull = InvalidHandle;
         }
     }
 
-    static fs::path _get_command_prompt_path() {
+    static fs::path _get_command_prompt_path(std::string &errorMessage) {
         auto comspec = winGetEnvironmentVariable(L"ComSpec", nullptr);
         fs::path comspec_path;
         if (comspec.empty()) {
             auto system_root = winGetEnvironmentVariable(L"SystemRoot", nullptr);
             if (system_root.empty()) {
-                throw std::filesystem::filesystem_error(
-                    "shell not found: neither %ComSpec% nor %SystemRoot% is set",
-                    std::make_error_code(std::errc::no_such_file_or_directory));
+                return "shell not found: neither %ComSpec% nor %SystemRoot% is set";
             }
             comspec_path = fs::path(system_root) / L"System32" / L"cmd.exe";
             if (!comspec_path.is_absolute()) {
-                throw std::filesystem::filesystem_error(
-                    "shell not found: constructed path is not absolute",
-                    std::make_error_code(std::errc::no_such_file_or_directory));
+                return "shell not found: constructed path is not absolute";
             }
         } else {
             comspec_path = comspec;
@@ -402,6 +457,11 @@ namespace stdc {
         LPHANDLE handle_list;
     };
 
+    struct GetAttrListResult {
+        std::error_code ec;
+        const char *where;
+    };
+
     // https://github.com/python/cpython/blob/3.13/Modules/_winapi.c#L1210
     static void _free_attribute_list(AttributeList *attribute_list) {
         if (attribute_list->attribute_list != NULL) {
@@ -413,7 +473,7 @@ namespace stdc {
     }
 
     // https://github.com/python/cpython/blob/3.13/Modules/_winapi.c#L1223
-    static std::system_error _get_attribute_list(const llvm::SmallVector<HANDLE, 10> &handles,
+    static GetAttrListResult _get_attribute_list(const llvm::SmallVector<HANDLE, 10> &handles,
                                                  AttributeList *attribute_list) {
         DWORD err;
         const char *where = nullptr;
@@ -471,13 +531,13 @@ namespace stdc {
     cleanup:
         if (where) {
             _free_attribute_list(attribute_list);
-            return std::system_error(err, std::system_category(), where);
+            return {std::error_code(err, std::system_category()), where};
         }
-        return std::system_error(ERROR_SUCCESS, std::system_category());
+        return {{}, {}};
     }
 
     // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1449
-    void Popen::Impl::_execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
+    bool Popen::Impl::_execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                                      int errread, Handle errwrite) {
         std::string arg_str = qt_create_commandline({}, args);
 
@@ -540,7 +600,13 @@ namespace stdc {
             si.dwFlags |= STARTF_USESHOWWINDOW;
             si.wShowWindow = SW_HIDE;
             if (executable.empty()) {
-                executable = _get_command_prompt_path();
+                std::string err;
+                executable = _get_command_prompt_path(err);
+                if (!err.empty()) {
+                    error_code = std::make_error_code(std::errc::no_such_file_or_directory);
+                    error_msg = err;
+                    return false;
+                }
             }
             arg_str = formatN(R"(%1 /c "%2")", executable, arg_str);
         }
@@ -566,8 +632,10 @@ namespace stdc {
 
         // https://github.com/python/cpython/blob/3.13/Modules/_winapi.c#L1380
         AttributeList attribute_list = {0};
-        std::system_error err = _get_attribute_list(handle_list, &attribute_list);
-        if (err.code().value() != ERROR_SUCCESS) {
+        if (GetAttrListResult res = _get_attribute_list(handle_list, &attribute_list);
+            res.ec.value() != 0) {
+            error_code = res.ec;
+            error_api = res.where;
             goto cleanup;
         }
 
@@ -585,7 +653,8 @@ namespace stdc {
                             (LPSTARTUPINFOW) &siex, //
                             &pi                     //
                             )) {
-            err = std::system_error(GetLastError(), std::system_category(), "CreateProcessW");
+            error_code = make_last_error_code();
+            error_api = "CreateProcessW";
             goto cleanup;
         }
 
@@ -607,9 +676,10 @@ namespace stdc {
         // ReadFile will hang.
         _close_pipe_fds(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
 
-        if (err.code().value() != ERROR_SUCCESS) {
-            throw err;
+        if (error_code.value() != ERROR_SUCCESS) {
+            return false;
         }
+        return true;
     }
 
     bool Popen::Impl::_internal_poll() {
@@ -627,9 +697,7 @@ namespace stdc {
                     return false;
                 }
                 returncode = exitCode;
-                close_std_files();
-                CloseHandle(_handle);
-                _handle = nullptr;
+                cleanup();
                 return true;
             }
             case WAIT_FAILED: {
@@ -672,9 +740,7 @@ namespace stdc {
             return false;
         }
         returncode = exitCode;
-        close_std_files();
-        CloseHandle(_handle);
-        _handle = nullptr;
+        cleanup();
         return true;
     }
 
@@ -698,9 +764,7 @@ namespace stdc {
                 return false;
             }
             returncode = exitCode;
-            close_std_files();
-            CloseHandle(_handle);
-            _handle = nullptr;
+            cleanup();
             return true;
         }
         error_code.assign(err, std::system_category());

@@ -55,8 +55,9 @@ int main(int argc, char *argv[]) {
         .text(true)
         .stdout_(stdc::Popen::PIPE)
         .stderr_(stdc::Popen::STDOUT);
-    if (!proc.start()) {
-        stdc::u8println("Failed to start process: %1", proc.error_code().message());
+    std::string err_msg;
+    if (!proc.start(&err_msg)) {
+        stdc::u8println("Failed to start process: %1", err_msg);
         return -1;
     }
 

@@ -4,8 +4,6 @@
 #include <shared_mutex>
 #include <tuple>
 #include <cstdint>
-#include <cstddef>
-#include <stdexcept>
 
 #include <stdcorelib/support/popen.h>
 
@@ -44,9 +42,8 @@ namespace stdc {
         FILE *stderr_file = nullptr;
 
         bool text = false;
-        bool close_fds = false;
+        bool close_fds = true;
         int pipesize = -1;
-        int process_group = 0;
 
 #ifdef _WIN32
         const StartupInfo *startupinfo = nullptr;
@@ -70,6 +67,7 @@ namespace stdc {
         user_info user = {false};
 
         int umask = -1;
+        int process_group = 0;
 #endif
 
     public:
@@ -89,25 +87,29 @@ namespace stdc {
         double _sigint_wait_secs = 0.25;
         bool _closed_child_pipe_fds = false;
 
-        Handle _devnull = InvalidHandle;
+        Handle _devnull = InvalidHandle; // will be closed after creating child
 
 #ifdef _WIN32
         Handle _handle = InvalidHandle;
         int tid = -1;
 #endif
-
         std::error_code error_code;
+
+        // error data during start
+        std::string error_msg;
+        const char *error_api = nullptr;
 
     public:
         //
         // Methods
         //
-        void done();
+        bool done();
         void close_std_files();
+        void cleanup();
 
-        Handle _get_devnull();
-
-        std::tuple<Handle, Handle, Handle, Handle, Handle, Handle> _get_handles();
+        bool _get_devnull();
+        bool _get_handles(Handle &p2cread, Handle &p2cwrite, Handle &c2pread, Handle &c2pwrite,
+                          Handle &errread, Handle &errwrite);
 
         void _close_pipe_fds(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                              int errread, Handle errwrite);
@@ -118,7 +120,7 @@ namespace stdc {
                                int errread, Handle errwrite);
 
 #ifdef _WIN32
-        void _execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite, int errread,
+        bool _execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite, int errread,
                             Handle errwrite);
 #else
         void _execute_child(int p2cread, int p2cwrite, int c2pread, int c2pwrite, int errread,

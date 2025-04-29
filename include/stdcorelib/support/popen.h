@@ -22,12 +22,12 @@ namespace stdc {
 
         struct IODev {
             enum Kind {
-                Null,
+                None,
                 Builtin,
                 FD,
                 CFile,
             };
-            IODev() : kind(Null) {
+            IODev() : kind(None) {
             }
             IODev(IOType builtin) : kind(Builtin) {
                 data.builtin = builtin;
@@ -85,7 +85,6 @@ namespace stdc {
         Popen &text(bool text);
         Popen &close_fds(bool close_fds);
         Popen &pipesize(int pipesize);
-        Popen &process_group(int process_group);
 
 #ifdef _WIN32
         Popen &startupinfo(const StartupInfo *startupinfo); // windows only
@@ -100,13 +99,14 @@ namespace stdc {
         Popen &user(int user);                                      // unix only
         Popen &user(const char *user);                              // unix only
         Popen &umask(int umask);                                    // unix only
+        Popen &process_group(int process_group);                    // unix only
 #endif
 
     public:
         //
         // additional apis
         //
-        bool start();
+        bool start(std::string *err_msg = nullptr);
         std::error_code error_code() const;
 
     public:
