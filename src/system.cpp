@@ -199,7 +199,7 @@ namespace stdc {
         /*
             Splits a command line string to a vector of arguments.
 
-            https://github.com/qt/qtbase/blob/6.8.0/src/corelib/io/qprocess.cpp#L2428
+            https://github.com/qt/qtbase/blob/v6.8.0/src/corelib/io/qprocess.cpp#L2428
         */
         std::vector<std::string> split_command_line(const std::string_view &command) {
             std::vector<std::string> args;

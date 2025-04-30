@@ -83,7 +83,7 @@ namespace stdc {
         std::string _input;
         bool _communication_started = false;
 
-        // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L895C14-L895C38
+        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L894
         double _sigint_wait_secs = 0.25;
         bool _closed_child_pipe_fds = false;
 
@@ -95,11 +95,11 @@ namespace stdc {
 #else
         std::shared_mutex _waitpid_lock;
 #endif
-        std::error_code error_code;
 
         // error data during start
         std::string error_msg;
         const char *error_api = nullptr;
+        std::error_code error_code;
 
     public:
         //
@@ -117,7 +117,7 @@ namespace stdc {
         void _close_pipe_fds(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                              int errread, Handle errwrite);
 
-        // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1050
+        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1050
         // close but not set _closed_child_pipe_fds, why?
         void _close_pipe_fds_1(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                                int errread, Handle errwrite);

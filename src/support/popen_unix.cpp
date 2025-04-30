@@ -33,7 +33,7 @@ namespace stdc {
         return true;
     }
 
-    // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1348
+    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1348
     bool Popen::Impl::_get_handles(int &p2cread, int &p2cwrite, int &c2pread, int &c2pwrite,
                                    int &errread, int &errwrite) {
         if (stdin_dev.kind == 0 && stdout_dev.kind == 0 && stderr_dev.kind == 0) {
@@ -288,7 +288,7 @@ namespace stdc {
         }
     }
 
-    // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1449
+    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1449
     bool Popen::Impl::_execute_child(int p2cread, int p2cwrite, int c2pread, int c2pwrite,
                                      int errread, int errwrite, int gid,
                                      const std::vector<int> &gids, int uid) {
@@ -307,7 +307,7 @@ namespace stdc {
             executable = args[0];
         }
 
-        // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1862
+        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1862
         //
         // For transferring possible exec failure from child to parent.
         // Data format: "exception name:hex errno:description"
@@ -371,7 +371,7 @@ namespace stdc {
 
         std::string errpipe_data;
 
-        // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1873
+        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1873
         {
             int tmp_pid = _fork_exec(fds_to_keep, envs, p2cread, p2cwrite, c2pread, c2pwrite,
                                      errread, errwrite, gid, gids, uid, true);
@@ -404,7 +404,7 @@ namespace stdc {
             close(errpipe_read);
         }
 
-        // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1930
+        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1930
         if (errpipe_data.empty()) {
             return true;
         }

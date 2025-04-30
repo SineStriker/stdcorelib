@@ -75,7 +75,7 @@ namespace stdc {
 
     public:
         //
-        // input
+        // input: shouldn't call after calling start()
         //
         Popen &executable(const std::filesystem::path &executable);
         Popen &args(const std::vector<std::string> &args);
@@ -90,7 +90,7 @@ namespace stdc {
 
         Popen &text(bool text);
         Popen &close_fds(bool close_fds);
-        Popen &pipesize(int pipesize);
+        Popen &pipesize(int pipesize); // linux only (ignored on other platforms)
 
 #ifdef _WIN32
         Popen &startupinfo(const StartupInfo *startupinfo); // windows only
