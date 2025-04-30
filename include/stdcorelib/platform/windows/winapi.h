@@ -40,7 +40,9 @@ namespace stdc::winapi {
         //
         // processenv
         //
-        static std::wstring GetEnvironmentVariableW(LPCWSTR name, bool *exists);
+        static std::wstring GetEnvironmentVariableW(LPCWSTR name, bool *exists = nullptr);
+
+        static std::wstring ExpandEnvironmentStringsW(LPCWSTR src, bool *ok);
     };
 
     struct STDCORELIB_EXPORT user32 {

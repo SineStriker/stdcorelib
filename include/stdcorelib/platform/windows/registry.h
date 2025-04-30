@@ -25,12 +25,12 @@ namespace stdc::winapi {
         };
 
         RegValue(Type type = None);
-        RegValue(const uint8_t *data, size_t size);
+        RegValue(const uint8_t *data, int size);
         RegValue(int32_t value);
         RegValue(int64_t value);
-        RegValue(const std::string &value, Type type = String);
-        RegValue(const char *value, Type type = String);
-        RegValue(const std::vector<std::string> &value);
+        RegValue(const std::wstring &value, Type type = String);
+        RegValue(const wchar_t *value, int size = -1, Type type = String);
+        RegValue(const std::vector<std::wstring> &value);
         RegValue(const void *data, Type type);
         ~RegValue();
 
@@ -46,10 +46,10 @@ namespace stdc::winapi {
 
         int32_t toInt32() const;
         int64_t toInt64() const;
-        std::string toString() const;
-        const std::vector<std::string> &toMultiString() const;
-        std::string toExpandString() const;
-        std::string toLink() const;
+        std::wstring toString() const;
+        const std::vector<std::wstring> &toMultiString() const;
+        std::wstring toExpandString() const;
+        std::wstring toLink() const;
 
         inline bool isValid() const {
             return type() != Invalid;

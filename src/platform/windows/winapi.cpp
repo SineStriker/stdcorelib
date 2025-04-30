@@ -2,6 +2,15 @@
 
 #include "str.h"
 
+namespace stdc {
+
+    /*!
+        \namespace winapi
+        \brief Windows API function wrappers.
+    */
+
+}
+
 namespace stdc::winapi {
 
     std::wstring kernel32::FormatMessageW(int from, LPCVOID source, DWORD message_id,
@@ -96,16 +105,35 @@ namespace stdc::winapi {
                 *ok = GetLastError() == ERROR_ENVVAR_NOT_FOUND;
             return {};
         }
-        std::wstring buffer;
-        buffer.resize(size - 1);
-        if (::GetEnvironmentVariableW(name, buffer.data(), size) == 0) {
+        std::wstring res;
+        res.resize(size - 1);
+        if (::GetEnvironmentVariableW(name, res.data(), size) == 0) {
             if (ok)
                 *ok = false;
             return {};
         }
         if (ok)
             *ok = true;
-        return buffer;
+        return res;
+    }
+
+    std::wstring kernel32::ExpandEnvironmentStringsW(LPCWSTR src, bool *ok) {
+        DWORD size = ::ExpandEnvironmentStringsW(src, nullptr, 0);
+        if (size == 0) {
+            if (ok)
+                *ok = false;
+            return {};
+        }
+        std::wstring res;
+        res.resize(size);
+        if (::ExpandEnvironmentStringsW(src, res.data(), size) == 0) {
+            if (ok)
+                *ok = false;
+            return {};
+        }
+        if (ok)
+            *ok = true;
+        return res;
     }
 
     /*!
