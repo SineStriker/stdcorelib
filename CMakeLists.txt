@@ -52,37 +52,51 @@ set(STDCORELIB_INSTALL_NAME ${PROJECT_NAME})
 # ----------------------------------
 # Main Project
 # ----------------------------------
-file(GLOB_RECURSE _src include/*.h src/*.h src/*.cpp src/*.mm)
-
 if(TRUE)
+    file(GLOB _common_src src/*.cpp)
+    file(GLOB_RECURSE _subdir_src src/3rdparty/*.cpp src/support/*.cpp)
+    file(GLOB _platform_common_src src/platform/*.cpp)
+
+    if(WIN32)
+        file(GLOB _platform_src src/platform/windows/*.cpp)
+    elseif(UNIX)
+        if(APPLE)
+            file(GLOB_RECURSE _objc_src src/*.mm)
+            file(GLOB _platform_src src/platform/mac/*.cpp)
+            list(APPEND _platform_src ${_objc_src})
+        else()
+            file(GLOB _platform_src src/platform/linux/*.cpp)
+        endif()
+    endif()
+
+    set(_src ${_common_src} ${_subdir_src} ${_platform_common_src} ${_platform_src})
     set(_temp)
 
+    # filter
     foreach(_item IN LISTS _src)
         get_filename_component(_name ${_item} NAME)
 
         if(WIN32)
+            # remove mac/linux
             if(_name MATCHES ".+_(unix|darwin|mac|linux)\..+" OR _name MATCHES "^unix_.+")
                 continue()
             endif()
         else()
-            if(_name MATCHES "^windows_.+" OR _name MATCHES "^win_.+")
+            # remove windows
+            if(_name MATCHES ".+_(win|windows)\..+" OR _name MATCHES "^windows_.+" OR _name MATCHES "^win_.+" OR _name MATCHES "winapi.*")
                 continue()
             endif()
 
             if(APPLE)
+                # remove linux
                 if(_name MATCHES ".+_linux\..+")
                     continue()
                 endif()
             else()
+                # remove mac
                 if(_name MATCHES ".+_(darwin|mac)\..+")
                     continue()
                 endif()
-            endif()
-        endif()
-
-        if(NOT APPLE)
-            if(_name MATCHES ".+\.mm$")
-                continue()
             endif()
         endif()
 
@@ -91,6 +105,8 @@ if(TRUE)
 
     set(_src ${_temp})
     unset(_temp)
+
+    message("1: ${_src}")
 endif()
 
 if(STDCORELIB_BUILD_STATIC)

@@ -15,6 +15,8 @@
 #  include <fstream>
 #endif
 
+#include <cstring>
+
 #include "path.h"
 #include "str.h"
 

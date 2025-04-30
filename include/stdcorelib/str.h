@@ -180,10 +180,10 @@ namespace stdc {
                    const std::function<std::string(const std::string_view &)> &find);
 
         // @overload: varexp(string, map<string, string>)
-        template <class MAP>
-        inline std::string varexp(const std::string_view &s, const MAP &vars) {
+        template <template <class, class, class...> class MAP, class K, class V, class... MODS>
+        inline std::string varexp(const std::string_view &s, const MAP<K, V, MODS...> &vars) {
             return varexp(s, [&vars](const std::string_view &name) -> std::string {
-                auto it = vars.find(name);
+                auto it = vars.find(std::string(name));
                 if (it == vars.end())
                     return std::string();
                 return it->second;

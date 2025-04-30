@@ -2,7 +2,12 @@
 #include "popen_p.h"
 
 #include <fcntl.h>
-#include <io.h>
+
+#ifdef _WIN32
+#  include <io.h>
+#else
+#  include <sys/io.h>
+#endif
 
 #include "pimpl.h"
 #include "str.h"
@@ -18,6 +23,14 @@ namespace stdc {
             std::ignore = _wait();
         }
         _cleanup();
+    }
+
+    static FILE *Popen_fdopen(int fd, const char *modes) {
+#ifdef _WIN32
+        return _fdopen(fd, modes);
+#else
+        return fdopen(fd, modes);
+#endif
     }
 
     bool Popen::Impl::done() {
@@ -104,13 +117,13 @@ namespace stdc {
 #endif
         // open C File objects
         if (p2cwrite != -1) {
-            stdin_file = _fdopen(p2cwrite, text ? "w" : "wb");
+            stdin_file = Popen_fdopen(p2cwrite, text ? "w" : "wb");
         }
         if (c2pread != -1) {
-            stdout_file = _fdopen(c2pread, text ? "r" : "rb");
+            stdout_file = Popen_fdopen(c2pread, text ? "r" : "rb");
         }
         if (errread != -1) {
-            stderr_file = _fdopen(errread, text ? "r" : "rb");
+            stderr_file = Popen_fdopen(errread, text ? "r" : "rb");
         }
 
 #ifdef _WIN32
@@ -321,8 +334,6 @@ namespace stdc {
         if (impl.error_api) {
 #ifdef _WIN32
             impl.error_code = std::error_code(impl.error_code.value(), windows_utf8_category());
-#else
-            impl.error_code = e.code();
 #endif
             if (err_msg)
                 *err_msg = formatN("%1: %2", impl.error_api, impl.error_code.message());

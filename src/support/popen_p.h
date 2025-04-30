@@ -1,9 +1,10 @@
 #ifndef POPEN_P_H
 #define POPEN_P_H
 
-#include <shared_mutex>
 #include <tuple>
 #include <cstdint>
+#include <set>
+#include <shared_mutex>
 
 #include <stdcorelib/support/popen.h>
 
@@ -79,7 +80,6 @@ namespace stdc {
         int pid = -1;
         std::optional<int> returncode;
 
-        std::shared_mutex _waitpid_lock;
         std::string _input;
         bool _communication_started = false;
 
@@ -92,6 +92,8 @@ namespace stdc {
 #ifdef _WIN32
         Handle _handle = InvalidHandle;
         int tid = -1;
+#else
+        std::shared_mutex _waitpid_lock;
 #endif
         std::error_code error_code;
 
@@ -126,6 +128,13 @@ namespace stdc {
 #else
         bool _execute_child(int p2cread, int p2cwrite, int c2pread, int c2pwrite, int errread,
                             int errwrite, int gid, const std::vector<int> &gids, int uid);
+
+        int _fork_exec(const std::set<int> &fds_to_keep, char **envs, int p2cread, int p2cwrite,
+                       int c2pread, int c2pwrite, int errread, int errwrite, int gid,
+                       const std::vector<int> &gids, int uid, bool allow_vfork);
+
+        bool _handle_exitstatus(int status);
+
 #endif
         bool _internal_poll();
         bool _wait(int timeout = -1);

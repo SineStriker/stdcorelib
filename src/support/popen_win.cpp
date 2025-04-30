@@ -6,6 +6,7 @@
 
 #include <array>
 #include <algorithm>
+#include <cassert>
 
 #include "osapi_win.h"
 #include "str.h"
@@ -45,7 +46,7 @@ namespace stdc {
             return false;
         }
         _devnull = handle;
-        return handle;
+        return true;
     }
 
     // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1436
@@ -531,6 +532,8 @@ namespace stdc {
     // https://github.com/python/cpython/blob/3.13/Lib/subprocess.py#L1449
     bool Popen::Impl::_execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                                      int errread, Handle errwrite) {
+        assert(!args.empty());
+
         std::string args_str = qt_create_commandline({}, args);
 
         STARTUPINFOEXW siex;

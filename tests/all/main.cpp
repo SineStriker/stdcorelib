@@ -6,6 +6,8 @@
 #include <stdcorelib/path.h>
 #include <stdcorelib/vla.h>
 
+#include <stdcorelib/support/popen.h>
+
 using stdc::u8printf;
 using stdc::u8println;
 
@@ -60,6 +62,11 @@ static void tst_ConsoleColor() {
     u8println();
 }
 
+static void tst_Popen() {
+    
+
+}
+
 int main(int /* argc */, char * /* argv */[]) {
     // 1 cmd line
     {
@@ -86,6 +93,13 @@ int main(int /* argc */, char * /* argv */[]) {
     {
         u8printf("[Console color]\n");
         tst_ConsoleColor();
+        u8println();
+    }
+
+    // 5 popen
+    {
+        u8printf("[Popen]\n");
+        tst_Popen();
         u8println();
     }
 

@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <system_error>
+#include <functional>
 
 #include <stdcorelib/stdc_global.h>
 
