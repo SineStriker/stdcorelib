@@ -1,7 +1,7 @@
 #include "system.h"
 
 #ifdef _WIN32
-#  include "osapi_win.h"
+#  include "winapi.h"
 // ...
 #  include <Psapi.h>
 #elif defined(__APPLE__)
@@ -73,7 +73,7 @@ namespace stdc {
     PathString sys_application_path() {
         static const auto res = []() -> PathString {
 #ifdef _WIN32
-            return winGetFullModuleFileName(nullptr);
+            return winapi::kernel32::GetModuleFileNameW(nullptr);
 #elif defined(__APPLE__)
             return macGetExecutablePath();
 #else

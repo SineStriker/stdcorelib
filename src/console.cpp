@@ -1,7 +1,7 @@
 #include "console.h"
 
 #ifdef _WIN32
-#  include "osapi_win.h"
+#  include "winapi.h"
 #endif
 
 #include <mutex>

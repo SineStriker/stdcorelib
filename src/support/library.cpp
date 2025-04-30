@@ -4,7 +4,7 @@
 #include <cctype>
 
 #ifdef _WIN32
-#  include "osapi_win.h"
+#  include "winapi.h"
 #else
 #  include <dlfcn.h>
 #  include <limits.h>
@@ -31,7 +31,7 @@ namespace stdc {
         virtual ~Impl();
 
         static inline int nativeLoadHints(int loadHints);
-        static std::string sysErrorMessage(bool nativeLanguage);
+        static std::string sysErrorMessage();
 
         bool open(int hints = 0);
         bool close();
@@ -68,11 +68,9 @@ namespace stdc {
 #endif
     }
 
-    std::string Library::Impl::sysErrorMessage(bool nativeLanguage) {
+    std::string Library::Impl::sysErrorMessage() {
 #ifdef _WIN32
-        static constexpr const DWORD g_EnglishLangId = MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US);
-        return wstring_conv::to_utf8(
-            winFormatError(::GetLastError(), nativeLanguage ? 0 : g_EnglishLangId));
+        return wstring_conv::to_utf8(winapi::SystemError(::GetLastError(), 0));
 #else
         auto err = dlerror();
         if (err) {
@@ -143,6 +141,18 @@ namespace stdc {
             ;
         return reinterpret_cast<void *>(addr);
     }
+
+    /*!
+        \class Library
+        \brief Loads shared libraries at run time.
+
+        This class provides a wrapper for dynamically loaded libraries. It provides a simple
+        interface for opening, closing, and resolving symbols from the library.
+    
+        The interface is similar to the Qt QLibrary class.
+
+        \sa https://doc.qt.io/qt-6/qlibrary.html
+    */
 
     /*!
         Constructs a library.
@@ -222,7 +232,7 @@ namespace stdc {
         Returns the error message of the last failed library operation.
     */
     std::string Library::lastError() const {
-        return _impl->sysErrorMessage(true);
+        return Impl::sysErrorMessage();
     }
 
 #if !defined(_WIN32) && !defined(__APPLE__)
@@ -283,7 +293,7 @@ namespace stdc {
     */
     fs::path Library::setLibraryPath(const fs::path &path) {
 #ifdef _WIN32
-        std::wstring org = winGetFullDllDirectory();
+        std::wstring org = winapi::kernel32::GetDllDirectoryW();
         ::SetDllDirectoryW(path.c_str());
 #else
         std::string org = getenv(PRIOR_LIBRARY_PATH_KEY);
@@ -303,7 +313,7 @@ namespace stdc {
                                   (LPCWSTR) addr, &hModule)) {
             return {};
         }
-        return winGetFullModuleFileName(hModule);
+        return winapi::kernel32::GetModuleFileNameW(hModule);
 #else
         Dl_info dl_info;
         dladdr(const_cast<void *>(addr), &dl_info);

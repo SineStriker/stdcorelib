@@ -23,7 +23,7 @@ int main(int /* argc */, char * /* argv */[]) {
     // No need to use main entry arguments
     auto args = stdc::system::command_line_arguments();
     for (int i = 0; i < args.size(); ++i) {
-        u8printf("%d - %s\n", i, args[i].data());
+        stdc::u8printf("%d - %s\n", i, args[i].data());
     }
     return 0;
 }
@@ -73,9 +73,9 @@ int main(int argc, char *argv[]) {
 
     int code = proc.returncode().value_or(-1);
     if (code == 0) {
-        stdc::console::success("Process exit with code %1", code);
+        stdc::console::success("Process exited with code %1", code);
     } else {
-        stdc::console::critical("Process exit with code %1", code);
+        stdc::console::critical("Process exited with code %1", code);
     }
     return 0;
 }
@@ -86,5 +86,5 @@ int main(int argc, char *argv[]) {
 > test_git.exe
 git version 2.47.1.windows.1
 
-Process exit with code 0
+Process exited with code 0
 ```

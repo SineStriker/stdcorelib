@@ -1,6 +1,8 @@
 #ifndef STDCORELIB_OSAPI_WIN_H
 #define STDCORELIB_OSAPI_WIN_H
 
+// WARNING: to be removed
+
 // Disable min/max macros in windows headers
 #define NOMINMAX
 

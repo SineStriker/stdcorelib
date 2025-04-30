@@ -105,8 +105,6 @@ if(TRUE)
 
     set(_src ${_temp})
     unset(_temp)
-
-    message("1: ${_src}")
 endif()
 
 if(STDCORELIB_BUILD_STATIC)
@@ -132,6 +130,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     include/stdcorelib/platform
     include/stdcorelib/support
 )
+
+if(WIN32)
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        include/stdcorelib/platform/windows
+    )
+endif()
+
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_EXTENSIONS OFF

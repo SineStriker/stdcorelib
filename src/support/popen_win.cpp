@@ -8,16 +8,18 @@
 #include <algorithm>
 #include <cassert>
 
-#include "osapi_win.h"
+#include "winapi.h"
 #include "str.h"
 #include "scope_guard.h"
-#include "pimpl.h"
+#include "3rdparty/llvm/smallvector.h"
 
 #include "3rdparty/llvm/smallvector.h"
 
 namespace fs = std::filesystem;
 
 namespace stdc {
+
+    using namespace winapi;
 
     constexpr UINT KillProcessExitCode = 0xf291;
 
@@ -364,10 +366,10 @@ namespace stdc {
     }
 
     static fs::path _get_command_prompt_path(std::string &err_msg) {
-        auto comspec = winGetEnvironmentVariable(L"ComSpec", nullptr);
+        auto comspec = kernel32::GetEnvironmentVariableW(L"ComSpec", nullptr);
         fs::path comspec_path;
         if (comspec.empty()) {
-            auto system_root = winGetEnvironmentVariable(L"SystemRoot", nullptr);
+            auto system_root = kernel32::GetEnvironmentVariableW(L"SystemRoot", nullptr);
             if (system_root.empty()) {
                 err_msg = "shell not found: neither %ComSpec% nor %SystemRoot% is set";
                 return {};
@@ -611,7 +613,7 @@ namespace stdc {
 
         // https://github.com/python/cpython/blob/3.13/Modules/_winapi.c#L1373
         // prepare environment variables
-        std::vector<wchar_t> env_str;
+        llvm::SmallVector<wchar_t, 1024> env_str;
         if (!env.empty()) {
             for (const auto &item : env) {
                 env_str.insert(env_str.end(), item.first.begin(), item.first.end());
@@ -803,7 +805,7 @@ namespace stdc {
             error_code = make_last_error_code();
             return false;
         }
-        error_code = std::make_error_code(std::errc::invalid_argument);
+        error_code = std::error_code(ERROR_NOT_SUPPORTED, std::system_category());
         return false;
     }
 

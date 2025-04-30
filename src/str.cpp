@@ -3,7 +3,7 @@
 #include "3rdparty/llvm/smallvector.h"
 
 #ifdef _WIN32
-#  include "osapi_win.h"
+#  include "winapi.h"
 #endif
 
 #include <cstring>
@@ -194,46 +194,41 @@ namespace stdc {
                 return {};
             }
 #ifdef _WIN32
-            return win8bitToWide(std::string_view(s, size), CP_UTF8, MB_ERR_INVALID_CHARS);
+            return winapi::kernel32::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                                         std::string_view(s, size));
 #else
             return std::filesystem::path(std::string(s, size)).wstring();
 #endif
         }
 
         std::string conv<std::wstring>::to_utf8(const wchar_t *s, int size) {
-            if (size < 0) {
-                size = int(std::wcslen(s));
-            }
-            if (size == 0) {
+            std::wstring_view sv = size < 0 ? std::wstring_view(s) : std::wstring_view(s, size);
+            if (sv.empty()) {
                 return {};
             }
 #ifdef _WIN32
-            return winWideTo8bit(std::wstring_view(s, size), CP_UTF8, WC_ERR_INVALID_CHARS);
+            return winapi::kernel32::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, sv);
 #else
-            return std::filesystem::path(std::wstring(s, size)).string();
+            return std::filesystem::path(std::wstring(sv)).string();
 #endif
         }
 
 #ifdef _WIN32
 
         std::wstring conv<std::wstring>::from_ansi(const char *s, int size) {
-            if (size < 0) {
-                size = int(std::strlen(s));
-            }
-            if (size == 0) {
+            std::string_view sv = size < 0 ? std::string_view(s) : std::string_view(s, size);
+            if (sv.empty()) {
                 return {};
             }
-            return win8bitToWide(std::string_view(s, size), CP_ACP, MB_ERR_INVALID_CHARS);
+            return winapi::kernel32::MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, sv);
         }
 
         std::string conv<std::wstring>::to_ansi(const wchar_t *s, int size) {
-            if (size < 0) {
-                size = int(std::wcslen(s));
-            }
-            if (size == 0) {
+            std::wstring_view sv = size < 0 ? std::wstring_view(s) : std::wstring_view(s, size);
+            if (sv.empty()) {
                 return {};
             }
-            return winWideTo8bit(std::wstring_view(s, size), CP_ACP, WC_ERR_INVALID_CHARS);
+            return winapi::kernel32::WideCharToMultiByte(CP_ACP, WC_ERR_INVALID_CHARS, sv);
         }
 #endif
 
@@ -376,7 +371,7 @@ namespace stdc {
         }
 
         std::string message(int ev) const override {
-            return wstring_conv::to_utf8(winFormatError(ev, 0));
+            return wstring_conv::to_utf8(winapi::SystemError(ev, 0));
         }
 
         std::error_condition default_error_condition(int ev) const noexcept override {

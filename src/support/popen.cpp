@@ -162,9 +162,25 @@ namespace stdc {
 
 namespace stdc {
 
+    /*!
+        \class Popen
+        \brief A class to create and control child processes.
+
+        This class provides a way to create and control child processes. It is similar to
+        Python's \c subprocess.Popen class.
+
+        \sa https://docs.python.org/3/library/subprocess.html
+    */
+
+    /*!
+        Constructs a Popen object.
+     */
     Popen::Popen() : _impl(new Impl()) {
     }
 
+    /*!
+        Destroys the Popen object.
+    */
     Popen::~Popen() = default;
 
     Popen::Popen(Popen &&RHS) noexcept {
