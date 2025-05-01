@@ -14,7 +14,7 @@ BOOST_AUTO_TEST_CASE(test_regvalue) {
 }
 
 BOOST_AUTO_TEST_CASE(test_regkey) {
-    RegKey hkcuKey(HKEY_LOCAL_MACHINE);
+    RegKey hkcuKey(RegKey::RK_LocalMachine);
     RegKey systemKey = hkcuKey.open(L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion");
     BOOST_CHECK(systemKey.isValid());
 

@@ -137,6 +137,14 @@ namespace stdc::windows {
             NF_LegalChangeFilter = REG_LEGAL_CHANGE_FILTER,
         };
 
+        enum ReservedKey {
+            RK_ClassesRoot = 1,
+            RK_CurrentUser,
+            RK_LocalMachine,
+            RK_Users,
+            RK_CurrentConfig,
+        };
+
         struct KeyData {
             std::wstring name;
             FILETIME lastWriteTime{};
@@ -150,6 +158,7 @@ namespace stdc::windows {
         // constructs from an existing HKEY handle
         inline RegKey(HKEY hkey = nullptr) noexcept : _hkey(hkey), _owns(false) {
         }
+        RegKey(ReservedKey key) noexcept;
         ~RegKey();
 
         RegKey(RegKey &&RHS) noexcept;

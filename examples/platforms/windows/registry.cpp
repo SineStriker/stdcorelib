@@ -5,10 +5,13 @@
 #include <stdcorelib/platform/windows/registry.h>
 #include <stdcorelib/platform/windows/winextra.h>
 
-static int test_registry() {
+/*!
+    Enumerates the subkeys and values of a registry key.
+*/
+static int example_Registry() {
     using namespace stdc::windows;
 
-    RegKey rootKey(HKEY_CURRENT_USER);
+    RegKey rootKey(RegKey::RK_CurrentUser);
     RegKey isKey = rootKey.open(L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Internet Settings");
     if (!isKey.isValid()) {
         stdc::console::critical("failed to open registry key: %1", rootKey.errorCode().message());
@@ -38,22 +41,7 @@ static int test_registry() {
     return 0;
 }
 
-void vare() {
-    using namespace stdc;
-
-    std::map<std::string, std::string> vars{
-        {"FOO", "A"    },
-        {"BAR", "B"    },
-        {"A_B", "Hello"}
-    };
-    std::string actual = str::varexp("${${FOO}_${BAR}} World!", vars);
-    std::string expect = "Hello World!";
-    std::cout << actual << std::endl;
-    std::cout << expect << std::endl;
-}
-
 int main(int argc, char *argv[]) {
-    test_registry();
-    vare();
+    example_Registry();
     return 0;
 }

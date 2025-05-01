@@ -11,8 +11,21 @@ C++ auxiliary core library.
 + String utilities and formatter
 + PIMPL and VLA syntactic sugar
 + Python **Popen** re-implementation (Experimental)
++ Windows registry wrapper
 
-## Example
+## Build
+
+```bash
+git clone https://github.com/SineStriker/stdcorelib.git
+cd stdcorelib
+cmake -B build -S. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/path/to/install
+cmake --build build --config Release --target all
+cmake --build build --config Release --target install
+```
+
+## Examples
 
 ### Command Line
 
@@ -68,7 +81,6 @@ int main(int argc, char *argv[]) {
     while (std::getline(is, line)) {
         stdc::u8println(line);
     }
-    stdc::u8println();
     proc.wait();
 
     int code = proc.returncode().value_or(-1);
@@ -88,3 +100,11 @@ git version 2.47.1.windows.1
 
 Process exited with code 0
 ```
+
+## Credits
+
+- [qtbase](https://github.com/qt/qtbase)
+- [Python](https://github.com/python/cpython)
+- [xmake](https://github.com/xmake-io/xmake)
+- [llvm-project](https://github.com/llvm/llvm-project)
+- [Registry](https://github.com/m4x1m1l14n/Registry)

@@ -224,6 +224,27 @@ namespace stdc::windows {
         }
     }
 
+    static inline HKEY getReservedKey(RegKey::ReservedKey key) {
+        switch (key) {
+            case RegKey::RK_ClassesRoot:
+                return HKEY_CLASSES_ROOT;
+            case RegKey::RK_CurrentUser:
+                return HKEY_CURRENT_USER;
+            case RegKey::RK_LocalMachine:
+                return HKEY_LOCAL_MACHINE;
+            case RegKey::RK_Users:
+                return HKEY_USERS;
+            case RegKey::RK_CurrentConfig:
+                return HKEY_CURRENT_CONFIG;
+            default:
+                break;
+        }
+        return nullptr;
+    }
+
+    RegKey::RegKey(ReservedKey key) noexcept : _hkey(getReservedKey(key)), _owns(false) {
+    }
+
     RegKey::RegKey(RegKey &&RHS) noexcept
         : _hkey(RHS._hkey), _owns(RHS._owns), _max_key_name_size(RHS._max_key_name_size),
           _max_value_name_size(RHS._max_value_name_size), _ec(RHS._ec) {

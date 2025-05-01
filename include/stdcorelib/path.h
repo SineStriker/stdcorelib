@@ -34,12 +34,10 @@ namespace stdc {
 #endif
         }
 
+        // no exception
         inline std::filesystem::path canonical(const std::filesystem::path &path) {
-            try {
-                return std::filesystem::canonical(path);
-            } catch (...) {
-            }
-            return {};
+            std::error_code ec;
+            return std::filesystem::canonical(path, ec);
         }
 
         STDCORELIB_EXPORT std::filesystem::path clean_path(const std::filesystem::path &path);

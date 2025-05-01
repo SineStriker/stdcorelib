@@ -7,6 +7,7 @@ project(stdcorelib VERSION 0.0.1.2 LANGUAGES CXX)
 # ----------------------------------
 option(STDCORELIB_BUILD_STATIC "Build static library" ON)
 option(STDCORELIB_BUILD_TESTS "Build test cases" OFF)
+option(STDCORELIB_BUILD_EXAMPLES "Build examples" OFF)
 option(STDCORELIB_INSTALL "Install library" ON)
 
 # ----------------------------------
@@ -166,6 +167,10 @@ endif()
 
 if(STDCORELIB_BUILD_TESTS)
     add_subdirectory(tests)
+endif()
+
+if(STDCORELIB_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
 
 if(STDCORELIB_INSTALL)
