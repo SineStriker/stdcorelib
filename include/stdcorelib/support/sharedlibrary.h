@@ -1,5 +1,5 @@
-#ifndef STDCORELIB_LIBRARY_H
-#define STDCORELIB_LIBRARY_H
+#ifndef STDCORELIB_SHAREDLIBRARY_H
+#define STDCORELIB_SHAREDLIBRARY_H
 
 #include <memory>
 #include <filesystem>
@@ -8,13 +8,13 @@
 
 namespace stdc {
 
-    class STDCORELIB_EXPORT Library {
+    class STDCORELIB_EXPORT SharedLibrary {
     public:
-        Library();
-        ~Library();
+        SharedLibrary();
+        ~SharedLibrary();
 
-        Library(Library &&other) noexcept;
-        Library &operator=(Library &&other) noexcept;
+        SharedLibrary(SharedLibrary &&other) noexcept;
+        SharedLibrary &operator=(SharedLibrary &&other) noexcept;
 
     public:
         enum LoadHint {
@@ -47,4 +47,4 @@ namespace stdc {
 
 }
 
-#endif // STDCORELIB_LIBRARY_H
+#endif // STDCORELIB_SHAREDLIBRARY_H

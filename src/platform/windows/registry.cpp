@@ -47,7 +47,7 @@ namespace stdc::windows {
         );
     }
 
-    struct RegValue::comp {
+    struct RegValue::Comp {
         mutable std::variant<std::monostate, std::vector<uint8_t>, std::wstring> s;
         mutable std::optional<std::vector<std::wstring>> ms;
 
@@ -87,13 +87,13 @@ namespace stdc::windows {
     RegValue::RegValue(Type type) : t(Invalid) {
     }
 
-    RegValue::RegValue(const uint8_t *data, int size) : t(Binary), _comp(std::make_shared<comp>()) {
-        _comp->s = std::vector<uint8_t>(data, data + size);
+    RegValue::RegValue(const uint8_t *data, int size) : t(Binary), comp(std::make_shared<Comp>()) {
+        comp->s = std::vector<uint8_t>(data, data + size);
     }
 
     RegValue::RegValue(std::vector<uint8_t> &&data, int size)
-        : t(Binary), _comp(std::make_shared<comp>()) {
-        _comp->s = std::move(data);
+        : t(Binary), comp(std::make_shared<Comp>()) {
+        comp->s = std::move(data);
     }
 
     RegValue::RegValue(int32_t value) : t(Int32) {
@@ -105,27 +105,27 @@ namespace stdc::windows {
     }
 
     RegValue::RegValue(const std::wstring &value, Type type)
-        : t(type), _comp(std::make_shared<comp>()) {
-        _comp->s = value;
+        : t(type), comp(std::make_shared<Comp>()) {
+        comp->s = value;
     }
 
-    RegValue::RegValue(std::wstring &&value, Type type) : t(type), _comp(std::make_shared<comp>()) {
-        _comp->s = std::move(value);
+    RegValue::RegValue(std::wstring &&value, Type type) : t(type), comp(std::make_shared<Comp>()) {
+        comp->s = std::move(value);
     }
 
     RegValue::RegValue(const wchar_t *value, int size, Type type)
-        : t(type), _comp(std::make_shared<comp>()) {
-        _comp->s = size < 0 ? std::wstring(value) : std::wstring(value, size);
+        : t(type), comp(std::make_shared<Comp>()) {
+        comp->s = size < 0 ? std::wstring(value) : std::wstring(value, size);
     }
 
     RegValue::RegValue(const std::vector<std::wstring> &value)
-        : t(MultiString), _comp(std::make_shared<comp>()) {
-        _comp->ms = value;
+        : t(MultiString), comp(std::make_shared<Comp>()) {
+        comp->ms = value;
     }
 
     RegValue::RegValue(std::vector<std::wstring> &&value)
-        : t(MultiString), _comp(std::make_shared<comp>()) {
-        _comp->ms = std::move(value);
+        : t(MultiString), comp(std::make_shared<Comp>()) {
+        comp->ms = std::move(value);
     }
 
     RegValue::RegValue(const void *data, int type) : t(type) {
@@ -147,8 +147,8 @@ namespace stdc::windows {
         if (!isBinary()) {
             return empty;
         }
-        assert(_comp && _comp->s.index() == 1);
-        return std::get<1>(_comp->s);
+        assert(comp && comp->s.index() == 1);
+        return std::get<1>(comp->s);
     }
 
     int32_t RegValue::toInt32() const {
@@ -169,14 +169,14 @@ namespace stdc::windows {
         static std::wstring empty;
 
         if (isMultiString()) {
-            assert(_comp && (_comp->s.index() == 2 || _comp->ms));
-            if (_comp->s.index() == 0) {
-                _comp->ms2s();
+            assert(comp && (comp->s.index() == 2 || comp->ms));
+            if (comp->s.index() == 0) {
+                comp->ms2s();
             }
-            return std::get<2>(_comp->s);
+            return std::get<2>(comp->s);
         }
-        if (_comp && _comp->s.index() == 2) {
-            return std::get<2>(_comp->s);
+        if (comp && comp->s.index() == 2) {
+            return std::get<2>(comp->s);
         }
         return empty;
     }
@@ -187,26 +187,26 @@ namespace stdc::windows {
         if (!isMultiString()) {
             return empty;
         }
-        assert(_comp && (_comp->s.index() == 2 || _comp->ms));
-        if (!_comp->ms) {
-            _comp->s2ms();
+        assert(comp && (comp->s.index() == 2 || comp->ms));
+        if (!comp->ms) {
+            comp->s2ms();
         }
-        return _comp->ms.value();
+        return comp->ms.value();
     }
 
     std::wstring RegValue::toExpandString() const {
         if (!isExpandString()) {
             return {};
         }
-        assert(_comp && _comp->s.index() == 2);
-        return winapi::kernel32::ExpandEnvironmentStringsW(std::get<2>(_comp->s).c_str(), nullptr);
+        assert(comp && comp->s.index() == 2);
+        return winapi::kernel32::ExpandEnvironmentStringsW(std::get<2>(comp->s).c_str(), nullptr);
     }
 
     std::wstring RegValue::toLink() const {
         if (!isLink()) {
             return {};
         }
-        assert(_comp && _comp->s.index() == 2);
+        assert(comp && comp->s.index() == 2);
         return toString();
     }
 

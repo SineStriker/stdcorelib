@@ -328,7 +328,7 @@ namespace stdc {
         }
 
         /*!
-            \fn auto formatN(const std::string &format, Args &&...args)
+            \fn std::string formatN(const std::string_view &format, Arg1 &&arg1, Args &&...args)
 
             Replaces occurrences of \c %N in format string with the corresponding argument from
             \a args.

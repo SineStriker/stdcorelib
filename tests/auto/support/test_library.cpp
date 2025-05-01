@@ -1,6 +1,6 @@
 #include <vector>
 
-#include <stdcorelib/support/library.h>
+#include <stdcorelib/support/sharedlibrary.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -9,7 +9,7 @@ using namespace stdc;
 BOOST_AUTO_TEST_SUITE(test_library)
 
 BOOST_AUTO_TEST_CASE(test_system_library) {
-    Library lib;
+    SharedLibrary lib;
 #ifdef _WIN32
     BOOST_CHECK(lib.open(L"C:\\Windows\\System32\\kernel32.dll"));
     BOOST_CHECK(lib.isOpen());

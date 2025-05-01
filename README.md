@@ -12,12 +12,12 @@ C++ auxiliary core library.
 
 ### OS
 
-- Shared library
+- Shared library manipulator
 - Python **Popen** re-implementation
-- Windows Registry key wrapper
+- Windows Registry key/value manipulator
 
 ### String Extra
-- Extra Apis (`starts_with`, `split`, `trim`...)
+- Extra Apis (`starts_with`, `split`, `join`, `trim`...)
 - Format string
 - Variable expression (`${VAR}`)
 
@@ -32,6 +32,11 @@ cmake -B build -S. \
 cmake --build build --config Release --target all
 cmake --build build --config Release --target install
 ```
+
+## TODO
+
+- Popen Unix implementation, communicate...
+- Registry implementation
 
 ## Credits
 

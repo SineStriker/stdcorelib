@@ -13,8 +13,6 @@
 #include "scope_guard.h"
 #include "3rdparty/llvm/smallvector.h"
 
-#include "3rdparty/llvm/smallvector.h"
-
 namespace fs = std::filesystem;
 
 namespace stdc {

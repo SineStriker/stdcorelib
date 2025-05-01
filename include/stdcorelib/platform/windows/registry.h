@@ -98,8 +98,8 @@ namespace stdc::windows {
             int64_t qw;
             const void *p;
         } d;
-        struct comp;
-        std::shared_ptr<comp> _comp;
+        struct Comp;
+        std::shared_ptr<Comp> comp;
     };
 
     class STDCORELIB_EXPORT RegKey {

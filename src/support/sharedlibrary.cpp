@@ -1,4 +1,4 @@
-#include "library.h"
+#include "sharedlibrary.h"
 
 #include <algorithm>
 #include <cctype>
@@ -24,7 +24,7 @@ namespace fs = std::filesystem;
 
 namespace stdc {
 
-    class Library::Impl {
+    class SharedLibrary::Impl {
     public:
         void *hDll = nullptr;
         fs::path path;
@@ -39,11 +39,11 @@ namespace stdc {
         void *resolve(const char *name) const;
     };
 
-    Library::Impl::~Impl() {
+    SharedLibrary::Impl::~Impl() {
         std::ignore = close();
     }
 
-    inline int Library::Impl::nativeLoadHints(int loadHints) {
+    inline int SharedLibrary::Impl::nativeLoadHints(int loadHints) {
 #ifdef _WIN32
         return 0;
 #else
@@ -69,7 +69,7 @@ namespace stdc {
 #endif
     }
 
-    std::string Library::Impl::sysErrorMessage() {
+    std::string SharedLibrary::Impl::sysErrorMessage() {
 #ifdef _WIN32
         return wstring_conv::to_utf8(windows::SystemError(::GetLastError(), 0));
 #else
@@ -81,7 +81,7 @@ namespace stdc {
 #endif
     }
 
-    bool Library::Impl::open(int hints) {
+    bool SharedLibrary::Impl::open(int hints) {
         auto absPath = fs::absolute(path);
 
         auto handle =
@@ -109,7 +109,7 @@ namespace stdc {
         return true;
     }
 
-    bool Library::Impl::close() {
+    bool SharedLibrary::Impl::close() {
         if (!hDll) {
             return true;
         }
@@ -128,7 +128,7 @@ namespace stdc {
         return true;
     }
 
-    void *Library::Impl::resolve(const char *name) const {
+    void *SharedLibrary::Impl::resolve(const char *name) const {
         if (!hDll) {
             return nullptr;
         }
@@ -158,19 +158,19 @@ namespace stdc {
     /*!
         Constructs a library.
      */
-    Library::Library() : _impl(new Impl()) {
+    SharedLibrary::SharedLibrary() : _impl(new Impl()) {
     }
 
     /*!
         Destroys the library object.
     */
-    Library::~Library() = default;
+    SharedLibrary::~SharedLibrary() = default;
 
-    Library::Library(Library &&other) noexcept {
+    SharedLibrary::SharedLibrary(SharedLibrary &&other) noexcept {
         std::swap(_impl, other._impl);
     }
 
-    Library &Library::operator=(Library &&other) noexcept {
+    SharedLibrary &SharedLibrary::operator=(SharedLibrary &&other) noexcept {
         if (this == &other)
             return *this;
         std::swap(_impl, other._impl);
@@ -180,7 +180,7 @@ namespace stdc {
     /*!
         Loads the library and returns \c true if the library was loaded successfully.
     */
-    bool Library::open(const fs::path &path, int hints) {
+    bool SharedLibrary::open(const fs::path &path, int hints) {
         _impl->path = path;
         if (_impl->open(hints)) {
             _impl->path = fs::canonical(fs::absolute(path));
@@ -193,7 +193,7 @@ namespace stdc {
     /*!
         Unloads the library and returns \c true if the library could be unloaded.
     */
-    bool Library::close() {
+    bool SharedLibrary::close() {
         if (_impl->close()) {
             _impl->path.clear();
             return true;
@@ -204,35 +204,35 @@ namespace stdc {
     /*!
         Returns \c true if the library is open.
     */
-    bool Library::isOpen() const {
+    bool SharedLibrary::isOpen() const {
         return _impl->hDll != nullptr;
     }
 
     /*!
         Returns the opened library path.
     */
-    fs::path Library::path() const {
+    fs::path SharedLibrary::path() const {
         return _impl->path;
     }
 
     /*!
         Returns the opened library handle.
     */
-    void *Library::handle() const {
+    void *SharedLibrary::handle() const {
         return _impl->hDll;
     }
 
     /*!
         Returns the address of the exported symbol \a name, the library must be opened.
     */
-    void *Library::resolve(const char *name) const {
+    void *SharedLibrary::resolve(const char *name) const {
         return _impl->resolve(name);
     }
 
     /*!
         Returns the error message of the last failed library operation.
     */
-    std::string Library::lastError() const {
+    std::string SharedLibrary::lastError() const {
         return Impl::sysErrorMessage();
     }
 
@@ -260,7 +260,7 @@ namespace stdc {
     /*!
         Returns \c true if \a path has a valid suffix for a loadable library.
     */
-    bool Library::isLibrary(const fs::path &path) {
+    bool SharedLibrary::isLibrary(const fs::path &path) {
 #if defined(_WIN32)
         auto fileName = path.wstring();
         return fileName.size() >= 4 &&
@@ -292,7 +292,7 @@ namespace stdc {
         Sets the library path hint as \a path, which is helpful when searching a loading library's
         dependencies.
     */
-    fs::path Library::setLibraryPath(const fs::path &path) {
+    fs::path SharedLibrary::setLibraryPath(const fs::path &path) {
 #ifdef _WIN32
         std::wstring org = winapi::kernel32::GetDllDirectoryW();
         ::SetDllDirectoryW(path.c_str());
@@ -306,7 +306,7 @@ namespace stdc {
     /*!
         Returns the path of the library that the address \a addr locates in.
     */
-    fs::path Library::locateLibraryPath(const void *addr) {
+    fs::path SharedLibrary::locateLibraryPath(const void *addr) {
 #ifdef _WIN32
         HMODULE hModule = nullptr;
         if (!::GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
