@@ -8,24 +8,35 @@ using namespace stdc;
 static void example_ConsolePrint() {
     using namespace console;
 
-    console::printf(nostyle, red, lightwhite, " Red in white ");
+    //
+    // test colors
+    //
+    printf(nostyle, red, lightwhite, " Red in white ");
     u8println();
-    console::printf(nostyle, yellow, blue, " Yellow in blue ");
-    u8println();
-
-
-    console::printf(bold, lightwhite, nocolor, "Bold");
-    u8println();
-    console::printf(italic, lightwhite, nocolor, "Italic");
-    u8println();
-    console::printf(underline, lightwhite, nocolor, "Underline");
-    u8println();
-    console::printf(strikethrough, lightwhite, nocolor, "Strikethrough");
+    printf(nostyle, yellow, blue, " Yellow in blue ");
     u8println();
 
+    //
+    // test styles
+    //
+    printf(bold, lightwhite, nocolor, "Bold");
+    u8println();
+    printf(italic, lightwhite, nocolor, "Italic");
+    u8println();
+    printf(underline, lightwhite, nocolor, "Underline");
+    u8println();
+    printf(strikethrough, lightwhite, nocolor, "Strikethrough");
+    u8println();
+
+    //
+    // test color hints
+    //
     cprintln("${yellow}yellow ${green}green ${blue}blue ${cyan}cyan ${magenta}magenta "
              "${white}white ${lightred}lightred ${strikethrough}strikethrough "
-             "${underline}underline ${bold}bold ${italic}italic $$");
+             "${underline}underline ${bold}bold ${italic}italic");
+    cprintln("${bold}bold ${italic}italic ${red}red ${nocolor}nocolor");
+    cprintln("${red}red ${italic}italic ${@blue}bg-blue ${nostyle}nostyle ${@nocolor}bg-nocolor");
+    cprintln("${lightgreen}lightgreen $ $$ $$$ $$$$"); // two consecutive $ are regarded as one $
     u8println();
 }
 
