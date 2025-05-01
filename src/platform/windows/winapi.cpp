@@ -21,11 +21,14 @@ namespace stdc::winapi {
             dwFlags |= FORMAT_MESSAGE_ARGUMENT_ARRAY;
 
         std::wstring ret;
-        wchar_t *string = nullptr;
+        wchar_t *pAllocated = nullptr;
 
-        std::ignore = ::FormatMessageW(dwFlags, source, message_id, language_id, (LPWSTR) &string,
-                                       0, (va_list *) arguments);
-        ::LocalFree((HLOCAL) string);
+        DWORD dwLength = ::FormatMessageW(dwFlags, source, message_id, language_id,
+                                          (LPWSTR) &pAllocated, 0, (va_list *) arguments);
+        if (dwLength != 0) {
+            ret.assign(pAllocated, dwLength);
+        }
+        ::LocalFree((HLOCAL) pAllocated);
         return ret;
     }
 

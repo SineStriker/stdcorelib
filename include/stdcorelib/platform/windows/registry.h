@@ -8,6 +8,7 @@
 #include <memory>
 #include <cstdint>
 #include <system_error>
+#include <optional>
 
 #include <stdcorelib/stdc_global.h>
 
@@ -37,7 +38,7 @@ namespace stdc::windows {
         RegValue(const wchar_t *value, int size = -1, Type type = String);
         RegValue(const std::vector<std::wstring> &value);
         RegValue(std::vector<std::wstring> &&value);
-        RegValue(const void *data, Type type);
+        RegValue(const void *data, int type); // data shouldn't be deleted before RegValue destructs
         ~RegValue();
 
         RegValue(const RegValue &RHS);
@@ -97,8 +98,8 @@ namespace stdc::windows {
             int64_t qw;
             const void *p;
         } d;
-        struct str;
-        std::shared_ptr<str> s;
+        struct comp;
+        std::shared_ptr<comp> _comp;
     };
 
     class STDCORELIB_EXPORT RegKey {
@@ -136,6 +137,15 @@ namespace stdc::windows {
             NF_LegalChangeFilter = REG_LEGAL_CHANGE_FILTER,
         };
 
+        struct KeyData {
+            std::wstring name;
+            FILETIME lastWriteTime{};
+        };
+
+        struct ValueData {
+            std::wstring name;
+            RegValue value;
+        };
 
         // constructs from an existing HKEY handle
         inline RegKey(HKEY hkey = nullptr) noexcept : _hkey(hkey), _owns(false) {
@@ -151,16 +161,23 @@ namespace stdc::windows {
                       LPSECURITY_ATTRIBUTES sa = nullptr, bool *exists = nullptr);
         bool close();
 
+        DWORD keyCount() const;
+        std::optional<KeyData> keyAt(DWORD index) const;
+
+        DWORD valueCount() const;
+        std::optional<ValueData> valueAt(DWORD index, bool query = false) const;
+
         bool flush();
         bool save(const std::wstring &filename);
 
-        bool hasDirectory(const std::wstring &path) const;
+        bool hasKey(const std::wstring &path) const;
         bool hasValue(const std::wstring &name) const;
 
         RegValue value(const std::wstring &name) const;
         bool setValue(const std::wstring &name, const RegValue &value);
 
-        bool remove(const std::wstring &subkey);
+        bool removeKey(const std::wstring &path);
+        bool removeValue(const std::wstring &name);
         bool remove();
 
         bool notify(HANDLE event = nullptr, bool watchSubtree = false,
@@ -174,30 +191,22 @@ namespace stdc::windows {
             return _hkey != nullptr;
         }
 
-        struct key_data {
-            std::wstring name;
-            FILETIME ftLastWriteTime;
-            std::error_code ec;
+        inline std::error_code errorCode() const {
+            return _ec;
+        }
 
-            inline bool has_error() const {
-                return ec.value() != 0;
-            }
-        };
+        class key_enumerator;
 
         class key_iterator {
         public:
             using iterator_category = std::forward_iterator_tag;
-            using value_type = key_data;
+            using value_type = KeyData;
             using difference_type = ptrdiff_t;
             using pointer = const value_type *;
             using reference = const value_type &;
 
-            // default constructor creates an end iterator
-            inline key_iterator() noexcept : _hkey(nullptr), _index(0) {
-            }
-
-            inline key_iterator(HKEY hkey, DWORD index = 0) noexcept : _hkey(hkey), _index(index) {
-                (void) fetch_next();
+            // default constructor creates an invalid iterator
+            inline key_iterator() noexcept : _key(nullptr), _index(0) {
             }
 
             inline reference operator*() const noexcept {
@@ -210,7 +219,7 @@ namespace stdc::windows {
 
             inline key_iterator &operator++() {
                 ++_index;
-                (void) fetch_next();
+                fetch();
                 return *this;
             }
 
@@ -221,7 +230,7 @@ namespace stdc::windows {
             }
 
             inline bool operator==(const key_iterator &RHS) const noexcept {
-                return _hkey == RHS._hkey && _index == RHS._index;
+                return _key == RHS._key && _index == RHS._index;
             }
 
             inline bool operator!=(const key_iterator &RHS) const noexcept {
@@ -229,39 +238,47 @@ namespace stdc::windows {
             }
 
         private:
-            STDCORELIB_EXPORT bool fetch_next();
-
-            HKEY _hkey;
-            DWORD _index;
-            value_type _data;
-            int _maxsize = 0;
-        };
-
-        struct value_data {
-            std::wstring name;
-            RegValue value;
-            std::error_code ec;
-
-            inline bool has_error() const {
-                return ec.value() != 0;
+            inline key_iterator(const RegKey *key, DWORD index = 0, int maxsize = 0) noexcept
+                : _key(key), _index(index) {
+                fetch();
             }
+
+            STDCORELIB_EXPORT void fetch() const;
+
+            const RegKey *_key;
+            mutable DWORD _index;
+            mutable value_type _data;
+
+            friend class key_enumerator;
         };
+
+        class key_enumerator {
+        public:
+            inline key_enumerator(const RegKey *key) : _key(key) {
+            }
+            inline key_iterator begin() const {
+                return key_iterator(_key, 0);
+            }
+            inline key_iterator end() const {
+                return key_iterator(_key, -1);
+            }
+
+        private:
+            const RegKey *_key;
+        };
+
+        class value_enumerator;
 
         class value_iterator {
         public:
             using iterator_category = std::forward_iterator_tag;
-            using value_type = value_data;
+            using value_type = ValueData;
             using difference_type = ptrdiff_t;
             using pointer = const value_type *;
             using reference = const value_type &;
 
             // default constructor creates an end iterator
-            inline value_iterator() noexcept : _hkey(nullptr), _index(0), _query(false) {
-            }
-
-            inline value_iterator(HKEY hkey, DWORD index = 0, bool query = false) noexcept
-                : _hkey(hkey), _index(index), _query(query) {
-                (void) fetch_next();
+            inline value_iterator() noexcept : _key(nullptr), _index(0), _query(false) {
             }
 
             inline reference operator*() const noexcept {
@@ -274,7 +291,7 @@ namespace stdc::windows {
 
             inline value_iterator &operator++() {
                 ++_index;
-                (void) fetch_next();
+                fetch();
                 return *this;
             }
 
@@ -285,7 +302,7 @@ namespace stdc::windows {
             }
 
             inline bool operator==(const value_iterator &RHS) const noexcept {
-                return _hkey == RHS._hkey && _index == RHS._index;
+                return _key == RHS._key && _index == RHS._index;
             }
 
             inline bool operator!=(const value_iterator &RHS) const noexcept {
@@ -293,50 +310,45 @@ namespace stdc::windows {
             }
 
         private:
-            STDCORELIB_EXPORT bool fetch_next();
+            inline value_iterator(const RegKey *key, DWORD index = 0, bool query = false) noexcept
+                : _key(key), _query(query), _index(index) {
+                fetch();
+            }
 
-            HKEY _hkey;
-            DWORD _index;
-            value_type _data;
+            STDCORELIB_EXPORT void fetch() const;
+
+            const RegKey *_key;
             bool _query;
-            int _maxsize = 0;
+            mutable DWORD _index;
+            mutable value_type _data;
+
+            friend class value_enumerator;
         };
 
-        struct key_enumerator {
-            inline key_enumerator(HKEY hkey) : _hkey(hkey) {
-            }
-            inline key_iterator begin() const {
-                return key_iterator(_hkey, 0);
-            }
-            inline key_iterator end() const {
-                return key_iterator();
-            }
-            HKEY _hkey;
-        };
-
-        struct value_enumerator {
-            inline value_enumerator(HKEY hkey, bool query) : _hkey(hkey), _query(query) {
+        class value_enumerator {
+        public:
+            inline value_enumerator(const RegKey *key, bool query) : _key(key), _query(query) {
             }
             inline value_iterator begin() const {
-                return value_iterator(_hkey, 0, _query);
+                return value_iterator(_key, 0, _query);
             }
             inline value_iterator end() const {
-                return value_iterator();
+                return value_iterator(_key, -1, _query);
             }
-            HKEY _hkey;
+
+        private:
+            const RegKey *_key;
             bool _query;
         };
 
-        inline key_enumerator keys() const {
-            return key_enumerator(_hkey);
+        inline key_enumerator enumerateKeys() const {
+            _ec.clear();
+            return key_enumerator(this);
         }
 
-        inline value_enumerator values(bool query = false) const {
-            return value_enumerator(_hkey, query);
-        }
-
-        inline std::error_code error_code() const {
-            return _ec;
+        inline value_enumerator enumerateValues(bool query = false) const {
+            _ec.clear();
+            return value_enumerator(this, query);
         }
 
     protected:
@@ -345,7 +357,9 @@ namespace stdc::windows {
 
         HKEY _hkey;
         bool _owns;
-        std::error_code _ec;
+        mutable int _max_key_name_size = 0;
+        mutable int _max_value_name_size = 0;
+        mutable std::error_code _ec;
 
         STDCORELIB_DISABLE_COPY(RegKey);
 

@@ -1,6 +1,5 @@
 #include "registry.h"
 
-#include <optional>
 #include <variant>
 #include <cassert>
 
@@ -10,23 +9,49 @@
 
 namespace stdc::windows {
 
-    struct RegValue::str {
+    static inline std::error_code make_status_error_code(LSTATUS status) {
+        return std::error_code(status, stdc::windows_utf8_category());
+    }
+
+    static inline LSTATUS getRegSubKeyCountAndMaxLen(HKEY hkey, DWORD *dwSubKeys,
+                                                     DWORD *dwLongestSubKeyLen) {
+        return RegQueryInfoKeyW(hkey,               // Key handle
+                                nullptr,            // Buffer for registry ked class name
+                                nullptr,            // Size of class string
+                                nullptr,            // Reserved
+                                dwSubKeys,          // Number of key subkeys
+                                dwLongestSubKeyLen, // Longest subkey size
+                                nullptr,            // Longest class string
+                                nullptr,            // number of values for this key
+                                nullptr,            // Longest value name
+                                nullptr,            // Longest value data
+                                nullptr,            // Security descriptor
+                                nullptr             // Last key write time
+        );
+    }
+
+    static inline LSTATUS getRegValueCountAndMaxLen(HKEY hkey, DWORD *dwValues,
+                                                    DWORD *dwLongestValueNameLen) {
+        return RegQueryInfoKeyW(hkey,                  // Key handle
+                                nullptr,               // Buffer for registry ked class name
+                                nullptr,               // Size of class string
+                                nullptr,               // Reserved
+                                nullptr,               // Number of key subkeys
+                                nullptr,               // Longest subkey size
+                                nullptr,               // Longest class string
+                                dwValues,              // number of values for this key
+                                dwLongestValueNameLen, // Longest value name
+                                nullptr,               // Longest value data
+                                nullptr,               // Security descriptor
+                                nullptr                // Last key write time
+        );
+    }
+
+    struct RegValue::comp {
         mutable std::variant<std::monostate, std::vector<uint8_t>, std::wstring> s;
         mutable std::optional<std::vector<std::wstring>> ms;
 
-        void convertMultiStringToVector() const {
-            assert(ms);
-
-            std::wstring env_str;
-            for (const auto &item : std::as_const(ms.value())) {
-                env_str += item;
-                env_str.push_back(L'\0');
-            }
-            env_str.push_back(L'\0');
-            s = std::move(env_str);
-        }
-
-        void convertVectorToMultiString() const {
+        void s2ms() const {
             assert(s.index() == 2);
 
             std::vector<std::wstring> ms;
@@ -40,6 +65,18 @@ namespace stdc::windows {
             }
             ms = std::move(ms);
         }
+
+        void ms2s() const {
+            assert(ms);
+
+            std::wstring env_str;
+            for (const auto &item : std::as_const(ms.value())) {
+                env_str += item;
+                env_str.push_back(L'\0');
+            }
+            env_str.push_back(L'\0');
+            s = std::move(env_str);
+        }
     };
 
     /*!
@@ -50,13 +87,13 @@ namespace stdc::windows {
     RegValue::RegValue(Type type) : t(Invalid) {
     }
 
-    RegValue::RegValue(const uint8_t *data, int size) : t(Binary), s(std::make_shared<str>()) {
-        s->s = std::vector<uint8_t>(data, data + size);
+    RegValue::RegValue(const uint8_t *data, int size) : t(Binary), _comp(std::make_shared<comp>()) {
+        _comp->s = std::vector<uint8_t>(data, data + size);
     }
 
     RegValue::RegValue(std::vector<uint8_t> &&data, int size)
-        : t(Binary), s(std::make_shared<str>()) {
-        s->s = std::move(data);
+        : t(Binary), _comp(std::make_shared<comp>()) {
+        _comp->s = std::move(data);
     }
 
     RegValue::RegValue(int32_t value) : t(Int32) {
@@ -67,30 +104,31 @@ namespace stdc::windows {
         d.qw = value;
     }
 
-    RegValue::RegValue(const std::wstring &value, Type type) : t(type), s(std::make_shared<str>()) {
-        s->s = value;
+    RegValue::RegValue(const std::wstring &value, Type type)
+        : t(type), _comp(std::make_shared<comp>()) {
+        _comp->s = value;
     }
 
-    RegValue::RegValue(std::wstring &&value, Type type) : t(type), s(std::make_shared<str>()) {
-        s->s = std::move(value);
+    RegValue::RegValue(std::wstring &&value, Type type) : t(type), _comp(std::make_shared<comp>()) {
+        _comp->s = std::move(value);
     }
 
     RegValue::RegValue(const wchar_t *value, int size, Type type)
-        : t(type), s(std::make_shared<str>()) {
-        s->s = size < 0 ? std::wstring(value) : std::wstring(value, size);
+        : t(type), _comp(std::make_shared<comp>()) {
+        _comp->s = size < 0 ? std::wstring(value) : std::wstring(value, size);
     }
 
     RegValue::RegValue(const std::vector<std::wstring> &value)
-        : t(MultiString), s(std::make_shared<str>()) {
-        s->ms = value;
+        : t(MultiString), _comp(std::make_shared<comp>()) {
+        _comp->ms = value;
     }
 
     RegValue::RegValue(std::vector<std::wstring> &&value)
-        : t(MultiString), s(std::make_shared<str>()) {
-        s->ms = std::move(value);
+        : t(MultiString), _comp(std::make_shared<comp>()) {
+        _comp->ms = std::move(value);
     }
 
-    RegValue::RegValue(const void *data, Type type) : t(type) {
+    RegValue::RegValue(const void *data, int type) : t(type) {
         d.p = data;
     }
 
@@ -109,7 +147,8 @@ namespace stdc::windows {
         if (!isBinary()) {
             return empty;
         }
-        return std::get<1>(s->s);
+        assert(_comp && _comp->s.index() == 1);
+        return std::get<1>(_comp->s);
     }
 
     int32_t RegValue::toInt32() const {
@@ -129,15 +168,15 @@ namespace stdc::windows {
     const std::wstring &RegValue::toString() const {
         static std::wstring empty;
 
-        assert(s);
         if (isMultiString()) {
-            if (s->s.index() == 0) {
-                s->convertMultiStringToVector();
+            assert(_comp && (_comp->s.index() == 2 || _comp->ms));
+            if (_comp->s.index() == 0) {
+                _comp->ms2s();
             }
-            return std::get<2>(s->s);
+            return std::get<2>(_comp->s);
         }
-        if (s && s->s.index() == 2) {
-            return std::get<2>(s->s);
+        if (_comp && _comp->s.index() == 2) {
+            return std::get<2>(_comp->s);
         }
         return empty;
     }
@@ -145,27 +184,29 @@ namespace stdc::windows {
     const std::vector<std::wstring> &RegValue::toMultiString() const {
         static std::vector<std::wstring> empty;
 
-        assert(s);
-        if (isMultiString()) {
+        if (!isMultiString()) {
             return empty;
         }
-        if (!s->ms) {
-            s->convertVectorToMultiString();
+        assert(_comp && (_comp->s.index() == 2 || _comp->ms));
+        if (!_comp->ms) {
+            _comp->s2ms();
         }
-        return s->ms.value();
+        return _comp->ms.value();
     }
 
     std::wstring RegValue::toExpandString() const {
         if (!isExpandString()) {
             return {};
         }
-        return winapi::kernel32::ExpandEnvironmentStringsW(std::get<2>(s->s).c_str(), nullptr);
+        assert(_comp && _comp->s.index() == 2);
+        return winapi::kernel32::ExpandEnvironmentStringsW(std::get<2>(_comp->s).c_str(), nullptr);
     }
 
     std::wstring RegValue::toLink() const {
         if (!isLink()) {
             return {};
         }
+        assert(_comp && _comp->s.index() == 2);
         return toString();
     }
 
@@ -183,193 +224,259 @@ namespace stdc::windows {
         }
     }
 
-    RegKey::RegKey(RegKey &&RHS) noexcept = default;
+    RegKey::RegKey(RegKey &&RHS) noexcept
+        : _hkey(RHS._hkey), _owns(RHS._owns), _max_key_name_size(RHS._max_key_name_size),
+          _max_value_name_size(RHS._max_value_name_size), _ec(RHS._ec) {
+        RHS._hkey = nullptr;
+        RHS._owns = false;
+    }
 
     RegKey &RegKey::operator=(RegKey &&RHS) noexcept = default;
 
     RegKey RegKey::open(const std::wstring &path, int access) {
         _ec.clear();
 
-        HKEY hKey = nullptr;
-        LSTATUS lStatus = RegOpenKeyExW(_hkey, path.c_str(), 0, static_cast<REGSAM>(access), &hKey);
-        if (lStatus != ERROR_SUCCESS) {
-            _ec = std::error_code(lStatus, stdc::windows_utf8_category());
+        HKEY hkey = nullptr;
+        LSTATUS status = RegOpenKeyExW(_hkey, path.c_str(), 0, static_cast<REGSAM>(access), &hkey);
+        if (status != ERROR_SUCCESS) {
+            _ec = make_status_error_code(status);
             return {};
         }
-        return RegKey(hKey, true);
+        return RegKey(hkey, true);
     }
 
     RegKey RegKey::create(const std::wstring &path, int access, int options,
                           LPSECURITY_ATTRIBUTES sa, bool *exists) {
-        HKEY hKey = nullptr;
-        LSTATUS lStatus =
+        _ec.clear();
+
+        HKEY hkey = nullptr;
+        LSTATUS status =
             RegCreateKeyExW(_hkey, path.c_str(), 0, nullptr, static_cast<DWORD>(options),
-                            static_cast<REGSAM>(access), sa, &hKey, nullptr);
-        if (lStatus != ERROR_SUCCESS) {
-            _ec = std::error_code(lStatus, stdc::windows_utf8_category());
+                            static_cast<REGSAM>(access), sa, &hkey, nullptr);
+        if (status != ERROR_SUCCESS) {
+            _ec = make_status_error_code(status);
             return {};
         }
-        return RegKey(hKey, true);
+        return RegKey(hkey, true);
     }
 
     bool RegKey::close() {
-        LSTATUS lStatus = RegCloseKey(_hkey);
-        if (lStatus != ERROR_SUCCESS) {
-            _ec = std::error_code(lStatus, stdc::windows_utf8_category());
+        _ec.clear();
+
+        LSTATUS status = RegCloseKey(_hkey);
+        if (status != ERROR_SUCCESS) {
+            _ec = make_status_error_code(status);
             return false;
         }
         _hkey = nullptr;
         return true;
     }
 
+    DWORD RegKey::keyCount() const {
+        _ec.clear();
+
+        DWORD count;
+        LSTATUS status = getRegSubKeyCountAndMaxLen(_hkey, &count, nullptr);
+        if (status != ERROR_SUCCESS) {
+            _ec = make_status_error_code(status);
+            return 0;
+        }
+        return count;
+    }
+
+    std::optional<RegKey::KeyData> RegKey::keyAt(DWORD index) const {
+        _ec.clear();
+
+        auto &maxsize = _max_value_name_size;
+        KeyData data;
+
+        LSTATUS status;
+        std::wstring buffer;
+        while (true) {
+            buffer.resize(maxsize + 1);
+
+            DWORD bufferSize = maxsize + 1;
+            status = RegEnumKeyExW(_hkey, index, buffer.data(), &bufferSize, nullptr, nullptr,
+                                   nullptr, &data.lastWriteTime);
+            if (status == ERROR_MORE_DATA) {
+                DWORD subkeySz;
+                status = getRegSubKeyCountAndMaxLen(_hkey, nullptr, &subkeySz);
+                if (status != ERROR_SUCCESS) {
+                    _ec = make_status_error_code(status);
+                    return {};
+                }
+                maxsize = subkeySz;
+                continue;
+            }
+            if (status == ERROR_NO_MORE_ITEMS) {
+                return {};
+            }
+            if (status != ERROR_SUCCESS) {
+                _ec = make_status_error_code(status);
+                return {};
+            }
+            buffer.reserve(bufferSize);
+            break;
+        };
+
+        // assign name
+        data.name = std::move(buffer);
+        return data;
+    }
+
+    DWORD RegKey::valueCount() const {
+        _ec.clear();
+
+        DWORD count;
+        LSTATUS status = getRegValueCountAndMaxLen(_hkey, &count, nullptr);
+        if (status != ERROR_SUCCESS) {
+            _ec = make_status_error_code(status);
+            return 0;
+        }
+        return count;
+    }
+
+    std::optional<RegKey::ValueData> RegKey::valueAt(DWORD index, bool query) const {
+        _ec.clear();
+
+        auto &maxsize = _max_value_name_size;
+        RegKey::ValueData data;
+
+        LSTATUS status;
+        std::wstring buffer;
+        while (true) {
+            buffer.resize(maxsize + 1);
+
+            DWORD bufferSize = maxsize + 1;
+            status = RegEnumValueW(_hkey, index, buffer.data(), &bufferSize, nullptr, nullptr,
+                                   nullptr, nullptr);
+            if (status == ERROR_MORE_DATA) {
+                DWORD subkeySz;
+                status = getRegValueCountAndMaxLen(_hkey, nullptr, &subkeySz);
+                if (status != ERROR_SUCCESS) {
+                    _ec = make_status_error_code(status);
+                    return {};
+                }
+                maxsize = subkeySz;
+                continue;
+            }
+            if (status == ERROR_NO_MORE_ITEMS) {
+                return {};
+            }
+            if (status != ERROR_SUCCESS) {
+                _ec = make_status_error_code(status);
+                return {};
+            }
+            buffer.reserve(bufferSize);
+            break;
+        };
+
+        // assign name
+        data.name = std::move(buffer);
+
+        // assign value
+        if (query) {
+            RegValue val = value(data.name);
+            if (!val.isValid()) {
+                return {};
+            }
+            data.value = val;
+        }
+        return data;
+    }
+
     bool RegKey::flush() {
+        _ec.clear();
+        // TODO
         return {};
     }
 
     bool RegKey::save(const std::wstring &filename) {
+        _ec.clear();
+        // TODO
         return {};
     }
 
-    bool RegKey::hasDirectory(const std::wstring &path) const {
+    bool RegKey::hasKey(const std::wstring &path) const {
+        _ec.clear();
+        // TODO
         return {};
     }
 
     bool RegKey::hasValue(const std::wstring &name) const {
+        _ec.clear();
+        // TODO
         return {};
     }
 
     RegValue RegKey::value(const std::wstring &name) const {
+        _ec.clear();
+        // TODO
         return {};
     }
 
     bool RegKey::setValue(const std::wstring &name, const RegValue &value) {
+        _ec.clear();
+        // TODO
         return {};
     }
 
-    bool RegKey::remove(const std::wstring &subkey) {
+    bool RegKey::removeKey(const std::wstring &path) {
+        _ec.clear();
+        // TODO
+        return {};
+    }
+
+    bool RegKey::removeValue(const std::wstring &name) {
+        _ec.clear();
+        // TODO
         return {};
     }
 
     bool RegKey::remove() {
+        _ec.clear();
+        // TODO
         return {};
     }
 
     bool RegKey::notify(HANDLE event, bool watchSubtree, int notifyFilter, bool async) {
+        _ec.clear();
+        // TODO
         return {};
     }
 
-    bool RegKey::key_iterator::fetch_next() {
-        _data.name.clear();
-        _data.ftLastWriteTime = {0, 0};
-
-        if (!_hkey) {
-            return false;
+    void RegKey::key_iterator::fetch() const {
+        if (!_key || _index < 0) {
+            return;
+        }
+        if (!_key->_hkey) {
+            _index = -1;
+            return;
         }
 
-        if (_maxsize == 0) {
-            DWORD dwLongestSubKeyLen = 0;
-            LSTATUS lStatus = RegQueryInfoKeyW(_hkey,   // Key handle
-                                               nullptr, // Buffer for registry ked class name
-                                               nullptr, // Size of class string
-                                               nullptr, // Reserved
-                                               nullptr, // Number of key subkeys
-                                               &dwLongestSubKeyLen, // Longest subkey size
-                                               nullptr,             // Longest class string
-                                               nullptr,             // number of values for this key
-                                               nullptr,             // Longest value name
-                                               nullptr,             // Longest value data
-                                               nullptr,             // Security descriptor
-                                               nullptr              // Last key write time
-            );
-            if (lStatus != ERROR_SUCCESS) {
-                _data.ec = std::error_code(lStatus, stdc::windows_utf8_category());
-                return false;
-            }
-            _maxsize = dwLongestSubKeyLen;
+        auto result = _key->keyAt(_index);
+        if (!result || _key->_ec.value() != ERROR_SUCCESS) {
+            _index = -1;
+            return;
         }
-
-        std::wstring buffer;
-        buffer.resize(_maxsize + 1);
-        DWORD bufferSize = _maxsize + 1;
-        LSTATUS status = RegEnumKeyExW(_hkey, _index, buffer.data(), &bufferSize, nullptr, nullptr,
-                                       nullptr, &_data.ftLastWriteTime);
-        if (status == ERROR_NO_MORE_ITEMS) {
-            _hkey = nullptr; // Convert to end iterator
-            _index = 0;
-            return false;
-        }
-        if (status != ERROR_SUCCESS) {
-            _data.ec = std::error_code(status, stdc::windows_utf8_category());
-            return false;
-        }
-
-        // assign name
-        buffer.reserve(bufferSize);
-        _data.name = std::move(buffer);
-        return true;
+        _data = result.value();
     }
 
-    bool RegKey::value_iterator::fetch_next() {
-        _data.name.clear();
-        _data.value = {};
-
-        if (!_hkey) {
-            return false;
+    void RegKey::value_iterator::fetch() const {
+        if (!_key || _index < 0) {
+            return;
+        }
+        if (!_key->_hkey) {
+            _index = -1;
+            return;
         }
 
-        if (_maxsize == 0) {
-            DWORD dwLongestValueNameLen = 0;
-            LSTATUS lStatus = RegQueryInfoKeyW(_hkey,   // Key handle
-                                               nullptr, // Buffer for registry ked class name
-                                               nullptr, // Size of class string
-                                               nullptr, // Reserved
-                                               nullptr, // Number of key subkeys
-                                               nullptr, // Longest subkey size
-                                               nullptr, // Longest class string
-                                               nullptr, // number of values for this key
-                                               &dwLongestValueNameLen, // Longest value name
-                                               nullptr,                // Longest value data
-                                               nullptr,                // Security descriptor
-                                               nullptr                 // Last key write time
-            );
-            if (lStatus != ERROR_SUCCESS) {
-                _data.ec = std::error_code(lStatus, stdc::windows_utf8_category());
-                return false;
-            }
-            _maxsize = dwLongestValueNameLen;
+        auto result = _key->valueAt(_index, _query);
+        if (!result || _key->_ec.value() != ERROR_SUCCESS) {
+            _index = -1;
+            return;
         }
-
-        std::wstring buffer;
-        buffer.resize(_maxsize + 1);
-        DWORD bufferSize = _maxsize + 1;
-        LSTATUS status = RegEnumValueW(_hkey, _index, buffer.data(), &bufferSize, nullptr, nullptr,
-                                       nullptr, nullptr);
-        if (status == ERROR_NO_MORE_ITEMS) {
-            _hkey = nullptr; // Convert to end iterator
-            _index = 0;
-            _query = false;
-            return false;
-        }
-        if (status != ERROR_SUCCESS) {
-            _data.ec = std::error_code(status, stdc::windows_utf8_category());
-            return false;
-        }
-
-        // assign name
-        buffer.reserve(bufferSize);
-        _data.name = std::move(buffer);
-
-        // assign value
-        if (_query) {
-            RegKey key(_hkey);
-            RegValue val = key.value(_data.name);
-            if (!val.isValid()) {
-                _data.ec = key.error_code();
-                return false;
-            }
-            _data.value = val;
-        }
-        return true;
+        _data = result.value();
     }
 
 }
