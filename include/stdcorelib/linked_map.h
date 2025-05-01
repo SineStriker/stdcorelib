@@ -259,19 +259,19 @@ namespace stdc {
             return res;
         }
 #ifdef QT_CORE_LIB
-        QList<V> values_qlist() const {
-            QList<V> res;
+        QList<K> keys_qlist() const {
+            QList<K> res;
             res.reserve(m_list.size());
             for (const auto &item : std::as_const(m_list)) {
-                res.push_back(item.second);
+                res.push_back(item.first);
             }
             return res;
         }
-        QVector<V> values_qvector() const {
-            QVector<V> res;
+        QVector<K> keys_qvector() const {
+            QVector<K> res;
             res.reserve(m_list.size());
             for (const auto &item : std::as_const(m_list)) {
-                res.push_back(item.second);
+                res.push_back(item.first);
             }
             return res;
         }
@@ -285,16 +285,16 @@ namespace stdc {
             return res;
         }
 #ifdef QT_CORE_LIB
-        QList<T> values_qlist() const {
-            QList<T> res;
+        QList<V> values_qlist() const {
+            QList<V> res;
             res.reserve(m_list.size());
             for (const auto &item : std::as_const(m_list)) {
                 res.push_back(item.second);
             }
             return res;
         }
-        QVector<T> values_qvector() const {
-            QVector<T> res;
+        QVector<V> values_qvector() const {
+            QVector<V> res;
             res.reserve(m_list.size());
             for (const auto &item : std::as_const(m_list)) {
                 res.push_back(item.second);
@@ -321,7 +321,7 @@ namespace stdc {
                 org_it = new_it;
                 return std::make_pair(iterator(new_it), true);
             }
-            return std::make_pair(iterator(org_it), true);
+            return std::make_pair(iterator(org_it), false);
         }
 
         std::pair<iterator, bool> insert_impl(typename _ListType::iterator it, const K &key,
@@ -330,11 +330,11 @@ namespace stdc {
             auto &org_it = res.first->second;
             if (res.second) {
                 // key doesn't exist
-                auto new_it = m_list.emplace(it, key, val);
+                auto new_it = m_list.emplace(it, key, std::forward<V>(val));
                 org_it = new_it;
                 return std::make_pair(iterator(new_it), true);
             }
-            return std::make_pair(iterator(org_it), true);
+            return std::make_pair(iterator(org_it), false);
         }
     };
 

@@ -39,7 +39,7 @@ namespace stdc {
                         bool nested = false;
                         int braceCount = 1;
                         while (j < s.size() && braceCount > 0) {
-                            if (s[j] == '{' && j + 1 < s.size() && s[j + 1] == '$') {
+                            if (s[j] == '$' && j + 1 < s.size() && s[j + 1] == '{') {
                                 braceCount++;
                                 nested = true;
                                 j += 2;
@@ -355,7 +355,7 @@ namespace stdc {
                         result += find(std::string_view(part.data, part.size));
                         break;
                     case varexp_part_type::nested_variable:
-                        result += varexp(std::string_view(part.data, part.size), find);
+                        result += find(varexp(std::string_view(part.data, part.size), find));
                         break;
                 }
             }

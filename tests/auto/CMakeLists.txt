@@ -8,7 +8,13 @@ if(NOT Boost_FOUND)
     return()
 endif()
 
-file(GLOB _src *.h *.cpp)
+file(GLOB _common_src *.cpp)
+
+if(WIN32)
+    file(GLOB _platform_src platforms/windows/*.cpp)
+endif()
+
+set(_src ${_common_src} ${_platform_src})
 add_executable(${PROJECT_NAME} ${_src})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Boost::unit_test_framework)

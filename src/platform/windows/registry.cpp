@@ -299,13 +299,11 @@ namespace stdc::windows {
             status = RegEnumKeyExW(_hkey, index, buffer.data(), &bufferSize, nullptr, nullptr,
                                    nullptr, &data.lastWriteTime);
             if (status == ERROR_MORE_DATA) {
-                DWORD subkeySz;
-                status = getRegSubKeyCountAndMaxLen(_hkey, nullptr, &subkeySz);
+                status = getRegSubKeyCountAndMaxLen(_hkey, nullptr, &maxsize);
                 if (status != ERROR_SUCCESS) {
                     _ec = make_status_error_code(status);
                     return {};
                 }
-                maxsize = subkeySz;
                 continue;
             }
             if (status == ERROR_NO_MORE_ITEMS) {
@@ -315,7 +313,7 @@ namespace stdc::windows {
                 _ec = make_status_error_code(status);
                 return {};
             }
-            buffer.reserve(bufferSize);
+            buffer.resize(bufferSize);
             break;
         };
 
@@ -351,13 +349,11 @@ namespace stdc::windows {
             status = RegEnumValueW(_hkey, index, buffer.data(), &bufferSize, nullptr, nullptr,
                                    nullptr, nullptr);
             if (status == ERROR_MORE_DATA) {
-                DWORD subkeySz;
-                status = getRegValueCountAndMaxLen(_hkey, nullptr, &subkeySz);
+                status = getRegValueCountAndMaxLen(_hkey, nullptr, &maxsize);
                 if (status != ERROR_SUCCESS) {
                     _ec = make_status_error_code(status);
                     return {};
                 }
-                maxsize = subkeySz;
                 continue;
             }
             if (status == ERROR_NO_MORE_ITEMS) {
@@ -367,7 +363,7 @@ namespace stdc::windows {
                 _ec = make_status_error_code(status);
                 return {};
             }
-            buffer.reserve(bufferSize);
+            buffer.resize(bufferSize);
             break;
         };
 

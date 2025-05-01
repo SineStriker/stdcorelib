@@ -341,12 +341,12 @@ namespace stdc::windows {
             bool _query;
         };
 
-        inline key_enumerator enumerateKeys() const {
+        inline key_enumerator enumKeys() const {
             _ec.clear();
             return key_enumerator(this);
         }
 
-        inline value_enumerator enumerateValues(bool query = false) const {
+        inline value_enumerator enumValues(bool query = false) const {
             _ec.clear();
             return value_enumerator(this, query);
         }
@@ -357,8 +357,8 @@ namespace stdc::windows {
 
         HKEY _hkey;
         bool _owns;
-        mutable int _max_key_name_size = 0;
-        mutable int _max_value_name_size = 0;
+        mutable DWORD _max_key_name_size = 0;
+        mutable DWORD _max_value_name_size = 0;
         mutable std::error_code _ec;
 
         STDCORELIB_DISABLE_COPY(RegKey);
