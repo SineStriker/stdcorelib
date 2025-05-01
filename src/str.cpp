@@ -4,6 +4,7 @@
 
 #ifdef _WIN32
 #  include "winapi.h"
+#  include "winextra.h"
 #endif
 
 #include <cstring>
@@ -371,7 +372,7 @@ namespace stdc {
         }
 
         std::string message(int ev) const override {
-            return wstring_conv::to_utf8(winapi::SystemError(ev, 0));
+            return wstring_conv::to_utf8(windows::SystemError(ev, 0));
         }
 
         std::error_condition default_error_condition(int ev) const noexcept override {

@@ -1,12 +1,10 @@
 #include "winapi.h"
 
-#include "str.h"
-
 namespace stdc {
 
     /*!
         \namespace winapi
-        \brief Windows API function wrappers.
+        \brief C++ wrapper for Windows API functions.
     */
 
 }
@@ -134,41 +132,6 @@ namespace stdc::winapi {
         if (ok)
             *ok = true;
         return res;
-    }
-
-    /*!
-        Get formatted error message using \c FormatMessageW without ending line break.
-    */
-    std::wstring SystemError(DWORD error_code, DWORD language_id) {
-        std::wstring ret =
-            kernel32::FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, error_code, language_id);
-        if (stdc::ends_with(ret, L"\r\n"))
-            ret = ret.substr(0, ret.size() - 2);
-        if (ret.empty()) {
-            wchar_t buffer[50];
-            std::ignore = wsprintfW(buffer, L"Unknown error %X.", unsigned(error_code));
-            ret = buffer;
-        }
-        return ret;
-    };
-
-    static RTL_OSVERSIONINFOW static_get_real_os_version() {
-        HMODULE hMod = ::GetModuleHandleW(L"ntdll.dll");
-        using RtlGetVersionPtr = NTSTATUS(WINAPI *)(PRTL_OSVERSIONINFOW);
-        auto pRtlGetVersion =
-            reinterpret_cast<RtlGetVersionPtr>(::GetProcAddress(hMod, "RtlGetVersion"));
-        RTL_OSVERSIONINFOW rovi{};
-        rovi.dwOSVersionInfoSize = sizeof(rovi);
-        pRtlGetVersion(&rovi);
-        return rovi;
-    }
-
-    /*!
-        Returns system version from \c ntdll.dll runtime library.
-    */
-    RTL_OSVERSIONINFOW SystemVersion() {
-        static auto result = static_get_real_os_version();
-        return result;
     }
 
 }

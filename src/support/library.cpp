@@ -5,6 +5,7 @@
 
 #ifdef _WIN32
 #  include "winapi.h"
+#  include "winextra.h"
 #else
 #  include <dlfcn.h>
 #  include <limits.h>
@@ -70,7 +71,7 @@ namespace stdc {
 
     std::string Library::Impl::sysErrorMessage() {
 #ifdef _WIN32
-        return wstring_conv::to_utf8(winapi::SystemError(::GetLastError(), 0));
+        return wstring_conv::to_utf8(windows::SystemError(::GetLastError(), 0));
 #else
         auto err = dlerror();
         if (err) {
@@ -148,7 +149,7 @@ namespace stdc {
 
         This class provides a wrapper for dynamically loaded libraries. It provides a simple
         interface for opening, closing, and resolving symbols from the library.
-    
+
         The interface is similar to the Qt QLibrary class.
 
         \sa https://doc.qt.io/qt-6/qlibrary.html

@@ -1,14 +1,10 @@
 #ifndef STDCORELIB_WINAPI_H
 #define STDCORELIB_WINAPI_H
 
-// Disable min/max macros in windows headers
-#ifndef NOMINMAX
-#  define NOMINMAX
-#endif
-
-#include <windows.h>
+#include "stdc_windows.h"
 
 #include <string>
+#include <chrono>
 
 #include <stdcorelib/stdc_global.h>
 
@@ -48,14 +44,6 @@ namespace stdc::winapi {
     struct STDCORELIB_EXPORT user32 {
         // To be added...
     };
-
-
-    //
-    // common
-    //
-    STDCORELIB_EXPORT std::wstring SystemError(DWORD error_code, DWORD language_id = 0);
-
-    STDCORELIB_EXPORT RTL_OSVERSIONINFOW SystemVersion();
 
 }
 
