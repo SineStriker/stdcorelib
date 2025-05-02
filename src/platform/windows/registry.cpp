@@ -7,7 +7,22 @@
 #include "str.h"
 #include "console.h"
 
+#include "3rdparty/llvm/smallvector.h"
+
 namespace stdc::windows {
+
+    template <class T>
+    static T qFromLittleEndian(const uint8_t *data) {
+        // TODO: support when the host system is not little-endian
+        return *reinterpret_cast<const T *>(data);
+    }
+
+    template <class T>
+    static T qFromBigEndian(const uint8_t *data) {
+        // TODO: implement
+        assert(false);
+        return {};
+    }
 
     static inline std::error_code make_status_error_code(LSTATUS status) {
         return std::error_code(status, stdc::windows_utf8_category());
@@ -84,7 +99,35 @@ namespace stdc::windows {
         \brief A registry value holder.
     */
 
-    RegValue::RegValue(Type type) : t(Invalid) {
+    RegValue::RegValue(Type type) : t(type) {
+        switch (type) {
+            case None:
+            case Invalid:
+                break;
+            case Binary:
+                comp = std::make_shared<Comp>();
+                comp->s = std::vector<uint8_t>();
+                break;
+            case Int32:
+                d.dw = 0;
+                break;
+            case Int64:
+                d.qw = 0;
+                break;
+            case String:
+            case ExpandString:
+            case Link:
+                comp = std::make_shared<Comp>();
+                comp->s = std::wstring();
+                break;
+            case MultiString:
+                comp = std::make_shared<Comp>();
+                comp->ms = std::vector<std::wstring>();
+                break;
+            default:
+                d.p = nullptr;
+                break;
+        }
     }
 
     RegValue::RegValue(const uint8_t *data, int size) : t(Binary), comp(std::make_shared<Comp>()) {
@@ -293,11 +336,12 @@ namespace stdc::windows {
         return true;
     }
 
-    DWORD RegKey::keyCount(std::error_code &ec) const noexcept {
+    int RegKey::keyCount(std::error_code &ec) const noexcept {
         ec.clear();
 
+        // update max key name size by the way
         DWORD count;
-        LSTATUS status = getRegSubKeyCountAndMaxLen(_hkey, &count, nullptr);
+        LSTATUS status = getRegSubKeyCountAndMaxLen(_hkey, &count, &_max_key_name_size);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return 0;
@@ -305,7 +349,7 @@ namespace stdc::windows {
         return count;
     }
 
-    std::optional<RegKey::KeyData> RegKey::keyAt(DWORD index, std::error_code &ec) const noexcept {
+    std::optional<RegKey::KeyData> RegKey::keyAt(int index, std::error_code &ec) const noexcept {
         ec.clear();
 
         auto &maxsize = _max_value_name_size;
@@ -340,11 +384,12 @@ namespace stdc::windows {
         return data;
     }
 
-    DWORD RegKey::valueCount(std::error_code &ec) const noexcept {
+    int RegKey::valueCount(std::error_code &ec) const noexcept {
         ec.clear();
 
+        // update max value name size by the way
         DWORD count;
-        LSTATUS status = getRegValueCountAndMaxLen(_hkey, &count, nullptr);
+        LSTATUS status = getRegValueCountAndMaxLen(_hkey, &count, &_max_value_name_size);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return 0;
@@ -352,7 +397,7 @@ namespace stdc::windows {
         return count;
     }
 
-    std::optional<RegKey::ValueData> RegKey::valueAt(DWORD index, std::error_code &ec,
+    std::optional<RegKey::ValueData> RegKey::valueAt(int index, std::error_code &ec,
                                                      bool query) const noexcept {
         ec.clear();
 
@@ -399,114 +444,190 @@ namespace stdc::windows {
 
     bool RegKey::flush(std::error_code &ec) noexcept {
         ec.clear();
-        // TODO
-        return {};
+
+        LSTATUS status = RegFlushKey(_hkey);
+        if (status != ERROR_SUCCESS) {
+            ec = make_status_error_code(status);
+            return false;
+        }
+        return true;
     }
 
-    bool RegKey::save(const std::wstring &filename, std::error_code &ec) noexcept {
+    bool RegKey::save(const std::wstring &filename, std::error_code &ec, LPSECURITY_ATTRIBUTES sa,
+                      int flags) noexcept {
         ec.clear();
-        // TODO
-        return {};
+
+        LSTATUS status = RegSaveKeyExW(_hkey, filename.c_str(), sa, flags);
+        if (status != ERROR_SUCCESS) {
+            ec = make_status_error_code(status);
+            return false;
+        }
+        return true;
     }
 
     bool RegKey::hasKey(const std::wstring &path, std::error_code &ec) const noexcept {
         ec.clear();
-        // TODO
-        return {};
+
+        bool hasKey = false;
+        HKEY hkey = nullptr;
+        LSTATUS status = RegOpenKeyExW(_hkey, path.c_str(), 0, KEY_READ, &hkey);
+        if (status == ERROR_SUCCESS) {
+            assert(hkey);
+            RegCloseKey(hkey);
+            hasKey = true;
+        } else if (status != ERROR_FILE_NOT_FOUND) {
+            ec = make_status_error_code(status);
+            return false;
+        }
+        return hasKey;
     }
 
     bool RegKey::hasValue(const std::wstring &name, std::error_code &ec) const noexcept {
         ec.clear();
-        // TODO
-        return {};
+
+        bool hasValue = false;
+        LSTATUS status = RegQueryValueExW(_hkey, name.c_str(), nullptr, nullptr, nullptr, nullptr);
+        if (status == ERROR_SUCCESS) {
+            hasValue = true;
+        } else if (status != ERROR_FILE_NOT_FOUND) {
+            ec = make_status_error_code(status);
+            return false;
+        }
+        return hasValue;
     }
 
+    // https://github.com/qt/qtbase/blob/v6.8.0/src/corelib/kernel/qwinregistry.cpp#L39
     RegValue RegKey::value(const std::wstring &name, std::error_code &ec) const noexcept {
         ec.clear();
-        // TODO
-        return {};
+
+        // NOTE: Empty value name is allowed in Windows registry, it means the default
+        // or unnamed value of a key, you can read/write/delete such value normally.
+
+        // Use nullptr when we need to access the default value.
+        const auto subKeyC =
+            name.empty() ? nullptr : reinterpret_cast<const wchar_t *>(name.data());
+
+        // Get the size and type of the value.
+        DWORD dataType = REG_NONE;
+        DWORD dataSize = 0;
+        LONG ret = RegQueryValueExW(_hkey, subKeyC, nullptr, &dataType, nullptr, &dataSize);
+        if (ret != ERROR_SUCCESS)
+            return RegValue(RegValue::Invalid);
+
+        // Get the value.
+        llvm::SmallVector<unsigned char, 512> data(dataSize);
+        std::fill(data.data(), data.data() + dataSize, 0u);
+
+        ret = RegQueryValueExW(_hkey, subKeyC, nullptr, nullptr, data.data(), &dataSize);
+        if (ret != ERROR_SUCCESS) {
+            ec = make_status_error_code(ret);
+            return RegValue(RegValue::Invalid);
+        }
+
+        switch (dataType) {
+            case REG_SZ: {
+                if (dataSize > 0) {
+                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()),
+                                    dataSize / sizeof(wchar_t));
+                }
+                return RegValue(RegValue::Type::String);
+            }
+            case REG_EXPAND_SZ: {
+                if (dataSize > 0) {
+                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()),
+                                    dataSize / sizeof(wchar_t), RegValue::ExpandString);
+                }
+                return RegValue(RegValue::Type::ExpandString);
+            }
+
+            case REG_MULTI_SZ: {
+                if (dataSize > 0) {
+                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()),
+                                    dataSize / sizeof(wchar_t), RegValue::MultiString);
+                }
+                return RegValue(RegValue::MultiString);
+            }
+
+            case REG_NONE: {
+                return RegValue(RegValue::None);
+            }
+            case REG_BINARY: {
+                if (dataSize > 0) {
+                    return RegValue(reinterpret_cast<const uint8_t *>(data.data()), dataSize);
+                }
+                return RegValue(RegValue::Type::Binary);
+            }
+
+            case REG_DWORD: // Same as REG_DWORD_LITTLE_ENDIAN
+                return qFromLittleEndian<uint32_t>(data.data());
+
+            case REG_DWORD_BIG_ENDIAN:
+                return qFromBigEndian<uint32_t>(data.data());
+
+            case REG_QWORD: // Same as REG_QWORD_LITTLE_ENDIAN
+                return qFromLittleEndian<uint64_t>(data.data());
+
+            default:
+                break;
+        }
+        return RegValue(RegValue::Invalid);
     }
 
     bool RegKey::setValue(const std::wstring &name, const RegValue &value,
                           std::error_code &ec) noexcept {
+        if (!value.isValid()) {
+            return removeValue(name, ec);
+        }
+
         ec.clear();
+
         // TODO
         return {};
     }
 
-    bool RegKey::removeKey(const std::wstring &, std::error_code &ec) noexcept {
+    bool RegKey::removeKey(const std::wstring &path, std::error_code &ec) noexcept {
         ec.clear();
-        // TODO
-        return {};
+
+        LSTATUS status = RegDeleteTreeW(_hkey, path.c_str());
+        if (status != ERROR_SUCCESS) {
+            ec = make_status_error_code(status);
+            return false;
+        }
+        return true;
     }
 
     bool RegKey::removeValue(const std::wstring &name, std::error_code &ec) noexcept {
         ec.clear();
-        // TODO
-        return {};
+
+        LSTATUS status = RegDeleteValueW(_hkey, name.c_str());
+        if (status != ERROR_SUCCESS) {
+            ec = make_status_error_code(status);
+            return false;
+        }
+        return true;
     }
 
     bool RegKey::remove(std::error_code &ec) noexcept {
         ec.clear();
-        // TODO
-        return {};
+
+        LSTATUS status = RegDeleteTreeW(_hkey, nullptr);
+        if (status != ERROR_SUCCESS) {
+            ec = make_status_error_code(status);
+            return false;
+        }
+        return true;
     }
 
-    bool RegKey::notify(std::error_code &ec, HANDLE event, bool watchSubtree, int notifyFilter,
+    bool RegKey::notify(std::error_code &ec, bool watchSubtree, int notifyFilter, HANDLE event,
                         bool async) noexcept {
         ec.clear();
-        // TODO
-        return {};
-    }
 
-    void RegKey::key_iterator::fetch(std::error_code &ec) const noexcept {
-        _data = {};
-        if (!_key || _index < 0) {
-            return;
+        LSTATUS status = RegNotifyChangeKeyValue(_hkey, watchSubtree, notifyFilter, event, async);
+        if (status != ERROR_SUCCESS) {
+            ec = make_status_error_code(status);
+            return false;
         }
-        if (!_key->_hkey) {
-            _index = -1;
-            return;
-        }
-
-        auto result = _key->keyAt(_index, ec);
-        if (ec.value() == ERROR_NO_MORE_ITEMS) {
-            ec.clear();
-            _index = -1;
-            return;
-        }
-        if (ec.value() != ERROR_SUCCESS) {
-            _index = -1;
-            return;
-        }
-        if (result)
-            _data = result.value();
-        return;
-    }
-
-    void RegKey::value_iterator::fetch(std::error_code &ec) const noexcept {
-        _data = {};
-        if (!_key || _index < 0) {
-            return;
-        }
-        if (!_key->_hkey) {
-            _index = -1;
-            return;
-        }
-
-        auto result = _key->valueAt(_index, ec, _query);
-        if (ec.value() == ERROR_NO_MORE_ITEMS) {
-            ec.clear();
-            _index = -1;
-            return;
-        }
-        if (ec.value() != ERROR_SUCCESS) {
-            _index = -1;
-            return;
-        }
-        if (result)
-            _data = result.value();
-        return;
+        return true;
     }
 
 }

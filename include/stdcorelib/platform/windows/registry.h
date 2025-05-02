@@ -12,6 +12,7 @@
 #include <optional>
 
 #include <stdcorelib/stdc_global.h>
+#include <stdcorelib/iterator.h>
 
 namespace stdc::windows {
 
@@ -33,7 +34,9 @@ namespace stdc::windows {
         RegValue(const uint8_t *data, int size);
         RegValue(std::vector<uint8_t> &&data, int size);
         RegValue(int32_t value);
+        inline RegValue(uint32_t value);
         RegValue(int64_t value);
+        inline RegValue(uint64_t value);
         RegValue(const std::wstring &value, Type type = String);
         RegValue(std::wstring &&value, Type type = String);
         RegValue(const wchar_t *value, int size = -1, Type type = String);
@@ -54,7 +57,9 @@ namespace stdc::windows {
 
         const std::vector<uint8_t> &toBinary() const;
         int32_t toInt32() const;
+        inline uint32_t toUInt32() const;
         int64_t toInt64() const;
+        inline uint64_t toUInt64() const;
         const std::wstring &toString() const;
         const std::vector<std::wstring> &toMultiString() const;
         std::wstring toExpandString() const;
@@ -103,6 +108,20 @@ namespace stdc::windows {
         std::shared_ptr<Comp> comp;
     };
 
+    inline RegValue::RegValue(uint32_t value) : RegValue(static_cast<int32_t>(value)) {
+    }
+
+    inline RegValue::RegValue(uint64_t value) : RegValue(static_cast<int64_t>(value)) {
+    }
+
+    inline uint32_t RegValue::toUInt32() const {
+        return static_cast<uint32_t>(toInt32());
+    }
+
+    inline uint64_t RegValue::toUInt64() const {
+        return static_cast<uint64_t>(toInt64());
+    }
+
     class STDCORELIB_EXPORT RegKey {
     public:
         enum DesiredAccess {
@@ -127,6 +146,12 @@ namespace stdc::windows {
             CO_BackupRestore = REG_OPTION_BACKUP_RESTORE,
             CO_NonVolatile = REG_OPTION_NON_VOLATILE,
             CO_Volatile = REG_OPTION_VOLATILE,
+        };
+
+        enum SaveFlag {
+            SF_StandardFormat = REG_STANDARD_FORMAT,
+            SF_LatestFormat = REG_LATEST_FORMAT,
+            SF_NoCompression = REG_NO_COMPRESSION,
         };
 
         enum NotifyFilter {
@@ -179,21 +204,23 @@ namespace stdc::windows {
         inline bool close();
         bool close(std::error_code &ec) noexcept;
 
-        inline DWORD keyCount() const;
-        DWORD keyCount(std::error_code &ec) const noexcept;
-        inline std::optional<KeyData> keyAt(DWORD index) const;
-        std::optional<KeyData> keyAt(DWORD index, std::error_code &ec) const noexcept;
+        inline int keyCount() const;
+        int keyCount(std::error_code &ec) const noexcept;
+        inline std::optional<KeyData> keyAt(int index) const;
+        std::optional<KeyData> keyAt(int index, std::error_code &ec) const noexcept;
 
-        inline DWORD valueCount() const;
-        DWORD valueCount(std::error_code &ec) const noexcept;
-        inline std::optional<ValueData> valueAt(DWORD index, bool query = false) const;
-        std::optional<ValueData> valueAt(DWORD index, std::error_code &ec,
+        inline int valueCount() const;
+        int valueCount(std::error_code &ec) const noexcept;
+        inline std::optional<ValueData> valueAt(int index, bool query = false) const;
+        std::optional<ValueData> valueAt(int index, std::error_code &ec,
                                          bool query = false) const noexcept;
 
         inline bool flush();
         bool flush(std::error_code &ec) noexcept;
-        inline bool save(const std::wstring &filename);
-        bool save(const std::wstring &filename, std::error_code &ec) noexcept;
+        inline bool save(const std::wstring &filename, LPSECURITY_ATTRIBUTES sa = nullptr,
+                         int flags = SF_StandardFormat);
+        bool save(const std::wstring &filename, std::error_code &ec,
+                  LPSECURITY_ATTRIBUTES sa = nullptr, int flags = SF_StandardFormat) noexcept;
 
         inline bool hasKey(const std::wstring &path) const;
         bool hasKey(const std::wstring &path, std::error_code &ec) const noexcept;
@@ -213,11 +240,11 @@ namespace stdc::windows {
         inline bool remove();
         bool remove(std::error_code &ec) noexcept;
 
-        inline bool notify(HANDLE event = nullptr, bool watchSubtree = false,
+        inline bool notify(bool watchSubtree = false,
                            int notifyFilter = NF_ChangeName | NF_ChangeAttributes,
-                           bool async = false);
-        bool notify(std::error_code &ec, HANDLE event = nullptr, bool watchSubtree = false,
-                    int notifyFilter = NF_ChangeName | NF_ChangeAttributes,
+                           HANDLE event = nullptr, bool async = false);
+        bool notify(std::error_code &ec, bool watchSubtree = false,
+                    int notifyFilter = NF_ChangeName | NF_ChangeAttributes, HANDLE event = nullptr,
                     bool async = false) noexcept;
 
         inline HKEY handle() const {
@@ -232,22 +259,22 @@ namespace stdc::windows {
 
         class key_iterator {
         public:
-            using iterator_category = std::forward_iterator_tag;
+            using iterator_category = std::random_access_iterator_tag;
             using value_type = KeyData;
-            using difference_type = ptrdiff_t;
+            using difference_type = int;
             using pointer = const value_type *;
             using reference = const value_type &;
 
             // default constructor creates an invalid iterator
-            inline key_iterator() noexcept : _key(nullptr), _ec(nullptr), _index(0) {
+            inline key_iterator() noexcept : _key(nullptr), _ec(nullptr), _index(0), _count(0) {
             }
 
             inline reference operator*() const noexcept {
-                return _data;
+                return _data.value();
             }
 
             inline pointer operator->() const noexcept {
-                return &_data;
+                return &_data.value();
             }
 
             inline key_iterator &operator++() {
@@ -262,6 +289,30 @@ namespace stdc::windows {
                 return tmp;
             }
 
+            inline key_iterator &operator+=(int off) {
+                _index += off;
+                fetch();
+                return *this;
+            }
+
+            inline key_iterator &operator--() {
+                --_index;
+                fetch();
+                return *this;
+            }
+
+            inline key_iterator operator--(int) {
+                auto tmp = *this;
+                --*this;
+                return tmp;
+            }
+
+            inline key_iterator &operator-=(int off) {
+                _index -= off;
+                fetch();
+                return *this;
+            }
+
             inline bool operator==(const key_iterator &RHS) const noexcept {
                 return _key == RHS._key && _index == RHS._index;
             }
@@ -270,71 +321,100 @@ namespace stdc::windows {
                 return !(*this == RHS);
             }
 
+            inline bool operator<(const key_iterator &RHS) const {
+                return _index < RHS._index;
+            }
+
+            inline bool operator<=(const key_iterator &RHS) const {
+                return _index <= RHS._index;
+            }
+
+            inline bool operator>(const key_iterator &RHS) const {
+                return _index > RHS._index;
+            }
+
+            inline bool operator>=(const key_iterator &RHS) const {
+                return _index >= RHS._index;
+            }
+
         private:
-            inline key_iterator(const RegKey *key, DWORD index, std::error_code *ec) noexcept
-                : _key(key), _ec(ec), _index(index) {
+            inline key_iterator(const RegKey *key, int index, int count,
+                                std::error_code *ec) noexcept
+                : _key(key), _ec(ec), _index(index), _count(count) {
                 fetch();
             }
 
             STDCORELIB_EXPORT void fetch(std::error_code &ec) const noexcept;
 
             inline void fetch() const {
-                std::error_code ec;
-                fetch(ec);
-                if (ec.value() == ERROR_SUCCESS)
+                if (_index >= _count || _index < 0)
                     return;
-                if (_ec) {
-                    *_ec = ec;
+                if (!_ec) {
+                    _data = _key->keyAt(_index);
                     return;
                 }
-                throw std::system_error(ec);
+                _data = _key->keyAt(_index, *_ec);
+                if (_ec->value() != ERROR_SUCCESS) {
+                    _index = _count;
+                }
             }
 
             const RegKey *_key;
             mutable std::error_code *_ec;
-            mutable DWORD _index;
-            mutable value_type _data;
+            mutable int _index;
+            mutable int _count;
+            mutable std::optional<value_type> _data;
 
             friend class key_enumerator;
         };
 
+        using reverse_key_iterator = reverse_iterator<key_iterator>;
+
         class key_enumerator {
         public:
-            inline key_enumerator(const RegKey *key, std::error_code *ec) : _key(key) {
+            inline key_enumerator(const RegKey *key, std::error_code *ec)
+                : _key(key), _ec(ec), _count(ec ? _key->keyCount(*ec) : _key->keyCount()) {
             }
             inline key_iterator begin() const {
-                return key_iterator(_key, 0, _ec);
+                return key_iterator(_key, 0, _count, _ec);
             }
             inline key_iterator end() const {
-                return key_iterator(_key, -1, _ec);
+                return key_iterator(_key, _count, _count, _ec);
+            }
+            inline reverse_key_iterator rbegin() const {
+                return reverse_key_iterator(end());
+            }
+            inline reverse_key_iterator rend() const {
+                return reverse_key_iterator(begin());
             }
 
         private:
             const RegKey *_key;
             std::error_code *_ec;
+            int _count;
         };
 
         class value_enumerator;
 
         class value_iterator {
         public:
-            using iterator_category = std::forward_iterator_tag;
+            using iterator_category = std::random_access_iterator_tag;
             using value_type = ValueData;
-            using difference_type = ptrdiff_t;
+            using difference_type = int;
             using pointer = const value_type *;
             using reference = const value_type &;
 
             // default constructor creates an end iterator
             inline value_iterator() noexcept
-                : _key(nullptr), _ec(nullptr), _query(false), _index(0) {
+                : _key(nullptr), _ec(nullptr), _query(false), _index(0), _count(0) {
             }
 
             inline reference operator*() const noexcept {
-                return _data;
+                return _data.value();
             }
 
             inline pointer operator->() const noexcept {
-                return &_data;
+                return &_data.value();
             }
 
             inline value_iterator &operator++() {
@@ -349,6 +429,30 @@ namespace stdc::windows {
                 return tmp;
             }
 
+            inline value_iterator &operator+=(int off) {
+                _index += off;
+                fetch();
+                return *this;
+            }
+
+            inline value_iterator &operator--() {
+                --_index;
+                fetch();
+                return *this;
+            }
+
+            inline value_iterator operator--(int) {
+                auto tmp = *this;
+                --*this;
+                return tmp;
+            }
+
+            inline value_iterator &operator-=(int off) {
+                _index -= off;
+                fetch();
+                return *this;
+            }
+
             inline bool operator==(const value_iterator &RHS) const noexcept {
                 return _key == RHS._key && _index == RHS._index;
             }
@@ -357,51 +461,77 @@ namespace stdc::windows {
                 return !(*this == RHS);
             }
 
+            inline bool operator<(const value_iterator &RHS) const {
+                return _index < RHS._index;
+            }
+
+            inline bool operator<=(const value_iterator &RHS) const {
+                return _index <= RHS._index;
+            }
+
+            inline bool operator>(const value_iterator &RHS) const {
+                return _index > RHS._index;
+            }
+
+            inline bool operator>=(const value_iterator &RHS) const {
+                return _index >= RHS._index;
+            }
+
         private:
-            inline value_iterator(const RegKey *key, DWORD index, std::error_code *ec,
+            inline value_iterator(const RegKey *key, int index, int count, std::error_code *ec,
                                   bool query) noexcept
-                : _key(key), _ec(ec), _query(query), _index(index) {
+                : _key(key), _ec(ec), _query(query), _index(index), _count(count) {
                 fetch();
             }
 
-            STDCORELIB_EXPORT void fetch(std::error_code &ec) const noexcept;
-
             inline void fetch() const {
-                std::error_code ec;
-                fetch(ec);
-                if (ec.value() == ERROR_SUCCESS)
+                if (_index >= _count || _index < 0)
                     return;
-                if (_ec) {
-                    *_ec = ec;
+                if (!_ec) {
+                    _data = _key->valueAt(_index, _query);
                     return;
                 }
-                throw std::system_error(ec);
+                _data = _key->valueAt(_index, *_ec, _query);
+                if (_ec->value() != ERROR_SUCCESS) {
+                    _index = _count;
+                }
             }
 
             const RegKey *_key;
             mutable std::error_code *_ec;
             bool _query;
-            mutable DWORD _index;
-            mutable value_type _data;
+            mutable int _index;
+            mutable int _count;
+            mutable std::optional<value_type> _data;
 
             friend class value_enumerator;
         };
 
+        using reverse_value_iterator = reverse_iterator<value_iterator>;
+
         class value_enumerator {
         public:
             inline value_enumerator(const RegKey *key, std::error_code *ec, bool query)
-                : _key(key), _ec(ec), _query(query) {
+                : _key(key), _ec(ec), _count(ec ? _key->valueCount(*ec) : _key->valueCount()),
+                  _query(query) {
             }
             inline value_iterator begin() const {
-                return value_iterator(_key, 0, _ec, _query);
+                return value_iterator(_key, 0, _count, _ec, _query);
             }
             inline value_iterator end() const {
-                return value_iterator(_key, -1, _ec, _query);
+                return value_iterator(_key, _count, _count, _ec, _query);
+            }
+            inline reverse_value_iterator rbegin() const {
+                return reverse_value_iterator(end());
+            }
+            inline reverse_value_iterator rend() const {
+                return reverse_value_iterator(begin());
             }
 
         private:
             const RegKey *_key;
             std::error_code *_ec;
+            int _count;
             bool _query;
         };
 
@@ -461,7 +591,7 @@ namespace stdc::windows {
         return result;
     }
 
-    inline DWORD RegKey::keyCount() const {
+    inline int RegKey::keyCount() const {
         std::error_code ec;
         auto result = keyCount(ec);
         if (ec.value() != ERROR_SUCCESS)
@@ -469,7 +599,7 @@ namespace stdc::windows {
         return result;
     }
 
-    inline std::optional<RegKey::KeyData> RegKey::keyAt(DWORD index) const {
+    inline std::optional<RegKey::KeyData> RegKey::keyAt(int index) const {
         std::error_code ec;
         auto result = keyAt(index, ec);
         if (ec.value() != ERROR_SUCCESS)
@@ -477,7 +607,7 @@ namespace stdc::windows {
         return result;
     }
 
-    inline DWORD RegKey::valueCount() const {
+    inline int RegKey::valueCount() const {
         std::error_code ec;
         auto result = valueCount(ec);
         if (ec.value() != ERROR_SUCCESS)
@@ -485,7 +615,7 @@ namespace stdc::windows {
         return result;
     }
 
-    inline std::optional<RegKey::ValueData> RegKey::valueAt(DWORD index, bool query) const {
+    inline std::optional<RegKey::ValueData> RegKey::valueAt(int index, bool query) const {
         std::error_code ec;
         auto result = valueAt(index, ec, query);
         if (ec.value() != ERROR_SUCCESS)
@@ -501,9 +631,9 @@ namespace stdc::windows {
         return result;
     }
 
-    inline bool RegKey::save(const std::wstring &filename) {
+    inline bool RegKey::save(const std::wstring &filename, LPSECURITY_ATTRIBUTES sa, int flags) {
         std::error_code ec;
-        auto result = save(filename, ec);
+        auto result = save(filename, ec, sa, flags);
         if (ec.value() != ERROR_SUCCESS)
             throw std::system_error(ec);
         return result;
@@ -565,9 +695,9 @@ namespace stdc::windows {
         return result;
     }
 
-    inline bool RegKey::notify(HANDLE event, bool watchSubtree, int notifyFilter, bool async) {
+    inline bool RegKey::notify(bool watchSubtree, int notifyFilter, HANDLE event, bool async) {
         std::error_code ec;
-        auto result = notify(ec, event, watchSubtree, notifyFilter, async);
+        auto result = notify(ec, watchSubtree, notifyFilter, event, async);
         if (ec.value() != ERROR_SUCCESS)
             throw std::system_error(ec);
         return result;
