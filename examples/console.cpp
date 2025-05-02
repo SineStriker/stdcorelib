@@ -8,17 +8,13 @@ using namespace stdc;
 static void example_ConsolePrint() {
     using namespace console;
 
-    //
-    // test colors
-    //
+    // use colors
     printf(nostyle, red, lightwhite, " Red in white ");
     u8println();
     printf(nostyle, yellow, blue, " Yellow in blue ");
     u8println();
 
-    //
-    // test styles
-    //
+    // use styles
     printf(bold, lightwhite, nocolor, "Bold");
     u8println();
     printf(italic, lightwhite, nocolor, "Italic");
@@ -28,13 +24,11 @@ static void example_ConsolePrint() {
     printf(strikethrough, lightwhite, nocolor, "Strikethrough");
     u8println();
 
-    //
-    // test color hints
-    //
+    // use color variables
     cprintln("${yellow}yellow ${green}green ${blue}blue ${cyan}cyan ${magenta}magenta "
              "${white}white ${lightred}lightred ${strikethrough}strikethrough "
              "${underline}underline ${bold}bold ${italic}italic");
-    cprintln("${bold}bold ${italic}italic ${red}red ${nocolor}nocolor");
+    cprintf("${%s}%s ${italic}italic ${red}red ${nocolor}nocolor\n", "bold", "bold");
     cprintln("${red}red ${italic}italic ${@blue}bg-blue ${nostyle}nostyle ${@nocolor}bg-nocolor");
     cprintln("${lightgreen}lightgreen $ $$ $$$ $$$$"); // two consecutive $ are regarded as one $
     u8println();

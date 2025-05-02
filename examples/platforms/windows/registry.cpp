@@ -9,101 +9,114 @@ using namespace stdc;
 
 using namespace windows;
 
+using console::success;
+using console::critical;
+
 /*!
     Enumerates the subkeys and values of a registry key.
 */
 static int example_RegistryTraverse() {
+    std::wstring subpath = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+    u8println("Querying registry key: HKCU\\%1", subpath);
+
     std::error_code ec;
 
     // HKCU is not owned by RegKey, no close will happen
     RegKey hkcuKey(RegKey::RK_CurrentUser);
     // the opened/created key is owned by RegKey, it will be closed when the RegKey destructs
-    RegKey isKey =
-        hkcuKey.open(L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Internet Settings", ec);
+    RegKey isKey = hkcuKey.open(subpath, ec);
     if (!isKey.isValid()) {
-        console::critical("failed to open registry key: %1", ec.message());
+        critical("failed to open registry key: %1", ec.message());
         return -1;
     }
 
     // enumerate the subkeys
-    console::u8println("Registry keys:");
+    u8println("Keys:");
     for (const auto &subkey : isKey.enumKeys(ec)) {
-        console::success("- %1", subkey.name);
+        success("- %1", subkey.name);
     }
     // must check for error after traversing, any error will cause the iteration to stop
     if (ec.value() != ERROR_SUCCESS) {
-        console::critical("failed to enumerate registry keys: %1", ec.message());
+        critical("failed to enumerate registry keys: %1", ec.message());
         return -1;
     }
-    console::u8println("Registry keys (for i=n-1; i>=0; i-=2):");
+    u8println("Keys (for i=n-1; i>=0; i-=2):");
     {
         auto keys = isKey.enumKeys(ec);
         for (auto it = keys.rbegin(); it < keys.rend(); it += 2) {
             auto &subkey = *it;
-            console::success("- %1", subkey.name);
+            success("- %1", subkey.name);
         }
         if (ec.value() != ERROR_SUCCESS) {
-            console::critical("failed to enumerate registry keys: %1", ec.message());
+            critical("failed to enumerate registry keys: %1", ec.message());
             return -1;
         }
     }
 
     // enumerate the value names
-    console::u8println("Registry values:");
+    u8println("Value Names:");
     for (const auto &val : isKey.enumValues(ec)) {
-        console::success("- %1", val.name);
+        success("- %1", val.name);
     }
     // same as above
     if (ec.value() != ERROR_SUCCESS) {
-        console::critical("failed to enumerate registry values: %1", ec.message());
+        critical("failed to enumerate registry values: %1", ec.message());
         return -1;
     }
-    console::u8println("Registry values (for i=n-1; i>=0; i-=2):");
+    u8println("Value Names (for i=n-1; i>=0; i-=2):");
     {
         auto values = isKey.enumValues(ec);
         for (auto it = values.rbegin(); it < values.rend(); it += 2) {
             auto &val = *it;
-            console::success("- %1", val.name);
+            success("- %1", val.name);
         }
         if (ec.value() != ERROR_SUCCESS) {
-            console::critical("failed to enumerate registry values: %1", ec.message());
+            critical("failed to enumerate registry values: %1", ec.message());
             return -1;
         }
     }
-
+    u8println();
     return 0;
 }
 
 static int example_RegistryQuery() {
+    std::wstring subpath = L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+    u8println("Querying registry key: HKCU\\%1", subpath);
+
     std::error_code ec;
     RegKey hklmKey(RegKey::RK_LocalMachine);
-    RegKey systemKey = hklmKey.open(L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", ec);
+    RegKey systemKey = hklmKey.open(subpath, ec);
     if (!systemKey.isValid()) {
-        console::critical("failed to open registry key: %1", ec.message());
+        critical("failed to open registry key: %1", ec.message());
         return -1;
     }
 
     RegValue productNameValue = systemKey.value(L"ProductName", ec);
     if (!productNameValue.isValid()) {
-        console::critical("failed to query registry value: %1", ec.message());
+        critical("failed to query registry value: %1", ec.message());
         return -1;
     }
 
-    console::u8println("Product Name:");
-    console::success("  %1", productNameValue.toString());
-
+    u8println("Product Name:");
+    success("%1", productNameValue.toString());
 
     RegValue digitalProductIdValue = systemKey.value(L"DigitalProductId", ec);
     if (!digitalProductIdValue.isValid()) {
-        console::critical("failed to query registry value: %1", ec.message());
+        critical("failed to query registry value: %1", ec.message());
         return -1;
     }
 
-    console::u8println("Digital Product ID:");
-    for (const auto &byte : digitalProductIdValue.toBinary()) {
-        printf("%02X ", byte);
+    u8println("Digital Product ID:");
+    {
+        int i = 0;
+        for (const auto &byte : digitalProductIdValue.toBinary()) {
+            i++;
+            cprintf("${lightgreen}%02X ", byte);
+            if (i % 16 == 0)
+                u8println();
+        }
     }
-    printf("\n");
+    u8println();
     return 0;
 }
 

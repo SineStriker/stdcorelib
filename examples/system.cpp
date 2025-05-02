@@ -8,6 +8,7 @@ using namespace stdc;
     Prints the command line arguments.
 */
 static void example_CommandLine() {
+    u8println("Command line arguments:");
     auto args = stdc::system::command_line_arguments();
     for (int i = 0; i < args.size(); ++i) {
         u8printf("%d - %s\n", i, args[i].c_str());

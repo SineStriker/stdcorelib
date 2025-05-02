@@ -182,7 +182,7 @@ namespace stdc::windows {
         };
 
         // constructs from an existing HKEY handle
-        inline RegKey(HKEY hkey = nullptr) noexcept : _hkey(hkey), _owns(false) {
+        inline RegKey(HKEY hkey = nullptr, bool owns = false) noexcept : _hkey(hkey), _owns(owns) {
         }
         RegKey(ReservedKey key) noexcept;
         ~RegKey();
@@ -191,6 +191,21 @@ namespace stdc::windows {
         RegKey &operator=(RegKey &&RHS) noexcept;
 
     public:
+        inline HKEY handle() const {
+            return _hkey;
+        }
+
+        inline HKEY take() {
+            HKEY hkey = _hkey;
+            _hkey = nullptr;
+            _owns = false;
+            return hkey;
+        }
+
+        inline bool isValid() const {
+            return _hkey != nullptr;
+        }
+
         inline RegKey open(const std::wstring &path, int access = DA_Read);
         RegKey open(const std::wstring &path, std::error_code &ec, int access = DA_Read) noexcept;
 
@@ -246,14 +261,6 @@ namespace stdc::windows {
         bool notify(std::error_code &ec, bool watchSubtree = false,
                     int notifyFilter = NF_ChangeName | NF_ChangeAttributes, HANDLE event = nullptr,
                     bool async = false) noexcept;
-
-        inline HKEY handle() const {
-            return _hkey;
-        }
-
-        inline bool isValid() const {
-            return _hkey != nullptr;
-        }
 
         class key_enumerator;
 
@@ -362,7 +369,7 @@ namespace stdc::windows {
             const RegKey *_key;
             mutable std::error_code *_ec;
             mutable int _index;
-            mutable int _count;
+            int _count;
             mutable std::optional<value_type> _data;
 
             friend class key_enumerator;
@@ -501,7 +508,7 @@ namespace stdc::windows {
             mutable std::error_code *_ec;
             bool _query;
             mutable int _index;
-            mutable int _count;
+            int _count;
             mutable std::optional<value_type> _data;
 
             friend class value_enumerator;
@@ -552,9 +559,6 @@ namespace stdc::windows {
         }
 
     protected:
-        inline RegKey(HKEY hkey, bool owns) noexcept : _hkey(hkey), _owns(owns) {
-        }
-
         HKEY _hkey;
         bool _owns;
         mutable DWORD _max_key_name_size = 0;
