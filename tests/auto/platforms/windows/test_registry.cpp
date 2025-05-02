@@ -20,21 +20,23 @@ BOOST_AUTO_TEST_CASE(test_regkey) {
 
     // "Windows" should be one of the subkeys
     {
+        std::error_code ec;
         std::vector<std::wstring> subkeys;
-        for (const auto &subkey : systemKey.enumKeys()) {
+        for (const auto &subkey : systemKey.enumKeys(ec)) {
             subkeys.push_back(subkey.name);
         }
-        BOOST_CHECK(systemKey.errorCode().value() == ERROR_SUCCESS);
+        BOOST_CHECK(ec.value() == ERROR_SUCCESS);
         BOOST_CHECK(std::find(subkeys.begin(), subkeys.end(), L"Windows") != subkeys.end());
     }
 
     // "ProductName" should be one of the values
     {
+        std::error_code ec;
         std::vector<std::wstring> values;
-        for (const auto &val : systemKey.enumValues()) {
+        for (const auto &val : systemKey.enumValues(ec)) {
             values.push_back(val.name);
         }
-        BOOST_CHECK(systemKey.errorCode().value() == ERROR_SUCCESS);
+        BOOST_CHECK(ec.value() == ERROR_SUCCESS);
         BOOST_CHECK(std::find(values.begin(), values.end(), L"ProductName") != values.end());
     }
 

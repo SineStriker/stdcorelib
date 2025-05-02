@@ -247,66 +247,66 @@ namespace stdc::windows {
 
     RegKey::RegKey(RegKey &&RHS) noexcept
         : _hkey(RHS._hkey), _owns(RHS._owns), _max_key_name_size(RHS._max_key_name_size),
-          _max_value_name_size(RHS._max_value_name_size), _ec(RHS._ec) {
+          _max_value_name_size(RHS._max_value_name_size) {
         RHS._hkey = nullptr;
         RHS._owns = false;
     }
 
     RegKey &RegKey::operator=(RegKey &&RHS) noexcept = default;
 
-    RegKey RegKey::open(const std::wstring &path, int access) {
-        _ec.clear();
+    RegKey RegKey::open(const std::wstring &path, std::error_code &ec, int access) noexcept {
+        ec.clear();
 
         HKEY hkey = nullptr;
         LSTATUS status = RegOpenKeyExW(_hkey, path.c_str(), 0, static_cast<REGSAM>(access), &hkey);
         if (status != ERROR_SUCCESS) {
-            _ec = make_status_error_code(status);
+            ec = make_status_error_code(status);
             return {};
         }
         return RegKey(hkey, true);
     }
 
-    RegKey RegKey::create(const std::wstring &path, int access, int options,
-                          LPSECURITY_ATTRIBUTES sa, bool *exists) {
-        _ec.clear();
+    RegKey RegKey::create(const std::wstring &path, std::error_code &ec, int access, int options,
+                          LPSECURITY_ATTRIBUTES sa, bool *exists) noexcept {
+        ec.clear();
 
         HKEY hkey = nullptr;
         LSTATUS status =
             RegCreateKeyExW(_hkey, path.c_str(), 0, nullptr, static_cast<DWORD>(options),
                             static_cast<REGSAM>(access), sa, &hkey, nullptr);
         if (status != ERROR_SUCCESS) {
-            _ec = make_status_error_code(status);
+            ec = make_status_error_code(status);
             return {};
         }
         return RegKey(hkey, true);
     }
 
-    bool RegKey::close() {
-        _ec.clear();
+    bool RegKey::close(std::error_code &ec) noexcept {
+        ec.clear();
 
         LSTATUS status = RegCloseKey(_hkey);
         if (status != ERROR_SUCCESS) {
-            _ec = make_status_error_code(status);
+            ec = make_status_error_code(status);
             return false;
         }
         _hkey = nullptr;
         return true;
     }
 
-    DWORD RegKey::keyCount() const {
-        _ec.clear();
+    DWORD RegKey::keyCount(std::error_code &ec) const noexcept {
+        ec.clear();
 
         DWORD count;
         LSTATUS status = getRegSubKeyCountAndMaxLen(_hkey, &count, nullptr);
         if (status != ERROR_SUCCESS) {
-            _ec = make_status_error_code(status);
+            ec = make_status_error_code(status);
             return 0;
         }
         return count;
     }
 
-    std::optional<RegKey::KeyData> RegKey::keyAt(DWORD index) const {
-        _ec.clear();
+    std::optional<RegKey::KeyData> RegKey::keyAt(DWORD index, std::error_code &ec) const noexcept {
+        ec.clear();
 
         auto &maxsize = _max_value_name_size;
         KeyData data;
@@ -322,16 +322,13 @@ namespace stdc::windows {
             if (status == ERROR_MORE_DATA) {
                 status = getRegSubKeyCountAndMaxLen(_hkey, nullptr, &maxsize);
                 if (status != ERROR_SUCCESS) {
-                    _ec = make_status_error_code(status);
+                    ec = make_status_error_code(status);
                     return {};
                 }
                 continue;
             }
-            if (status == ERROR_NO_MORE_ITEMS) {
-                return {};
-            }
             if (status != ERROR_SUCCESS) {
-                _ec = make_status_error_code(status);
+                ec = make_status_error_code(status);
                 return {};
             }
             buffer.resize(bufferSize);
@@ -343,20 +340,21 @@ namespace stdc::windows {
         return data;
     }
 
-    DWORD RegKey::valueCount() const {
-        _ec.clear();
+    DWORD RegKey::valueCount(std::error_code &ec) const noexcept {
+        ec.clear();
 
         DWORD count;
         LSTATUS status = getRegValueCountAndMaxLen(_hkey, &count, nullptr);
         if (status != ERROR_SUCCESS) {
-            _ec = make_status_error_code(status);
+            ec = make_status_error_code(status);
             return 0;
         }
         return count;
     }
 
-    std::optional<RegKey::ValueData> RegKey::valueAt(DWORD index, bool query) const {
-        _ec.clear();
+    std::optional<RegKey::ValueData> RegKey::valueAt(DWORD index, std::error_code &ec,
+                                                     bool query) const noexcept {
+        ec.clear();
 
         auto &maxsize = _max_value_name_size;
         RegKey::ValueData data;
@@ -372,16 +370,13 @@ namespace stdc::windows {
             if (status == ERROR_MORE_DATA) {
                 status = getRegValueCountAndMaxLen(_hkey, nullptr, &maxsize);
                 if (status != ERROR_SUCCESS) {
-                    _ec = make_status_error_code(status);
+                    ec = make_status_error_code(status);
                     return {};
                 }
                 continue;
             }
-            if (status == ERROR_NO_MORE_ITEMS) {
-                return {};
-            }
             if (status != ERROR_SUCCESS) {
-                _ec = make_status_error_code(status);
+                ec = make_status_error_code(status);
                 return {};
             }
             buffer.resize(bufferSize);
@@ -402,67 +397,70 @@ namespace stdc::windows {
         return data;
     }
 
-    bool RegKey::flush() {
-        _ec.clear();
+    bool RegKey::flush(std::error_code &ec) noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    bool RegKey::save(const std::wstring &filename) {
-        _ec.clear();
+    bool RegKey::save(const std::wstring &filename, std::error_code &ec) noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    bool RegKey::hasKey(const std::wstring &path) const {
-        _ec.clear();
+    bool RegKey::hasKey(const std::wstring &path, std::error_code &ec) const noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    bool RegKey::hasValue(const std::wstring &name) const {
-        _ec.clear();
+    bool RegKey::hasValue(const std::wstring &name, std::error_code &ec) const noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    RegValue RegKey::value(const std::wstring &name) const {
-        _ec.clear();
+    RegValue RegKey::value(const std::wstring &name, std::error_code &ec) const noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    bool RegKey::setValue(const std::wstring &name, const RegValue &value) {
-        _ec.clear();
+    bool RegKey::setValue(const std::wstring &name, const RegValue &value,
+                          std::error_code &ec) noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    bool RegKey::removeKey(const std::wstring &path) {
-        _ec.clear();
+    bool RegKey::removeKey(const std::wstring &, std::error_code &ec) noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    bool RegKey::removeValue(const std::wstring &name) {
-        _ec.clear();
+    bool RegKey::removeValue(const std::wstring &name, std::error_code &ec) noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    bool RegKey::remove() {
-        _ec.clear();
+    bool RegKey::remove(std::error_code &ec) noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    bool RegKey::notify(HANDLE event, bool watchSubtree, int notifyFilter, bool async) {
-        _ec.clear();
+    bool RegKey::notify(std::error_code &ec, HANDLE event, bool watchSubtree, int notifyFilter,
+                        bool async) noexcept {
+        ec.clear();
         // TODO
         return {};
     }
 
-    void RegKey::key_iterator::fetch() const {
+    void RegKey::key_iterator::fetch(std::error_code &ec) const noexcept {
+        _data = {};
         if (!_key || _index < 0) {
             return;
         }
@@ -471,15 +469,23 @@ namespace stdc::windows {
             return;
         }
 
-        auto result = _key->keyAt(_index);
-        if (!result || _key->_ec.value() != ERROR_SUCCESS) {
+        auto result = _key->keyAt(_index, ec);
+        if (ec.value() == ERROR_NO_MORE_ITEMS) {
+            ec.clear();
             _index = -1;
             return;
         }
-        _data = result.value();
+        if (ec.value() != ERROR_SUCCESS) {
+            _index = -1;
+            return;
+        }
+        if (result)
+            _data = result.value();
+        return;
     }
 
-    void RegKey::value_iterator::fetch() const {
+    void RegKey::value_iterator::fetch(std::error_code &ec) const noexcept {
+        _data = {};
         if (!_key || _index < 0) {
             return;
         }
@@ -488,12 +494,19 @@ namespace stdc::windows {
             return;
         }
 
-        auto result = _key->valueAt(_index, _query);
-        if (!result || _key->_ec.value() != ERROR_SUCCESS) {
+        auto result = _key->valueAt(_index, ec, _query);
+        if (ec.value() == ERROR_NO_MORE_ITEMS) {
+            ec.clear();
             _index = -1;
             return;
         }
-        _data = result.value();
+        if (ec.value() != ERROR_SUCCESS) {
+            _index = -1;
+            return;
+        }
+        if (result)
+            _data = result.value();
+        return;
     }
 
 }

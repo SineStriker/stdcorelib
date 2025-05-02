@@ -8,6 +8,7 @@
 #include <memory>
 #include <cstdint>
 #include <system_error>
+#include <stdexcept>
 #include <optional>
 
 #include <stdcorelib/stdc_global.h>
@@ -165,32 +166,59 @@ namespace stdc::windows {
         RegKey &operator=(RegKey &&RHS) noexcept;
 
     public:
-        RegKey open(const std::wstring &path, int access = DA_Read);
-        RegKey create(const std::wstring &path, int access = DA_Read, int options = CO_NonVolatile,
-                      LPSECURITY_ATTRIBUTES sa = nullptr, bool *exists = nullptr);
-        bool close();
+        inline RegKey open(const std::wstring &path, int access = DA_Read);
+        RegKey open(const std::wstring &path, std::error_code &ec, int access = DA_Read) noexcept;
 
-        DWORD keyCount() const;
-        std::optional<KeyData> keyAt(DWORD index) const;
+        inline RegKey create(const std::wstring &path, int access = DA_Read,
+                             int options = CO_NonVolatile, LPSECURITY_ATTRIBUTES sa = nullptr,
+                             bool *exists = nullptr);
+        RegKey create(const std::wstring &path, std::error_code &ec, int access = DA_Read,
+                      int options = CO_NonVolatile, LPSECURITY_ATTRIBUTES sa = nullptr,
+                      bool *exists = nullptr) noexcept;
 
-        DWORD valueCount() const;
-        std::optional<ValueData> valueAt(DWORD index, bool query = false) const;
+        inline bool close();
+        bool close(std::error_code &ec) noexcept;
 
-        bool flush();
-        bool save(const std::wstring &filename);
+        inline DWORD keyCount() const;
+        DWORD keyCount(std::error_code &ec) const noexcept;
+        inline std::optional<KeyData> keyAt(DWORD index) const;
+        std::optional<KeyData> keyAt(DWORD index, std::error_code &ec) const noexcept;
 
-        bool hasKey(const std::wstring &path) const;
-        bool hasValue(const std::wstring &name) const;
+        inline DWORD valueCount() const;
+        DWORD valueCount(std::error_code &ec) const noexcept;
+        inline std::optional<ValueData> valueAt(DWORD index, bool query = false) const;
+        std::optional<ValueData> valueAt(DWORD index, std::error_code &ec,
+                                         bool query = false) const noexcept;
 
-        RegValue value(const std::wstring &name) const;
-        bool setValue(const std::wstring &name, const RegValue &value);
+        inline bool flush();
+        bool flush(std::error_code &ec) noexcept;
+        inline bool save(const std::wstring &filename);
+        bool save(const std::wstring &filename, std::error_code &ec) noexcept;
 
-        bool removeKey(const std::wstring &path);
-        bool removeValue(const std::wstring &name);
-        bool remove();
+        inline bool hasKey(const std::wstring &path) const;
+        bool hasKey(const std::wstring &path, std::error_code &ec) const noexcept;
+        inline bool hasValue(const std::wstring &name) const;
+        bool hasValue(const std::wstring &name, std::error_code &ec) const noexcept;
 
-        bool notify(HANDLE event = nullptr, bool watchSubtree = false,
-                    int notifyFilter = NF_ChangeName | NF_ChangeAttributes, bool async = false);
+        inline RegValue value(const std::wstring &name) const;
+        RegValue value(const std::wstring &name, std::error_code &ec) const noexcept;
+        inline bool setValue(const std::wstring &name, const RegValue &value);
+        bool setValue(const std::wstring &name, const RegValue &value,
+                      std::error_code &ec) noexcept;
+
+        inline bool removeKey(const std::wstring &path);
+        bool removeKey(const std::wstring &path, std::error_code &ec) noexcept;
+        inline bool removeValue(const std::wstring &name);
+        bool removeValue(const std::wstring &name, std::error_code &ec) noexcept;
+        inline bool remove();
+        bool remove(std::error_code &ec) noexcept;
+
+        inline bool notify(HANDLE event = nullptr, bool watchSubtree = false,
+                           int notifyFilter = NF_ChangeName | NF_ChangeAttributes,
+                           bool async = false);
+        bool notify(std::error_code &ec, HANDLE event = nullptr, bool watchSubtree = false,
+                    int notifyFilter = NF_ChangeName | NF_ChangeAttributes,
+                    bool async = false) noexcept;
 
         inline HKEY handle() const {
             return _hkey;
@@ -198,10 +226,6 @@ namespace stdc::windows {
 
         inline bool isValid() const {
             return _hkey != nullptr;
-        }
-
-        inline std::error_code errorCode() const {
-            return _ec;
         }
 
         class key_enumerator;
@@ -215,7 +239,7 @@ namespace stdc::windows {
             using reference = const value_type &;
 
             // default constructor creates an invalid iterator
-            inline key_iterator() noexcept : _key(nullptr), _index(0) {
+            inline key_iterator() noexcept : _key(nullptr), _ec(nullptr), _index(0) {
             }
 
             inline reference operator*() const noexcept {
@@ -247,14 +271,27 @@ namespace stdc::windows {
             }
 
         private:
-            inline key_iterator(const RegKey *key, DWORD index = 0, int maxsize = 0) noexcept
-                : _key(key), _index(index) {
+            inline key_iterator(const RegKey *key, DWORD index, std::error_code *ec) noexcept
+                : _key(key), _ec(ec), _index(index) {
                 fetch();
             }
 
-            STDCORELIB_EXPORT void fetch() const;
+            STDCORELIB_EXPORT void fetch(std::error_code &ec) const noexcept;
+
+            inline void fetch() const {
+                std::error_code ec;
+                fetch(ec);
+                if (ec.value() == ERROR_SUCCESS)
+                    return;
+                if (_ec) {
+                    *_ec = ec;
+                    return;
+                }
+                throw std::system_error(ec);
+            }
 
             const RegKey *_key;
+            mutable std::error_code *_ec;
             mutable DWORD _index;
             mutable value_type _data;
 
@@ -263,17 +300,18 @@ namespace stdc::windows {
 
         class key_enumerator {
         public:
-            inline key_enumerator(const RegKey *key) : _key(key) {
+            inline key_enumerator(const RegKey *key, std::error_code *ec) : _key(key) {
             }
             inline key_iterator begin() const {
-                return key_iterator(_key, 0);
+                return key_iterator(_key, 0, _ec);
             }
             inline key_iterator end() const {
-                return key_iterator(_key, -1);
+                return key_iterator(_key, -1, _ec);
             }
 
         private:
             const RegKey *_key;
+            std::error_code *_ec;
         };
 
         class value_enumerator;
@@ -287,7 +325,8 @@ namespace stdc::windows {
             using reference = const value_type &;
 
             // default constructor creates an end iterator
-            inline value_iterator() noexcept : _key(nullptr), _index(0), _query(false) {
+            inline value_iterator() noexcept
+                : _key(nullptr), _ec(nullptr), _query(false), _index(0) {
             }
 
             inline reference operator*() const noexcept {
@@ -319,14 +358,28 @@ namespace stdc::windows {
             }
 
         private:
-            inline value_iterator(const RegKey *key, DWORD index = 0, bool query = false) noexcept
-                : _key(key), _query(query), _index(index) {
+            inline value_iterator(const RegKey *key, DWORD index, std::error_code *ec,
+                                  bool query) noexcept
+                : _key(key), _ec(ec), _query(query), _index(index) {
                 fetch();
             }
 
-            STDCORELIB_EXPORT void fetch() const;
+            STDCORELIB_EXPORT void fetch(std::error_code &ec) const noexcept;
+
+            inline void fetch() const {
+                std::error_code ec;
+                fetch(ec);
+                if (ec.value() == ERROR_SUCCESS)
+                    return;
+                if (_ec) {
+                    *_ec = ec;
+                    return;
+                }
+                throw std::system_error(ec);
+            }
 
             const RegKey *_key;
+            mutable std::error_code *_ec;
             bool _query;
             mutable DWORD _index;
             mutable value_type _data;
@@ -336,28 +389,36 @@ namespace stdc::windows {
 
         class value_enumerator {
         public:
-            inline value_enumerator(const RegKey *key, bool query) : _key(key), _query(query) {
+            inline value_enumerator(const RegKey *key, std::error_code *ec, bool query)
+                : _key(key), _ec(ec), _query(query) {
             }
             inline value_iterator begin() const {
-                return value_iterator(_key, 0, _query);
+                return value_iterator(_key, 0, _ec, _query);
             }
             inline value_iterator end() const {
-                return value_iterator(_key, -1, _query);
+                return value_iterator(_key, -1, _ec, _query);
             }
 
         private:
             const RegKey *_key;
+            std::error_code *_ec;
             bool _query;
         };
 
         inline key_enumerator enumKeys() const {
-            _ec.clear();
-            return key_enumerator(this);
+            return key_enumerator(this, nullptr);
+        }
+
+        inline key_enumerator enumKeys(std::error_code &ec) const {
+            return key_enumerator(this, &ec);
         }
 
         inline value_enumerator enumValues(bool query = false) const {
-            _ec.clear();
-            return value_enumerator(this, query);
+            return value_enumerator(this, nullptr, query);
+        }
+
+        inline value_enumerator enumValues(std::error_code &ec, bool query = false) const {
+            return value_enumerator(this, &ec, query);
         }
 
     protected:
@@ -368,13 +429,149 @@ namespace stdc::windows {
         bool _owns;
         mutable DWORD _max_key_name_size = 0;
         mutable DWORD _max_value_name_size = 0;
-        mutable std::error_code _ec;
 
         STDCORELIB_DISABLE_COPY(RegKey);
 
         friend class key_iterator;
         friend class value_iterator;
     };
+
+    inline RegKey RegKey::open(const std::wstring &path, int access) {
+        std::error_code ec;
+        auto result = open(path, ec, access);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline RegKey RegKey::create(const std::wstring &path, int access, int options,
+                                 LPSECURITY_ATTRIBUTES sa, bool *exists) {
+        std::error_code ec;
+        auto result = create(path, ec, access, options, sa, exists);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::close() {
+        std::error_code ec;
+        auto result = close(ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline DWORD RegKey::keyCount() const {
+        std::error_code ec;
+        auto result = keyCount(ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline std::optional<RegKey::KeyData> RegKey::keyAt(DWORD index) const {
+        std::error_code ec;
+        auto result = keyAt(index, ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline DWORD RegKey::valueCount() const {
+        std::error_code ec;
+        auto result = valueCount(ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline std::optional<RegKey::ValueData> RegKey::valueAt(DWORD index, bool query) const {
+        std::error_code ec;
+        auto result = valueAt(index, ec, query);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::flush() {
+        std::error_code ec;
+        auto result = flush(ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::save(const std::wstring &filename) {
+        std::error_code ec;
+        auto result = save(filename, ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::hasKey(const std::wstring &path) const {
+        std::error_code ec;
+        auto result = hasKey(path, ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::hasValue(const std::wstring &name) const {
+        std::error_code ec;
+        auto result = hasValue(name, ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline RegValue RegKey::value(const std::wstring &name) const {
+        std::error_code ec;
+        auto result = value(name, ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::setValue(const std::wstring &name, const RegValue &value) {
+        std::error_code ec;
+        auto result = setValue(name, value, ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::removeKey(const std::wstring &path) {
+        std::error_code ec;
+        auto result = removeKey(path, ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::removeValue(const std::wstring &name) {
+        std::error_code ec;
+        auto result = removeValue(name, ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::remove() {
+        std::error_code ec;
+        auto result = remove(ec);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline bool RegKey::notify(HANDLE event, bool watchSubtree, int notifyFilter, bool async) {
+        std::error_code ec;
+        auto result = notify(ec, event, watchSubtree, notifyFilter, async);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
 
 }
 
