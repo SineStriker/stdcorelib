@@ -32,7 +32,7 @@ namespace stdc {
     }
 
     static inline std::error_code make_last_error_code() {
-        return std::error_code(GetLastError(), std::system_category());
+        return std::error_code(GetLastError(), windows_utf8_category());
     }
 
     bool Popen::Impl::_get_devnull() {
@@ -123,7 +123,7 @@ namespace stdc {
         const auto &convert_from_fd = [this](HANDLE &handle, int fd) {
             auto tmp_handle = (HANDLE) _get_osfhandle(fd);
             if (tmp_handle == INVALID_HANDLE_VALUE) {
-                error_code = std::error_code(ERROR_INVALID_HANDLE, std::system_category());
+                error_code = std::error_code(ERROR_INVALID_HANDLE, windows_utf8_category());
                 error_api = "_get_osfhandle";
                 return false;
             };
@@ -524,7 +524,7 @@ namespace stdc {
     _cleanup:
         if (err_api) {
             _free_attribute_list(attribute_list);
-            return {std::error_code(err, std::system_category()), err_api};
+            return {std::error_code(err, windows_utf8_category()), err_api};
         }
         return {{}, {}};
     }
@@ -752,14 +752,14 @@ namespace stdc {
 
             std::ignore = GetExitCodeProcess(_handle, &exitCode);
             if (exitCode == STILL_ACTIVE) {
-                error_code.assign(err, std::system_category());
+                error_code.assign(err, windows_utf8_category());
                 return false;
             }
             returncode = exitCode;
             _cleanup();
             return true;
         }
-        error_code.assign(err, std::system_category());
+        error_code.assign(err, windows_utf8_category());
         return false;
     }
 
@@ -803,7 +803,7 @@ namespace stdc {
             error_code = make_last_error_code();
             return false;
         }
-        error_code = std::error_code(ERROR_NOT_SUPPORTED, std::system_category());
+        error_code = std::error_code(ERROR_NOT_SUPPORTED, windows_utf8_category());
         return false;
     }
 

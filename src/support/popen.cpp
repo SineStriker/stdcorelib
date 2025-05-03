@@ -347,24 +347,26 @@ namespace stdc {
         }
 
         // system api error
-        if (impl.error_api) {
-#ifdef _WIN32
-            impl.error_code = std::error_code(impl.error_code.value(), windows_utf8_category());
-#endif
-            if (err_msg)
+        if (err_msg) {
+            if (impl.error_api) {
                 *err_msg = formatN("%1: %2", impl.error_api, impl.error_code.message());
-            return false;
-        }
+                return false;
+            }
 
-        // invalid argument, file no found, etc.
-        if (!impl.error_msg.empty()) {
-            if (err_msg)
+            // invalid argument, file no found, etc.
+            if (!impl.error_msg.empty()) {
                 *err_msg = impl.error_msg;
-            return false;
-        }
-        // unknown error
-        if (err_msg)
+                return false;
+            }
+
+            if (impl.error_code.value() != 0) {
+                *err_msg = impl.error_code.message();
+                return false;
+            }
+
+            // unknown error
             *err_msg = "unknown error";
+        }
         return false;
     }
 
