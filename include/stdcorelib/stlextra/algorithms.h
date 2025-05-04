@@ -7,17 +7,17 @@
 
 namespace stdc {
 
-    template <typename ForwardIterator>
-    void deleteAll(ForwardIterator begin, ForwardIterator end) {
+    template <class ForwardIterator>
+    void delete_all(ForwardIterator begin, ForwardIterator end) {
         while (begin != end) {
             delete *begin;
             ++begin;
         }
     }
 
-    template <typename Container>
-    inline void deleteAll(const Container &c) {
-        deleteAll(c.begin(), c.end());
+    template <class Container>
+    inline void delete_all(const Container &c) {
+        delete_all(c.begin(), c.end());
     }
 
     inline constexpr size_t hash(size_t key, size_t seed = 0) noexcept {

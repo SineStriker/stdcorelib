@@ -191,7 +191,7 @@ namespace stdc {
         /*!
             Returns the command line arguments in UTF-8 encoding.
         */
-        std::vector<std::string> command_line_arguments() {
+        array_view<std::string> command_line_arguments() {
             static auto result = sys_command_line_arguments();
             return result;
         }

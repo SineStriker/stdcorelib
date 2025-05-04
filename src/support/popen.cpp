@@ -414,7 +414,7 @@ namespace stdc {
         return impl.executable;
     }
 
-    const std::vector<std::string> &Popen::args() const {
+    array_view<std::string> Popen::args() const {
         __stdc_impl_t;
         return impl.args;
     }

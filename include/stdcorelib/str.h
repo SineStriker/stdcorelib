@@ -13,6 +13,7 @@
 #include <system_error>
 
 #include <stdcorelib/stdc_global.h>
+#include <stdcorelib/adt/array_view.h>
 
 namespace stdc {
 
@@ -135,11 +136,11 @@ namespace stdc {
             }
         }
 
-        STDCORELIB_EXPORT std::string join(const std::vector<std::string> &v,
+        STDCORELIB_EXPORT std::string join(const array_view<std::string> &v,
                                            const std::string_view &delimiter);
 
         // @overload: join(vector<string_view>, string_view)
-        STDCORELIB_EXPORT std::string join(const std::vector<std::string_view> &v,
+        STDCORELIB_EXPORT std::string join(const array_view<std::string_view> &v,
                                            const std::string_view &delimiter);
 
         STDCORELIB_EXPORT std::vector<std::string_view> split(const std::string_view &s,
@@ -150,7 +151,7 @@ namespace stdc {
                                                          const std::string_view &delimiter);
 
         STDCORELIB_EXPORT std::string format(const std::string_view &fmt,
-                                             const std::vector<std::string> &args);
+                                             const array_view<std::string> &args);
 
         template <class Arg1, class... Args>
         std::string formatN(const std::string_view &fmt, Arg1 &&arg1, Args &&...args) {

@@ -55,7 +55,12 @@ set(STDCORELIB_INSTALL_NAME ${PROJECT_NAME})
 # ----------------------------------
 if(TRUE)
     file(GLOB _common_src src/*.cpp)
-    file(GLOB_RECURSE _subdir_src src/3rdparty/*.cpp src/support/*.cpp)
+    file(GLOB_RECURSE _subdir_src
+        src/3rdparty/*.cpp
+        src/support/*.cpp
+        src/adt/*.cpp
+        src/stlextra/*.cpp
+    )
     file(GLOB _platform_common_src src/platform/*.cpp)
 
     if(WIN32)
@@ -130,6 +135,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     include/stdcorelib/experimental
     include/stdcorelib/platform
     include/stdcorelib/support
+    include/stdcorelib/adt
+    include/stdcorelib/stlextra
 )
 
 if(WIN32)

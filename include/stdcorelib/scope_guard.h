@@ -19,21 +19,21 @@ namespace stdc {
         }
 
         scope_guard(scope_guard &&RHS) noexcept
-            : m_func(std::move(RHS.m_func)), m_invoke(std::exchange(RHS.m_invoke, false)) {
+            : m_func(std::move(RHS.m_func)), m_active(std::exchange(RHS.m_active, false)) {
         }
 
         ~scope_guard() noexcept {
-            if (m_invoke)
+            if (m_active)
                 m_func();
         }
 
         void dismiss() noexcept {
-            m_invoke = false;
+            m_active = false;
         }
 
     protected:
         F m_func;
-        bool m_invoke = true;
+        bool m_active = true;
 
         STDCORELIB_DISABLE_COPY(scope_guard)
     };

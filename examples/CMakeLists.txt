@@ -2,7 +2,7 @@ file(GLOB _common_src *.cpp)
 file(GLOB_RECURSE _subdir_src support/*.cpp)
 
 if(WIN32)
-    file(GLOB _platform_src platforms/windows/*.cpp)
+    file(GLOB _platform_src platform/windows/*.cpp)
 else()
     set(_platform_src)
 endif()

@@ -12,7 +12,8 @@
 #include <optional>
 
 #include <stdcorelib/stdc_global.h>
-#include <stdcorelib/iterator.h>
+#include <stdcorelib/stlextra/iterator.h>
+#include <stdcorelib/adt/array_view.h>
 
 namespace stdc::windows {
 
@@ -31,8 +32,9 @@ namespace stdc::windows {
         };
 
         RegValue(Type type = None);
-        RegValue(const uint8_t *data, int size);
-        RegValue(std::vector<uint8_t> &&data, int size);
+        RegValue(const array_view<uint8_t> &data);
+        inline RegValue(const uint8_t *data, int size);
+        RegValue(std::vector<uint8_t> &&data);
         RegValue(int32_t value);
         inline RegValue(uint32_t value);
         RegValue(int64_t value);
@@ -40,7 +42,7 @@ namespace stdc::windows {
         RegValue(const std::wstring &value, Type type = String);
         RegValue(std::wstring &&value, Type type = String);
         RegValue(const wchar_t *value, int size = -1, Type type = String);
-        RegValue(const std::vector<std::wstring> &value);
+        RegValue(const array_view<std::wstring> &value);
         RegValue(std::vector<std::wstring> &&value);
         RegValue(const void *data, int type); // data shouldn't be deleted before RegValue destructs
         ~RegValue();
@@ -55,13 +57,13 @@ namespace stdc::windows {
             return t;
         }
 
-        const std::vector<uint8_t> &toBinary() const;
+        array_view<uint8_t> toBinary() const;
         int32_t toInt32() const;
         inline uint32_t toUInt32() const;
         int64_t toInt64() const;
         inline uint64_t toUInt64() const;
         const std::wstring &toString() const;
-        const std::vector<std::wstring> &toMultiString() const;
+        array_view<std::wstring> toMultiString() const;
         std::wstring toExpandString() const;
         std::wstring toLink() const;
 
@@ -107,6 +109,10 @@ namespace stdc::windows {
         struct Comp;
         std::shared_ptr<Comp> comp;
     };
+
+    inline RegValue::RegValue(const uint8_t *data, int size)
+        : RegValue(array_view<uint8_t>(data, size)) {
+    }
 
     inline RegValue::RegValue(uint32_t value) : RegValue(static_cast<int32_t>(value)) {
     }
@@ -244,6 +250,10 @@ namespace stdc::windows {
 
         inline RegValue value(const std::wstring &name) const;
         RegValue value(const std::wstring &name, std::error_code &ec) const noexcept;
+        inline RegValue valueOr(const std::wstring &name,
+                                const RegValue &defaultValue = RegValue::Invalid) const;
+        inline RegValue valueOr(const std::wstring &name, std::error_code &ec,
+                                const RegValue &defaultValue = RegValue::Invalid) const noexcept;
         inline bool setValue(const std::wstring &name, const RegValue &value);
         bool setValue(const std::wstring &name, const RegValue &value,
                       std::error_code &ec) noexcept;
@@ -664,6 +674,24 @@ namespace stdc::windows {
         auto result = value(name, ec);
         if (ec.value() != ERROR_SUCCESS)
             throw std::system_error(ec);
+        return result;
+    }
+
+    inline RegValue RegKey::valueOr(const std::wstring &name, const RegValue &defaultValue) const {
+        std::error_code ec;
+        auto result = valueOr(name, ec, defaultValue);
+        if (ec.value() != ERROR_SUCCESS)
+            throw std::system_error(ec);
+        return result;
+    }
+
+    inline RegValue RegKey::valueOr(const std::wstring &name, std::error_code &ec,
+                                    const RegValue &defaultValue) const noexcept {
+        auto result = value(name, ec);
+        if (ec.value() == ERROR_FILE_NOT_FOUND) {
+            ec.clear();
+            return defaultValue;
+        }
         return result;
     }
 

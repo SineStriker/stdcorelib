@@ -130,11 +130,11 @@ namespace stdc::windows {
         }
     }
 
-    RegValue::RegValue(const uint8_t *data, int size) : t(Binary), comp(std::make_shared<Comp>()) {
-        comp->s = std::vector<uint8_t>(data, data + size);
+    RegValue::RegValue(const array_view<uint8_t> &data) : t(Binary), comp(std::make_shared<Comp>()) {
+        comp->s = data.vec();
     }
 
-    RegValue::RegValue(std::vector<uint8_t> &&data, int size)
+    RegValue::RegValue(std::vector<uint8_t> &&data)
         : t(Binary), comp(std::make_shared<Comp>()) {
         comp->s = std::move(data);
     }
@@ -161,9 +161,9 @@ namespace stdc::windows {
         comp->s = size < 0 ? std::wstring(value) : std::wstring(value, size);
     }
 
-    RegValue::RegValue(const std::vector<std::wstring> &value)
+    RegValue::RegValue(const array_view<std::wstring> &value)
         : t(MultiString), comp(std::make_shared<Comp>()) {
-        comp->ms = value;
+        comp->ms = value.vec();
     }
 
     RegValue::RegValue(std::vector<std::wstring> &&value)
@@ -185,10 +185,9 @@ namespace stdc::windows {
 
     RegValue &RegValue::operator=(RegValue &&RHS) noexcept = default;
 
-    const std::vector<uint8_t> &RegValue::toBinary() const {
-        static std::vector<uint8_t> empty;
+    array_view<uint8_t> RegValue::toBinary() const {
         if (!isBinary()) {
-            return empty;
+            return {};
         }
         assert(comp && comp->s.index() == 1);
         return std::get<1>(comp->s);
@@ -224,11 +223,9 @@ namespace stdc::windows {
         return empty;
     }
 
-    const std::vector<std::wstring> &RegValue::toMultiString() const {
-        static std::vector<std::wstring> empty;
-
+    array_view<std::wstring> RegValue::toMultiString() const {
         if (!isMultiString()) {
-            return empty;
+            return {};
         }
         assert(comp && (comp->s.index() == 2 || comp->ms));
         if (!comp->ms) {

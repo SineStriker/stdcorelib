@@ -10,6 +10,7 @@
 #include <functional>
 
 #include <stdcorelib/stdc_global.h>
+#include <stdcorelib/adt/array_view.h>
 
 namespace stdc {
 
@@ -132,7 +133,7 @@ namespace stdc {
         // properties
         //
         const std::filesystem::path &executable() const;
-        const std::vector<std::string> &args() const;
+        array_view<std::string> args() const;
 
         FILE *stdin_() const;
         FILE *stdout_() const;
