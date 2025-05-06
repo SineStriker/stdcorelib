@@ -21,6 +21,7 @@ namespace stdc::windows {
     static T qFromBigEndian(const uint8_t *data) {
         // TODO: implement
         assert(false);
+        std::abort();
         return {};
     }
 
@@ -64,28 +65,28 @@ namespace stdc::windows {
 
     struct RegValue::Comp {
         mutable std::variant<std::monostate, std::vector<uint8_t>, std::wstring> s;
-        mutable std::optional<std::vector<std::wstring>> ms;
+        mutable std::optional<std::vector<std::wstring>> sl;
 
-        void s2ms() const {
+        void s2sl() const {
             assert(s.index() == 2);
 
-            std::vector<std::wstring> ms;
-            if (wchar_t *multiStrings = std::get<2>(s).data()) {
-                for (const wchar_t *entry = multiStrings; *entry;) {
+            std::vector<std::wstring> stringList;
+            if (wchar_t *multiStr = std::get<2>(s).data()) {
+                for (const wchar_t *entry = multiStr; *entry;) {
                     std::wstring entryStr(entry);
                     auto entryLen = entryStr.size();
-                    ms.emplace_back(std::move(entryStr));
+                    stringList.emplace_back(std::move(entryStr));
                     entry += entryLen + 1;
                 }
             }
-            ms = std::move(ms);
+            sl = std::move(stringList);
         }
 
-        void ms2s() const {
-            assert(ms);
+        void sl2s() const {
+            assert(sl);
 
             std::wstring env_str;
-            for (const auto &item : std::as_const(ms.value())) {
+            for (const auto &item : std::as_const(sl.value())) {
                 env_str += item;
                 env_str.push_back(L'\0');
             }
@@ -120,9 +121,9 @@ namespace stdc::windows {
                 comp = std::make_shared<Comp>();
                 comp->s = std::wstring();
                 break;
-            case MultiString:
+            case StringList:
                 comp = std::make_shared<Comp>();
-                comp->ms = std::vector<std::wstring>();
+                comp->sl = std::vector<std::wstring>();
                 break;
             default:
                 d.p = nullptr;
@@ -130,12 +131,12 @@ namespace stdc::windows {
         }
     }
 
-    RegValue::RegValue(const array_view<uint8_t> &data) : t(Binary), comp(std::make_shared<Comp>()) {
+    RegValue::RegValue(const array_view<uint8_t> &data)
+        : t(Binary), comp(std::make_shared<Comp>()) {
         comp->s = data.vec();
     }
 
-    RegValue::RegValue(std::vector<uint8_t> &&data)
-        : t(Binary), comp(std::make_shared<Comp>()) {
+    RegValue::RegValue(std::vector<uint8_t> &&data) : t(Binary), comp(std::make_shared<Comp>()) {
         comp->s = std::move(data);
     }
 
@@ -147,28 +148,87 @@ namespace stdc::windows {
         d.qw = value;
     }
 
+    static std::wstring rawStringToStringList(const wchar_t *value, int size) {
+        if (size < 0) {
+            if (const wchar_t *stringList = value) {
+                const wchar_t *entry;
+                for (entry = stringList; *entry;) {
+                    std::wstring entryStr(entry);
+                    auto entryLen = entryStr.size();
+                    entry += entryLen + 1;
+                }
+                return std::wstring(value, entry - value + 1);
+            }
+            return std::wstring(1, L'\0');
+        }
+
+        std::wstring tmp(value, size);
+        if (tmp.empty()) {
+            tmp.push_back(L'\0');
+            return tmp;
+        }
+        if (tmp.back() != L'\0') {
+            tmp += std::wstring(2, L'\0');
+            return tmp;
+        }
+        if (tmp.size() > 1 && tmp[tmp.size() - 2] != L'\0') {
+            tmp.push_back(L'\0');
+            return tmp;
+        }
+        return tmp;
+    }
+
     RegValue::RegValue(const std::wstring &value, Type type)
-        : t(type), comp(std::make_shared<Comp>()) {
-        comp->s = value;
+        : RegValue(value.data(), value.size(), type) {
     }
 
     RegValue::RegValue(std::wstring &&value, Type type) : t(type), comp(std::make_shared<Comp>()) {
-        comp->s = std::move(value);
+        switch (type) {
+            case String:
+            case ExpandString:
+            case Link: {
+                comp->s = std::move(value);
+                break;
+            }
+            case StringList: {
+                comp->s = rawStringToStringList(value.data(), value.size());
+                break;
+            }
+            default: {
+                t = Invalid;
+                break;
+            }
+        }
     }
 
-    RegValue::RegValue(const wchar_t *value, int size, Type type)
-        : t(type), comp(std::make_shared<Comp>()) {
-        comp->s = size < 0 ? std::wstring(value) : std::wstring(value, size);
+    RegValue::RegValue(const wchar_t *value, int size, Type type) : t(type) {
+        switch (type) {
+            case String:
+            case ExpandString:
+            case Link: {
+                comp = std::make_shared<Comp>();
+                comp->s = size < 0 ? std::wstring(value) : std::wstring(value, size);
+                break;
+            }
+            case StringList:
+                comp = std::make_shared<Comp>();
+                comp->s = rawStringToStringList(value, size);
+                break;
+            default: {
+                t = Invalid;
+                break;
+            }
+        }
     }
 
     RegValue::RegValue(const array_view<std::wstring> &value)
-        : t(MultiString), comp(std::make_shared<Comp>()) {
-        comp->ms = value.vec();
+        : t(StringList), comp(std::make_shared<Comp>()) {
+        comp->sl = value.vec();
     }
 
     RegValue::RegValue(std::vector<std::wstring> &&value)
-        : t(MultiString), comp(std::make_shared<Comp>()) {
-        comp->ms = std::move(value);
+        : t(StringList), comp(std::make_shared<Comp>()) {
+        comp->sl = std::move(value);
     }
 
     RegValue::RegValue(const void *data, int type) : t(type) {
@@ -210,10 +270,10 @@ namespace stdc::windows {
     const std::wstring &RegValue::toString() const {
         static std::wstring empty;
 
-        if (isMultiString()) {
-            assert(comp && (comp->s.index() == 2 || comp->ms));
+        if (isStringList()) {
+            assert(comp && (comp->s.index() == 2 || comp->sl));
             if (comp->s.index() == 0) {
-                comp->ms2s();
+                comp->sl2s();
             }
             return std::get<2>(comp->s);
         }
@@ -223,15 +283,15 @@ namespace stdc::windows {
         return empty;
     }
 
-    array_view<std::wstring> RegValue::toMultiString() const {
-        if (!isMultiString()) {
+    array_view<std::wstring> RegValue::toStringList() const {
+        if (!isStringList()) {
             return {};
         }
-        assert(comp && (comp->s.index() == 2 || comp->ms));
-        if (!comp->ms) {
-            comp->s2ms();
+        assert(comp && (comp->s.index() == 2 || comp->sl));
+        if (!comp->sl) {
+            comp->s2sl();
         }
-        return comp->ms.value();
+        return comp->sl.value();
     }
 
     std::wstring RegValue::toExpandString() const {
@@ -248,6 +308,32 @@ namespace stdc::windows {
         }
         assert(comp && comp->s.index() == 2);
         return toString();
+    }
+
+    bool RegValue::operator==(const RegValue &RHS) const {
+        if (t != RHS.t) {
+            return false;
+        }
+        switch (t) {
+            case None:
+            case Invalid:
+                return true;
+            case Binary:
+                return toBinary().vec() == RHS.toBinary();
+            case Int32:
+                return toInt32() == RHS.toInt32();
+            case Int64:
+                return toInt64() == RHS.toInt64();
+            case String:
+            case ExpandString:
+            case Link:
+                return toString() == RHS.toString();
+            case StringList:
+                return toStringList() == RHS.toStringList();
+            default:
+                break;
+        }
+        return false;
     }
 
     /*!
@@ -508,8 +594,10 @@ namespace stdc::windows {
         DWORD dataType = REG_NONE;
         DWORD dataSize = 0;
         LONG ret = RegQueryValueExW(_hkey, subKeyC, nullptr, &dataType, nullptr, &dataSize);
-        if (ret != ERROR_SUCCESS)
+        if (ret != ERROR_SUCCESS) {
+            ec = make_status_error_code(ret);
             return RegValue(RegValue::Invalid);
+        }
 
         // Get the value.
         llvm::SmallVector<unsigned char, 512> data(dataSize);
@@ -524,25 +612,31 @@ namespace stdc::windows {
         switch (dataType) {
             case REG_SZ: {
                 if (dataSize > 0) {
-                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()),
-                                    dataSize / sizeof(wchar_t));
+                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()));
                 }
                 return RegValue(RegValue::Type::String);
             }
             case REG_EXPAND_SZ: {
                 if (dataSize > 0) {
-                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()),
-                                    dataSize / sizeof(wchar_t), RegValue::ExpandString);
+                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()), -1,
+                                    RegValue::ExpandString);
                 }
                 return RegValue(RegValue::Type::ExpandString);
+            }
+            case REG_LINK: {
+                if (dataSize > 0) {
+                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()), -1,
+                                    RegValue::Link);
+                }
+                return RegValue(RegValue::Type::Link);
             }
 
             case REG_MULTI_SZ: {
                 if (dataSize > 0) {
                     return RegValue(reinterpret_cast<const wchar_t *>(data.data()),
-                                    dataSize / sizeof(wchar_t), RegValue::MultiString);
+                                    dataSize / sizeof(wchar_t), RegValue::StringList);
                 }
-                return RegValue(RegValue::MultiString);
+                return RegValue(RegValue::StringList);
             }
 
             case REG_NONE: {
@@ -578,6 +672,14 @@ namespace stdc::windows {
 
         ec.clear();
 
+        const auto &writeString = [&](DWORD type) {
+            auto data = value.toStringView();
+            return RegSetValueExW(_hkey, name.c_str(), 0, type,
+                                  data.empty() ? nullptr
+                                               : reinterpret_cast<const BYTE *>(data.data()),
+                                  data.size() * sizeof(wchar_t));
+        };
+
         LSTATUS ret = ERROR_SUCCESS;
         switch (value.type()) {
             case RegValue::Invalid:
@@ -588,40 +690,36 @@ namespace stdc::windows {
             }
             case RegValue::Binary: {
                 auto data = value.toBinary();
-                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_BINARY, data.data(), data.size());
+                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_BINARY,
+                                     data.empty() ? nullptr : data.data(), data.size());
                 break;
             }
             case RegValue::Int32: {
                 auto num = value.toInt32();
-                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_DWORD, reinterpret_cast<const BYTE*>(&num), sizeof(num));
+                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_DWORD,
+                                     reinterpret_cast<const BYTE *>(&num), sizeof(num));
                 break;
             }
             case RegValue::Int64: {
                 auto num = value.toInt64();
-                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_QWORD, reinterpret_cast<const BYTE*>(&num), sizeof(num));
+                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_QWORD,
+                                     reinterpret_cast<const BYTE *>(&num), sizeof(num));
                 break;
             }
-            case RegValue::String:
-            case RegValue::MultiString:
-            case RegValue::ExpandString:
+            case RegValue::String: {
+                ret = writeString(REG_SZ);
+                break;
+            }
+            case RegValue::StringList: {
+                ret = writeString(REG_MULTI_SZ);
+                break;
+            }
+            case RegValue::ExpandString: {
+                ret = writeString(REG_EXPAND_SZ);
+                break;
+            }
             case RegValue::Link: {
-                auto type = [&value](){
-                    switch (value.type()) {
-                        case RegValue::String:
-                            return REG_SZ;
-                        case RegValue::MultiString:
-                            return REG_MULTI_SZ;
-                        case RegValue::ExpandString:
-                            return REG_EXPAND_SZ;
-                        case RegValue::Link:
-                            return REG_LINK;
-                        default:
-                            break;
-                    }
-                    return REG_NONE;
-                }();
-                auto data = value.toString();
-                ret = RegSetValueExW(_hkey, name.c_str(), 0, type, reinterpret_cast<const BYTE*>(data.c_str()), data.size() * sizeof(wchar_t));
+                ret = writeString(REG_LINK);
                 break;
             }
         }
@@ -654,7 +752,7 @@ namespace stdc::windows {
         return true;
     }
 
-    bool RegKey::remove(std::error_code &ec) noexcept {
+    bool RegKey::removeAll(std::error_code &ec) noexcept {
         ec.clear();
 
         LSTATUS status = RegDeleteTreeW(_hkey, nullptr);

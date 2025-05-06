@@ -170,6 +170,27 @@ namespace stdc {
         size_type _size = 0;
     };
 
+
+    template <typename T>
+    inline bool operator==(array_view<T> LHS, array_view<T> RHS) {
+        return LHS.equals(RHS);
+    }
+
+    template <template <class, class...> class V, typename T, class... A>
+    inline bool operator==(const V<T, A...> &LHS, array_view<T> RHS) {
+        return array_view<T>(LHS).equals(RHS);
+    }
+
+    template <typename T>
+    inline bool operator!=(array_view<T> LHS, array_view<T> RHS) {
+        return !(LHS == RHS);
+    }
+
+    template <template <class, class...> class V, typename T, class... A>
+    inline bool operator!=(const V<T, A...> &LHS, array_view<T> RHS) {
+        return !(LHS == RHS);
+    }
+
 }
 
 #endif // STDCORELIB_ARRAY_VIEW_H

@@ -26,7 +26,7 @@ namespace stdc::windows {
             Int32 = REG_DWORD, // DWORD
             Int64 = REG_QWORD, // QWORD
             String = REG_SZ,
-            MultiString = REG_MULTI_SZ,
+            StringList = REG_MULTI_SZ,
             ExpandString = REG_EXPAND_SZ,
             Link = REG_LINK,
         };
@@ -44,6 +44,9 @@ namespace stdc::windows {
         RegValue(const wchar_t *value, int size = -1, Type type = String);
         RegValue(const array_view<std::wstring> &value);
         RegValue(std::vector<std::wstring> &&value);
+        inline RegValue(std::initializer_list<std::wstring> value)
+            : RegValue(array_view<std::wstring>(value)) {
+        }
         RegValue(const void *data, int type); // data shouldn't be deleted before RegValue destructs
         ~RegValue();
 
@@ -63,7 +66,10 @@ namespace stdc::windows {
         int64_t toInt64() const;
         inline uint64_t toUInt64() const;
         const std::wstring &toString() const;
-        array_view<std::wstring> toMultiString() const;
+        inline std::wstring_view toStringView() const {
+            return std::wstring_view(toString());
+        }
+        array_view<std::wstring> toStringList() const;
         std::wstring toExpandString() const;
         std::wstring toLink() const;
 
@@ -85,8 +91,8 @@ namespace stdc::windows {
         inline bool isString() const {
             return type() == String;
         }
-        inline bool isMultiString() const {
-            return type() == MultiString;
+        inline bool isStringList() const {
+            return type() == StringList;
         }
         inline bool isExpandString() const {
             return type() == ExpandString;
@@ -97,6 +103,11 @@ namespace stdc::windows {
 
         inline const void *dataPointer() const {
             return d.p;
+        }
+
+        bool operator==(const RegValue &RHS) const;
+        inline bool operator!=(const RegValue &RHS) const {
+            return !(*this == RHS);
         }
 
     protected:
@@ -148,7 +159,7 @@ namespace stdc::windows {
             DA_Execute = KEY_EXECUTE,
         };
 
-        enum CreateOptions {
+        enum CreateOption {
             CO_BackupRestore = REG_OPTION_BACKUP_RESTORE,
             CO_NonVolatile = REG_OPTION_NON_VOLATILE,
             CO_Volatile = REG_OPTION_VOLATILE,
@@ -215,12 +226,12 @@ namespace stdc::windows {
         inline RegKey open(const std::wstring &path, int access = DA_Read);
         RegKey open(const std::wstring &path, std::error_code &ec, int access = DA_Read) noexcept;
 
-        inline RegKey create(const std::wstring &path, int access = DA_Read,
+        inline RegKey create(const std::wstring &path, int access = DA_Read | DA_Write,
                              int options = CO_NonVolatile, LPSECURITY_ATTRIBUTES sa = nullptr,
                              bool *exists = nullptr);
-        RegKey create(const std::wstring &path, std::error_code &ec, int access = DA_Read,
-                      int options = CO_NonVolatile, LPSECURITY_ATTRIBUTES sa = nullptr,
-                      bool *exists = nullptr) noexcept;
+        RegKey create(const std::wstring &path, std::error_code &ec,
+                      int access = DA_Read | DA_Write, int options = CO_NonVolatile,
+                      LPSECURITY_ATTRIBUTES sa = nullptr, bool *exists = nullptr) noexcept;
 
         inline bool close();
         bool close(std::error_code &ec) noexcept;
@@ -262,8 +273,8 @@ namespace stdc::windows {
         bool removeKey(const std::wstring &path, std::error_code &ec) noexcept;
         inline bool removeValue(const std::wstring &name);
         bool removeValue(const std::wstring &name, std::error_code &ec) noexcept;
-        inline bool remove();
-        bool remove(std::error_code &ec) noexcept;
+        inline bool removeAll();
+        bool removeAll(std::error_code &ec) noexcept;
 
         inline bool notify(bool watchSubtree = false,
                            int notifyFilter = NF_ChangeName | NF_ChangeAttributes,
@@ -719,9 +730,9 @@ namespace stdc::windows {
         return result;
     }
 
-    inline bool RegKey::remove() {
+    inline bool RegKey::removeAll() {
         std::error_code ec;
-        auto result = remove(ec);
+        auto result = removeAll(ec);
         if (ec.value() != ERROR_SUCCESS)
             throw std::system_error(ec);
         return result;
