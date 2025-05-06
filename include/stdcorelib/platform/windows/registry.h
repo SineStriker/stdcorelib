@@ -26,7 +26,7 @@ namespace stdc::windows {
             Int32 = REG_DWORD, // DWORD
             Int64 = REG_QWORD, // QWORD
             String = REG_SZ,
-            StringList = REG_MULTI_SZ,
+            StringList = REG_MULTI_SZ, // MULTI_STRING
             ExpandString = REG_EXPAND_SZ,
             Link = REG_LINK,
         };

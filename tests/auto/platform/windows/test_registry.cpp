@@ -185,24 +185,52 @@ BOOST_AUTO_TEST_CASE(test_regkey) {
     RegKey systemKey = hklmKey.open(L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", ec);
     BOOST_VERIFY(systemKey.isValid());
 
-    // "Windows" should be one of the subkeys
     {
+        // test collect
         std::vector<std::wstring> subkeys;
         for (const auto &subkey : systemKey.enumKeys(ec)) {
             subkeys.push_back(subkey.name);
         }
         BOOST_VERIFY(ec.value() == ERROR_SUCCESS);
+
+        // "Windows" should be one of the subkeys
         BOOST_CHECK(std::find(subkeys.begin(), subkeys.end(), L"Windows") != subkeys.end());
+
+        // test enumerate
+        {
+            std::vector<std::wstring> reversedSubkeys;
+            auto keys = systemKey.enumKeys(ec);
+            for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
+                reversedSubkeys.push_back(it->name);
+            }
+            BOOST_VERIFY(ec.value() == ERROR_SUCCESS);
+            std::reverse(reversedSubkeys.begin(), reversedSubkeys.end());
+            BOOST_CHECK(reversedSubkeys == subkeys);
+        }
     }
 
-    // "ProductName" should be one of the values
     {
+        // test collect
         std::vector<std::wstring> values;
         for (const auto &val : systemKey.enumValues(ec)) {
             values.push_back(val.name);
         }
         BOOST_VERIFY(ec.value() == ERROR_SUCCESS);
+
+        // "ProductName" should be one of the values
         BOOST_CHECK(std::find(values.begin(), values.end(), L"ProductName") != values.end());
+
+        // test enumerate
+        {
+            std::vector<std::wstring> reversedValues;
+            auto vals = systemKey.enumValues(ec);
+            for (auto it = vals.rbegin(); it != vals.rend(); ++it) {
+                reversedValues.push_back(it->name);
+            }
+            BOOST_VERIFY(ec.value() == ERROR_SUCCESS);
+            std::reverse(reversedValues.begin(), reversedValues.end());
+            BOOST_CHECK(reversedValues == values);
+        }
     }
 }
 
