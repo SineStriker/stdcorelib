@@ -578,8 +578,58 @@ namespace stdc::windows {
 
         ec.clear();
 
-        // TODO
-        return {};
+        LSTATUS ret = ERROR_SUCCESS;
+        switch (value.type()) {
+            case RegValue::Invalid:
+                break;
+            case RegValue::None: {
+                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_NONE, nullptr, 0);
+                break;
+            }
+            case RegValue::Binary: {
+                auto data = value.toBinary();
+                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_BINARY, data.data(), data.size());
+                break;
+            }
+            case RegValue::Int32: {
+                auto num = value.toInt32();
+                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_DWORD, reinterpret_cast<const BYTE*>(&num), sizeof(num));
+                break;
+            }
+            case RegValue::Int64: {
+                auto num = value.toInt64();
+                ret = RegSetValueExW(_hkey, name.c_str(), 0, REG_QWORD, reinterpret_cast<const BYTE*>(&num), sizeof(num));
+                break;
+            }
+            case RegValue::String:
+            case RegValue::MultiString:
+            case RegValue::ExpandString:
+            case RegValue::Link: {
+                auto type = [&value](){
+                    switch (value.type()) {
+                        case RegValue::String:
+                            return REG_SZ;
+                        case RegValue::MultiString:
+                            return REG_MULTI_SZ;
+                        case RegValue::ExpandString:
+                            return REG_EXPAND_SZ;
+                        case RegValue::Link:
+                            return REG_LINK;
+                        default:
+                            break;
+                    }
+                    return REG_NONE;
+                }();
+                auto data = value.toString();
+                ret = RegSetValueExW(_hkey, name.c_str(), 0, type, reinterpret_cast<const BYTE*>(data.c_str()), data.size() * sizeof(wchar_t));
+                break;
+            }
+        }
+        if (ret != ERROR_SUCCESS) {
+            ec = make_status_error_code(ret);
+            return false;
+        }
+        return true;
     }
 
     bool RegKey::removeKey(const std::wstring &path, std::error_code &ec) noexcept {
