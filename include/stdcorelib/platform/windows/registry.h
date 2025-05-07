@@ -342,27 +342,27 @@ namespace stdc::windows {
             }
 
             inline bool operator==(const key_iterator &RHS) const noexcept {
-                return _key == RHS._key && _index == RHS._index;
+                return !_error_occurred && _index == RHS._index;
             }
 
             inline bool operator!=(const key_iterator &RHS) const noexcept {
-                return !(*this == RHS);
+                return !_error_occurred && _index != RHS._index;
             }
 
             inline bool operator<(const key_iterator &RHS) const {
-                return _index < RHS._index;
+                return !_error_occurred && _index < RHS._index;
             }
 
             inline bool operator<=(const key_iterator &RHS) const {
-                return _index <= RHS._index;
+                return !_error_occurred && _index <= RHS._index;
             }
 
             inline bool operator>(const key_iterator &RHS) const {
-                return _index > RHS._index;
+                return !_error_occurred && _index > RHS._index;
             }
 
             inline bool operator>=(const key_iterator &RHS) const {
-                return _index >= RHS._index;
+                return !_error_occurred && _index >= RHS._index;
             }
 
         private:
@@ -371,8 +371,6 @@ namespace stdc::windows {
                 : _key(key), _ec(ec), _index(index), _count(count) {
                 fetch();
             }
-
-            STDCORELIB_EXPORT void fetch(std::error_code &ec) const noexcept;
 
             inline void fetch() const {
                 if (_index >= _count || _index < 0)
@@ -383,12 +381,13 @@ namespace stdc::windows {
                 }
                 _data = _key->keyAt(_index, *_ec);
                 if (_ec->value() != ERROR_SUCCESS) {
-                    _index = _count;
+                    _error_occurred = true;
                 }
             }
 
             const RegKey *_key;
             mutable std::error_code *_ec;
+            mutable bool _error_occurred = false;
             mutable int _index;
             int _count;
             mutable std::optional<value_type> _data;
@@ -482,27 +481,27 @@ namespace stdc::windows {
             }
 
             inline bool operator==(const value_iterator &RHS) const noexcept {
-                return _key == RHS._key && _index == RHS._index;
+                return !_error_occurred && _index == RHS._index;
             }
 
             inline bool operator!=(const value_iterator &RHS) const noexcept {
-                return !(*this == RHS);
+                return !_error_occurred && _index != RHS._index;
             }
 
             inline bool operator<(const value_iterator &RHS) const {
-                return _index < RHS._index;
+                return !_error_occurred && _index < RHS._index;
             }
 
             inline bool operator<=(const value_iterator &RHS) const {
-                return _index <= RHS._index;
+                return !_error_occurred && _index <= RHS._index;
             }
 
             inline bool operator>(const value_iterator &RHS) const {
-                return _index > RHS._index;
+                return !_error_occurred && _index > RHS._index;
             }
 
             inline bool operator>=(const value_iterator &RHS) const {
-                return _index >= RHS._index;
+                return !_error_occurred && _index >= RHS._index;
             }
 
         private:
@@ -521,13 +520,14 @@ namespace stdc::windows {
                 }
                 _data = _key->valueAt(_index, *_ec, _query);
                 if (_ec->value() != ERROR_SUCCESS) {
-                    _index = _count;
+                    _error_occurred = true;
                 }
             }
 
             const RegKey *_key;
             mutable std::error_code *_ec;
             bool _query;
+            mutable bool _error_occurred = false;
             mutable int _index;
             int _count;
             mutable std::optional<value_type> _data;

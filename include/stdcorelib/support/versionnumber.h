@@ -2,6 +2,7 @@
 #define VERSIONNUMBER_H
 
 #include <string>
+#include <array>
 
 #include <stdcorelib/stdc_global.h>
 
@@ -42,7 +43,7 @@ namespace stdc {
         bool operator>=(const VersionNumber &rhs) const;
 
     private:
-        int m_numbers[4];
+        std::array<int, 4> m_numbers;
     };
 
 }

@@ -14,11 +14,12 @@
 
 namespace stdc {
 
-    template <class K, class V, template <class, class, class...> class Map = std::unordered_map>
+    template <class K, class V, template <class, class, class...> class Map = std::unordered_map,
+              class... Mods>
     class linked_map {
     private:
         std::list<std::pair<const K, V>, typename Map<K, V>::allocator_type> m_list;
-        Map<K, typename decltype(m_list)::iterator> m_map;
+        Map<K, typename decltype(m_list)::iterator, Mods...> m_map;
 
     public:
         using _ListType = decltype(m_list);
