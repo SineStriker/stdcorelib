@@ -76,4 +76,21 @@ BOOST_AUTO_TEST_CASE(test_codec_convert) {
 #endif
 }
 
+BOOST_AUTO_TEST_CASE(test_asprintf) {
+    {
+        std::string actual = asprintf("a=%d, b=%s, c=%p", 123, "hello", printf);
+        std::string expect;
+        expect.resize(100);
+        size_t size = snprintf(&expect[0], expect.size(), "a=%d, b=%s, c=%p", 123, "hello", printf);
+        expect.resize(size);
+        BOOST_CHECK(actual == expect);
+    }
+
+    {
+        std::string actual = formatN("%% %1 %5 %2 %X %", "foo", "bar");
+        std::string expect = "% foo %5 bar %X %";
+        BOOST_CHECK(actual == expect);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

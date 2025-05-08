@@ -673,40 +673,7 @@ namespace stdc {
         }
 
         int cvfprintf(FILE *file, const char *fmt, va_list args) {
-            static constexpr int STACK_BUFFER_SIZE = 4096; // 栈上缓冲区大小
-
-            va_list args_copy;
-            va_copy(args_copy, args); // 复制 va_list
-
-            // 第一次尝试：使用栈上缓冲区
-            char stack_buffer[STACK_BUFFER_SIZE];
-            int len = std::vsnprintf(stack_buffer, STACK_BUFFER_SIZE, fmt, args);
-            if (len < 0) {
-                va_end(args_copy);
-                return -1;
-            }
-
-            if (len < STACK_BUFFER_SIZE) {
-                // 如果栈上缓冲区足够，直接输出
-                len = cfputs(std::string_view(stack_buffer, len), file);
-            } else {
-                // 如果栈上缓冲区不足，则在堆上分配足够的空间
-                char *heap_buffer = new char[len + 1]; // +1 用于 '\0'
-                if (!heap_buffer) {
-                    va_end(args_copy);
-                    return -1;
-                }
-
-                // 使用副本重新格式化
-                len = std::vsnprintf(heap_buffer, len + 1, fmt, args_copy);
-                len = cfputs(std::string_view(heap_buffer, len), file);
-
-                // 释放堆上缓冲区
-                delete[] heap_buffer;
-            }
-
-            va_end(args_copy); // 结束副本
-            return len;
+            return cfputs(vasprintf(fmt, args), file);
         }
 
         int cprintf(const char *fmt, ...) {

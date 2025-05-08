@@ -380,6 +380,17 @@ namespace stdc {
     using str::rtrim;
     using str::trim;
 
+    namespace str {
+
+        STDCORELIB_EXPORT std::string asprintf(const char *fmt, ...);
+
+        STDCORELIB_EXPORT std::string vasprintf(const char *fmt, va_list args);
+
+    }
+
+    using str::asprintf;
+    using str::vasprintf;
+
 #ifdef _WIN32
     const std::error_category &windows_utf8_category() noexcept;
 #endif
