@@ -5,7 +5,8 @@ project(stdcorelib VERSION 0.0.1.2 LANGUAGES CXX)
 # ----------------------------------
 # Build Options
 # ----------------------------------
-option(STDCORELIB_BUILD_STATIC "Build static library" ON)
+option(STDCORELIB_BUILD_STATIC "Build static library" OFF)
+option(STDCORELIB_BUILD_SHARED "Build shared library" OFF)
 option(STDCORELIB_BUILD_TESTS "Build test cases" OFF)
 option(STDCORELIB_BUILD_EXAMPLES "Build examples" OFF)
 option(STDCORELIB_INSTALL "Install library" ON)
@@ -113,7 +114,7 @@ if(TRUE)
     unset(_temp)
 endif()
 
-if(STDCORELIB_BUILD_STATIC)
+if(STDCORELIB_BUILD_STATIC OR (NOT STDCORELIB_BUILD_SHARED AND NOT BUILD_SHARED_LIBS))
     add_library(${PROJECT_NAME} STATIC)
     target_compile_definitions(${PROJECT_NAME} PUBLIC STDCORELIB_STATIC)
 else()
