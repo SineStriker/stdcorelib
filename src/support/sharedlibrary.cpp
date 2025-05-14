@@ -48,7 +48,7 @@ namespace stdc {
         return 0;
 #else
         int dlFlags = 0;
-        if (loadHints & Library::ResolveAllSymbolsHint) {
+        if (loadHints & ResolveAllSymbolsHint) {
             dlFlags |= RTLD_NOW;
         } else {
             dlFlags |= RTLD_LAZY;

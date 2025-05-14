@@ -51,9 +51,19 @@ namespace stdc {
         constexpr array_view(const T (&Arr)[N]) : _data(Arr), _size(N) {
         }
 
+#if defined(__GNUC__) && __GNUC__ >= 9
+// Disable gcc's warning in this constructor as it generates an enormous amount
+// of messages. Anyone using ArrayRef(array_view) should already be aware of the fact that
+// it does not do lifetime extension.
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Winit-list-lifetime"
+#endif
         constexpr array_view(std::initializer_list<T> vec)
             : _data(vec.begin() == vec.end() ? (T *) nullptr : vec.begin()), _size(vec.size()) {
         }
+#if defined(__GNUC__) && __GNUC__ >= 9
+#  pragma GCC diagnostic pop
+#endif
 
         template <typename T1>
         array_view(const array_view<T1 *> &RHS,
