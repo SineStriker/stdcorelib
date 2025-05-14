@@ -382,7 +382,7 @@ namespace stdc {
 
     namespace str {
 
-        STDCORELIB_EXPORT std::string asprintf(const char *fmt, ...);
+        STDCORELIB_EXPORT std::string asprintf(const char *fmt, ...) STDCORELIB_PRINTF_FORMAT(1, 2);
 
         STDCORELIB_EXPORT std::string vasprintf(const char *fmt, va_list args);
 

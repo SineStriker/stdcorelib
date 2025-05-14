@@ -2,11 +2,11 @@
 #define STDCORELIB_STDC_GLOBAL_H
 
 #ifndef __has_attribute
-# define __has_attribute(x) 0
+#  define __has_attribute(x) 0
 #endif
 
 #ifndef __has_builtin
-# define __has_builtin(x) 0
+#  define __has_builtin(x) 0
 #endif
 
 #ifdef _WIN32
@@ -46,8 +46,11 @@
 #if defined(__GNUC__) || defined(__clang__)
 #  define STDCORELIB_PRINTF_FORMAT(fmtpos, attrpos)                                                \
       __attribute__((__format__(__printf__, fmtpos, attrpos)))
+#  define STDCORELIB_SCANF_FORMAT(fmtpos, attrpos)                                                 \
+      __attribute__((__format__(__scanf__, fmtpos, attrpos)))
 #else
 #  define STDCORELIB_PRINTF_FORMAT(fmtpos, attrpos)
+#  define STDCORELIB_SCANF_FORMAT
 #endif
 
 #if defined(_MSC_VER)
@@ -56,18 +59,18 @@
 #  define STDCORELIB_USED
 #  define SYSCMDLINE_DEPRECATED __declspec(deprecated)
 #else
-#  define STDCORELIB_NOINLINE __attribute__((noinline))
-#  define STDCORELIB_INLINE   __attribute__((always_inline))
-#  define STDCORELIB_USED     __attribute__((used))
+#  define STDCORELIB_NOINLINE   __attribute__((noinline))
+#  define STDCORELIB_INLINE     __attribute__((always_inline))
+#  define STDCORELIB_USED       __attribute__((used))
 #  define SYSCMDLINE_DEPRECATED __attribute__((__deprecated__))
 #endif
 
 #if __has_builtin(__builtin_expect) || defined(__GNUC__)
-#define STDCORELIB_LIKELY(EXPR) __builtin_expect((bool)(EXPR), true)
-#define STDCORELIB_UNLIKELY(EXPR) __builtin_expect((bool)(EXPR), false)
+#  define STDCORELIB_LIKELY(EXPR)   __builtin_expect((bool) (EXPR), true)
+#  define STDCORELIB_UNLIKELY(EXPR) __builtin_expect((bool) (EXPR), false)
 #else
-#define STDCORELIB_LIKELY(EXPR) (EXPR)
-#define STDCORELIB_UNLIKELY(EXPR) (EXPR)
+#  define STDCORELIB_LIKELY(EXPR)   (EXPR)
+#  define STDCORELIB_UNLIKELY(EXPR) (EXPR)
 #endif
 
 #ifndef _TSTR
