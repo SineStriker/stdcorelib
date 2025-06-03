@@ -21,6 +21,14 @@ namespace stdc {
         return std::error_code(errno, std::system_category());
     }
 
+    void Popen::Impl::_cleanup() {
+        close_std_files();
+
+        // TODO
+
+        pid = -1;
+    }
+
     bool Popen::Impl::_get_devnull() {
         // Create a null device handle
         int devnull = open("/dev/null", O_RDWR);

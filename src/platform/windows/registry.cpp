@@ -26,18 +26,18 @@ namespace stdc::windows {
     static T qFromBigEndian(const uint8_t *data) {
 #ifdef _MSC_VER
         if constexpr (sizeof(T) == sizeof(short))
-            return _byteswap_ushort(*reinterpret_cast<const USHORT *>(data));
+            return (T) _byteswap_ushort(*reinterpret_cast<const USHORT *>(data));
         else if constexpr (sizeof(T) == sizeof(int))
-            return _byteswap_ulong(*reinterpret_cast<const ULONG *>(data));
+            return (T) _byteswap_ulong(*reinterpret_cast<const ULONG *>(data));
         else if constexpr (sizeof(T) == sizeof(int64_t))
-            return _byteswap_uint64(*reinterpret_cast<const UINT64 *>(data));
+            return (T) _byteswap_uint64(*reinterpret_cast<const UINT64 *>(data));
 #else
         if constexpr (sizeof(T) == sizeof(short))
-            return __builtin_bswap16(*reinterpret_cast<const short *>(data));
+            return (T) __builtin_bswap16(*reinterpret_cast<const short *>(data));
         else if constexpr (sizeof(T) == sizeof(int))
-            return __builtin_bswap32(*reinterpret_cast<const int *>(data));
+            return (T) __builtin_bswap32(*reinterpret_cast<const int *>(data));
         else if constexpr (sizeof(T) == sizeof(int64_t))
-            return __builtin_bswap64(*reinterpret_cast<const int64_t *>(data));
+            return (T) __builtin_bswap64(*reinterpret_cast<const int64_t *>(data));
 #endif
         return {};
     }
