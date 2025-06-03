@@ -158,6 +158,14 @@ namespace stdc {
         }
     }
 
+    void Popen::Impl::_cleanup() {
+        close_std_files();
+
+        // TODO
+
+        pid = -1;
+    }
+
 }
 
 namespace stdc {

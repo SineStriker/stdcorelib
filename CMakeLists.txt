@@ -171,6 +171,7 @@ endif()
 
 if(NOT WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE dl)
+    target_link_options(${PROJECT_NAME} PRIVATE -Wl,-z,defs)
 endif()
 
 if(STDCORELIB_BUILD_TESTS)
