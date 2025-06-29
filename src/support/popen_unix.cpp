@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <limits.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
+#include <grp.h>
 
 #include <csignal>
 #include <cassert>
@@ -373,8 +375,9 @@ namespace stdc {
 
         // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1873
         {
-            int tmp_pid = _fork_exec(fds_to_keep, envs, p2cread, p2cwrite, c2pread, c2pwrite,
-                                     errread, errwrite, gid, gids, uid, true);
+            int tmp_pid =
+                _fork_exec(fds_to_keep, envs, p2cread, p2cwrite, c2pread, c2pwrite, errread,
+                           errwrite, errpipe_read, errpipe_write, gid, gids, uid, true);
             if (tmp_pid == -1) {
                 close(errpipe_read);
                 close(errpipe_write);
@@ -392,12 +395,12 @@ namespace stdc {
             // Wait for exec to fail or succeed; possibly raising an
             // exception (limited in size)
             while (true) {
-                char buf[4096];
-                int errpipe_data_size = read(errread, buf, 50000);
-                if (errpipe_data_size <= 0)
+                char buf[20];
+                int errpipe_data_size = read(errread, buf, 20);
+                if (errpipe_data_size < 20)
                     break;
                 errpipe_data.append(buf, errpipe_data_size);
-                if (errpipe_data.size() > 50000) {
+                if (errpipe_data.size() > 20) {
                     break;
                 }
             }
@@ -429,9 +432,173 @@ namespace stdc {
         return false;
     }
 
+    static void _close_open_fds(int start_fd, const std::set<int> &fds_to_keep) {
+        // TODO
+    }
+
+    static int _set_inheritable_async_safe(int fd, int inheritable, int *atomic_flag_works) {
+        // TODO
+        return 0;
+    }
+
+    static void _restoreSignals(void) {
+#ifdef SIGPIPE
+        signal(SIGPIPE, SIG_DFL);
+#endif
+#ifdef SIGXFZ
+        signal(SIGXFZ, SIG_DFL);
+#endif
+#ifdef SIGXFSZ
+        signal(SIGXFSZ, SIG_DFL);
+#endif
+    }
+
+    static int make_inheritable(const std::set<int> &fds_to_keep, int errpipe_write) {
+        for (int fd : fds_to_keep) {
+            if (fd == errpipe_write) {
+                /* errpipe_write is part of fds_to_keep. It must be closed at
+                   exec(), but kept open in the child process until exec() is
+                   called. */
+                continue;
+            }
+            if (_set_inheritable_async_safe(fd, 1, NULL) < 0)
+                return -1;
+        }
+        return 0;
+    }
+
+#define POSIX_CALL(call)                                                                           \
+    do {                                                                                           \
+        if ((call) == -1)                                                                          \
+            goto error;                                                                            \
+    } while (0)
+
     int Popen::Impl::_fork_exec(const std::set<int> &fds_to_keep, char **envs, int p2cread,
                                 int p2cwrite, int c2pread, int c2pwrite, int errread, int errwrite,
-                                int gid, const std::vector<int> &gids, int uid, bool allow_vfork) {
+                                int errpipe_read, int errpipe_write, int gid,
+                                const std::vector<int> &gids, int uid, bool allow_vfork) {
+        (void) allow_vfork;
+
+        pid_t tmp_pid = fork();
+        if (tmp_pid != 0) {
+            // parent
+            return 0;
+        }
+
+        // _child_exec begin
+        if (make_inheritable(fds_to_keep, errpipe_write) < 0)
+            goto error;
+
+        /* Close parent's pipe ends. */
+        if (p2cwrite != -1)
+            POSIX_CALL(close(p2cwrite));
+        if (c2pread != -1)
+            POSIX_CALL(close(c2pread));
+        if (errread != -1)
+            POSIX_CALL(close(errread));
+        POSIX_CALL(close(errpipe_read));
+
+        /* When duping fds, if there arises a situation where one of the fds is
+           either 0, 1 or 2, it is possible that it is overwritten (#12607). */
+        if (c2pwrite == 0) {
+            POSIX_CALL(c2pwrite = dup(c2pwrite));
+            /* issue32270 */
+            if (_set_inheritable_async_safe(c2pwrite, 0, NULL) < 0) {
+                goto error;
+            }
+        }
+        while (errwrite == 0 || errwrite == 1) {
+            POSIX_CALL(errwrite = dup(errwrite));
+            /* issue32270 */
+            if (_set_inheritable_async_safe(errwrite, 0, NULL) < 0) {
+                goto error;
+            }
+        }
+
+        /* Dup fds for child.
+           dup2() removes the CLOEXEC flag but we must do it ourselves if dup2()
+           would be a no-op (issue #10806). */
+        if (p2cread == 0) {
+            if (_set_inheritable_async_safe(p2cread, 1, NULL) < 0)
+                goto error;
+        } else if (p2cread != -1)
+            POSIX_CALL(dup2(p2cread, 0)); /* stdin */
+
+        if (c2pwrite == 1) {
+            if (_set_inheritable_async_safe(c2pwrite, 1, NULL) < 0)
+                goto error;
+        } else if (c2pwrite != -1)
+            POSIX_CALL(dup2(c2pwrite, 1)); /* stdout */
+
+        if (errwrite == 2) {
+            if (_set_inheritable_async_safe(errwrite, 1, NULL) < 0)
+                goto error;
+        } else if (errwrite != -1)
+            POSIX_CALL(dup2(errwrite, 2)); /* stderr */
+
+        /* We no longer manually close p2cread, c2pwrite, and errwrite here as
+         * _close_open_fds takes care when it is not already non-inheritable. */
+        if (!cwd.empty()) {
+            POSIX_CALL(chdir(cwd.c_str()));
+        }
+
+        if (umask >= 0)
+            ::umask(umask); /* umask() always succeeds. */
+
+        if (restore_signals) {
+            _restoreSignals();
+        }
+
+        if (start_new_session)
+            POSIX_CALL(setsid());
+
+        if (process_group >= 0) {
+            POSIX_CALL(setpgid(0, process_group));
+        }
+
+        if (extra_groups.size() >= 0) {
+            POSIX_CALL(setgroups(extra_groups.size(), (gid_t *) extra_groups.data()));
+        }
+
+        if (gid != (gid_t) -1)
+            POSIX_CALL(setregid(gid, gid));
+
+        if (uid != (uid_t) -1)
+            POSIX_CALL(setreuid(uid, uid));
+
+
+        if (preexec_fn) {
+            preexec_fn();
+        }
+
+        /* close FDs after executing preexec_fn, which might open FDs */
+        if (close_fds) {
+            /* TODO HP-UX could use pstat_getproc() if anyone cares about it. */
+            _close_open_fds(3, fds_to_keep);
+        }
+
+        /* This loop matches the Lib/os.py _execvpe()'s PATH search when */
+        /* given the executable_list generated by Lib/subprocess.py.     */
+        {
+            char **argv = new char *[args.size() + 1];
+            int i;
+            for (i = 0; i < args.size(); i++) {
+                argv[i] = const_cast<char *>(args[i].c_str());
+            }
+            argv[i] = NULL;
+
+            if (envs) {
+                execve(executable.c_str(), argv, envs);
+            } else {
+                execv(executable.c_str(), argv);
+            }
+        }
+
+    error:
+        std::string errno_str = std::to_string(errno);
+        std::ignore = write(errpipe_write, errno_str.data(), errno_str.size());
+
+        _exit(255);
         return 0;
     }
 
@@ -450,8 +617,6 @@ namespace stdc {
         }
         return false;
     }
-
-    // TODO
 
     bool Popen::Impl::_internal_poll() {
         int pip[2];
@@ -493,6 +658,4 @@ namespace stdc {
         // TODO
         return {};
     }
-
-
 }

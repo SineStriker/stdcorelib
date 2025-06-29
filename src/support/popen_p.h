@@ -68,7 +68,7 @@ namespace stdc {
         user_info user = {false};
 
         int umask = -1;
-        int process_group = 0;
+        int process_group = -1;
 #endif
 
     public:
@@ -130,8 +130,9 @@ namespace stdc {
                             int errwrite, int gid, const std::vector<int> &gids, int uid);
 
         int _fork_exec(const std::set<int> &fds_to_keep, char **envs, int p2cread, int p2cwrite,
-                       int c2pread, int c2pwrite, int errread, int errwrite, int gid,
-                       const std::vector<int> &gids, int uid, bool allow_vfork);
+                       int c2pread, int c2pwrite, int errread, int errwrite, int errpipe_read,
+                       int errpipe_write, int gid, const std::vector<int> &gids, int uid,
+                       bool allow_vfork);
 
         bool _handle_exitstatus(int status);
 
