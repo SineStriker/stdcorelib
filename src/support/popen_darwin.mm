@@ -8,7 +8,7 @@
 
 namespace stdc {
 
-    static std::string NSStringToString(NSString *nsString) {
+    static std::string NSStringToString(NSString *string) {
         if (!string)
             return {};
         std::wstring wstr;

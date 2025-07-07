@@ -5,8 +5,6 @@
 
 #ifdef _WIN32
 #  include <io.h>
-#else
-#  include <sys/io.h>
 #endif
 
 #include "pimpl.h"
