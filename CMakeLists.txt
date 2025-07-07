@@ -114,7 +114,7 @@ if(TRUE)
     unset(_temp)
 endif()
 
-if(STDCORELIB_BUILD_STATIC OR (NOT STDCORELIB_BUILD_SHARED AND NOT BUILD_SHARED_LIBS))
+if(STDCORELIB_BUILD_STATIC OR(NOT STDCORELIB_BUILD_SHARED AND NOT BUILD_SHARED_LIBS))
     add_library(${PROJECT_NAME} STATIC)
     target_compile_definitions(${PROJECT_NAME} PUBLIC STDCORELIB_STATIC)
 else()
@@ -171,7 +171,10 @@ endif()
 
 if(NOT WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE dl)
-    target_link_options(${PROJECT_NAME} PRIVATE -Wl,-z,defs)
+
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(${PROJECT_NAME} PRIVATE -Wl,-z,defs)
+    endif()
 endif()
 
 if(STDCORELIB_BUILD_TESTS)
