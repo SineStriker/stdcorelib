@@ -175,6 +175,13 @@ if(NOT WIN32)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         target_link_options(${PROJECT_NAME} PRIVATE -Wl,-z,defs)
     endif()
+
+    if(APPLE)
+        target_link_libraries(${PROJECT_NAME} PRIVATE
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+    endif()
 endif()
 
 if(STDCORELIB_BUILD_TESTS)
