@@ -1,6 +1,8 @@
 #include "versionnumber.h"
 
-#include <sstream>
+#include <cstdlib>
+#include <charconv>
+#include <typeinfo>
 
 #include "algorithms.h"
 
@@ -20,19 +22,27 @@ namespace stdc {
         m_numbers[3] = tweak;
     }
 
-    VersionNumber VersionNumber::fromString(const std::string &s) {
+    VersionNumber VersionNumber::fromString(const std::string_view &s) {
         VersionNumber version;
-        std::stringstream ss(s);
-        std::string segment;
 
         // Split the string by '.' and convert each segment to int
         int i = 0;
-        while (std::getline(ss, segment, '.')) {
-            version.m_numbers[i++] = std::stoi(segment);
+        std::string::size_type start = 0;
+        std::string::size_type end = s.find('.');
+        while (i < version.m_numbers.size() && end != std::string::npos) {
+            std::string_view segment = s.substr(start, end - start);
+            std::ignore = std::from_chars(segment.data(), segment.data() + segment.size(),
+                                          version.m_numbers[i++]);
+            start = end + 1;
+            end = s.find('.', start);
+        }
+        if (i < version.m_numbers.size() && start < s.size()) {
+            std::string_view segment = s.substr(start);
+            std::ignore = std::from_chars(segment.data(), segment.data() + segment.size(),
+                                          version.m_numbers[i++]);
         }
         return version;
     }
-
 
     std::string VersionNumber::toString() const {
         if (tweak() != 0) {

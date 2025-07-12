@@ -3,6 +3,7 @@
 
 #include <string>
 #include <array>
+#include <iostream>
 
 #include <stdcorelib/stdc_global.h>
 
@@ -13,7 +14,7 @@ namespace stdc {
         VersionNumber();
         explicit VersionNumber(int major, int minor = 0, int patch = 0, int tweak = 0);
 
-        static VersionNumber fromString(const std::string &s);
+        static VersionNumber fromString(const std::string_view &s);
 
     public:
         inline int major() const {
@@ -54,6 +55,11 @@ namespace std {
     struct STDCORELIB_EXPORT hash<stdc::VersionNumber> {
         size_t operator()(const stdc::VersionNumber &key) const;
     };
+
+    inline ostream &operator<<(std::ostream &out, const stdc::VersionNumber &c) {
+        out << "VersionNumber(" << c.toString() << ")";
+        return out;
+    }
 
 }
 
