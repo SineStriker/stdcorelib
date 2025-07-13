@@ -392,7 +392,7 @@ namespace stdc {
     using str::vasprintf;
 
 #ifdef _WIN32
-    const std::error_category &windows_utf8_category() noexcept;
+    STDCORELIB_EXPORT const std::error_category &windows_utf8_category() noexcept;
 #endif
 
 }
