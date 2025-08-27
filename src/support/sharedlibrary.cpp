@@ -12,7 +12,8 @@
 #  include <string.h>
 #endif
 
-#include "stdcorelib/str.h"
+#include "str.h"
+#include "pimpl.h"
 
 #ifdef __APPLE__
 #  define PRIOR_LIBRARY_PATH_KEY "DYLD_LIBRARY_PATH"
@@ -28,6 +29,8 @@ namespace stdc {
     public:
         void *hDll = nullptr;
         fs::path path;
+
+        bool released = false;
 
         virtual ~Impl();
 
@@ -166,27 +169,20 @@ namespace stdc {
     */
     SharedLibrary::~SharedLibrary() = default;
 
-    SharedLibrary::SharedLibrary(SharedLibrary &&other) noexcept {
-        std::swap(_impl, other._impl);
-    }
-
-    SharedLibrary &SharedLibrary::operator=(SharedLibrary &&other) noexcept {
-        if (this == &other)
-            return *this;
-        std::swap(_impl, other._impl);
-        return *this;
-    }
-
     /*!
         Loads the library and returns \c true if the library was loaded successfully.
     */
     bool SharedLibrary::open(const fs::path &path, int hints) {
-        _impl->path = path;
-        if (_impl->open(hints)) {
-            _impl->path = fs::canonical(fs::absolute(path));
+        __stdc_impl_t;
+        if (impl.hDll) {
+            std::ignore = close();
+        }
+        impl.path = path;
+        if (impl.open(hints)) {
+            impl.path = fs::canonical(fs::absolute(path));
             return true;
         }
-        _impl->path.clear();
+        impl.path.clear();
         return false;
     }
 
@@ -194,8 +190,15 @@ namespace stdc {
         Unloads the library and returns \c true if the library could be unloaded.
     */
     bool SharedLibrary::close() {
-        if (_impl->close()) {
-            _impl->path.clear();
+        __stdc_impl_t;
+        if (impl.released) {
+            impl.released = false;
+            impl.hDll = nullptr;
+            impl.path.clear();
+            return true;
+        }
+        if (impl.close()) {
+            impl.path.clear();
             return true;
         }
         return false;
@@ -205,28 +208,32 @@ namespace stdc {
         Returns \c true if the library is open.
     */
     bool SharedLibrary::isOpen() const {
-        return _impl->hDll != nullptr;
+        __stdc_impl_t;
+        return impl.hDll != nullptr;
     }
 
     /*!
         Returns the opened library path.
     */
     fs::path SharedLibrary::path() const {
-        return _impl->path;
+        __stdc_impl_t;
+        return impl.path;
     }
 
     /*!
         Returns the opened library handle.
     */
     void *SharedLibrary::handle() const {
-        return _impl->hDll;
+        __stdc_impl_t;
+        return impl.hDll;
     }
 
     /*!
         Returns the address of the exported symbol \a name, the library must be opened.
     */
     void *SharedLibrary::resolve(const char *name) const {
-        return _impl->resolve(name);
+        __stdc_impl_t;
+        return impl.resolve(name);
     }
 
     /*!
@@ -234,6 +241,14 @@ namespace stdc {
     */
     std::string SharedLibrary::lastError() const {
         return Impl::sysErrorMessage();
+    }
+
+    /*!
+        Releases the library handle.
+    */
+    void SharedLibrary::release() {
+        __stdc_impl_t;
+        impl.released = true;
     }
 
 #if !defined(_WIN32) && !defined(__APPLE__)

@@ -18,8 +18,8 @@ namespace stdc {
             std::conditional_t<std::random_access_iterator<T>, std::random_access_iterator_tag,
                                std::bidirectional_iterator_tag>;
         using iterator_category =
-            conditional_t<std::derived_from<_base_category, std::random_access_iterator_tag>,
-                          std::random_access_iterator_tag, _base_category>;
+            std::conditional_t<std::derived_from<_base_category, std::random_access_iterator_tag>,
+                               std::random_access_iterator_tag, _base_category>;
 #else
         using iterator_category = _base_category;
 #endif

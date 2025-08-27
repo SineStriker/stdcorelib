@@ -162,8 +162,8 @@ namespace stdc {
         }
 
         // @overload: formatN(string_view)
-        inline std::string_view formatN(const std::string_view &fmt) {
-            return fmt;
+        inline std::string formatN(const std::string_view &fmt) {
+            return std::string(fmt);
         }
 
         // @overload: formatN(string &&)
@@ -172,7 +172,7 @@ namespace stdc {
         }
 
         // @overload: formatN(const char *)
-        inline const char *formatN(const char *fmt) {
+        inline std::string formatN(const char *fmt) {
             return fmt;
         }
 

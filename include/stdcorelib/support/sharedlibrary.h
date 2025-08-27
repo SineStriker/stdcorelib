@@ -13,8 +13,8 @@ namespace stdc {
         SharedLibrary();
         ~SharedLibrary();
 
-        SharedLibrary(SharedLibrary &&other) noexcept;
-        SharedLibrary &operator=(SharedLibrary &&other) noexcept;
+        SharedLibrary(SharedLibrary &&other) noexcept = default;
+        SharedLibrary &operator=(SharedLibrary &&other) noexcept = default;
 
     public:
         enum LoadHint {
@@ -35,6 +35,8 @@ namespace stdc {
         void *resolve(const char *name) const;
 
         std::string lastError() const;
+
+        void release();
 
         static bool isLibrary(const std::filesystem::path &path);
         static std::filesystem::path setLibraryPath(const std::filesystem::path &path);
