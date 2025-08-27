@@ -13,8 +13,8 @@ namespace stdc {
         SharedLibrary();
         ~SharedLibrary();
 
-        SharedLibrary(SharedLibrary &&other) noexcept = default;
-        SharedLibrary &operator=(SharedLibrary &&other) noexcept = default;
+        SharedLibrary(SharedLibrary &&other) noexcept;
+        SharedLibrary &operator=(SharedLibrary &&other) noexcept;
 
     public:
         enum LoadHint {

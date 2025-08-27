@@ -169,6 +169,17 @@ namespace stdc {
     */
     SharedLibrary::~SharedLibrary() = default;
 
+
+    /*!
+        Move constructor.
+    */
+    SharedLibrary::SharedLibrary(SharedLibrary &&other) noexcept = default;
+
+    /*!
+        Move assignment operator.
+    */
+    SharedLibrary &SharedLibrary::operator=(SharedLibrary &&other) noexcept = default;
+
     /*!
         Loads the library and returns \c true if the library was loaded successfully.
     */
