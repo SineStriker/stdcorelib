@@ -13,8 +13,29 @@
 #include "3rdparty/llvm/smallvector.h"
 
 #include <string>
+#include <tuple>
 
-#define LLVM_ENABLE_EXCEPTIONS
+#ifndef LLVM_ENABLE_EXCEPTIONS
+#include "logging.h"
+
+namespace llvm {
+
+static const char *Twine(std::string &t) {
+  return t.c_str();
+}
+
+[[noreturn]] static void report_fatal_error(const char *Reason) {
+  stdcFatal(Reason);
+  do { std::abort(); } while (0);
+}
+
+[[noreturn]] static void report_bad_alloc_error(const char *Reason, bool GenCrashDiag = false) {
+  report_fatal_error(Reason);
+}
+
+}
+
+#endif
 
 namespace llvm {
 
@@ -26,7 +47,7 @@ inline void *safe_malloc(size_t Sz) {
     // non-zero, if the space requested was zero.
     if (Sz == 0)
       return safe_malloc(1);
-    throw std::bad_alloc();
+    report_bad_alloc_error("Allocation failed");
   }
   return Result;
 }
@@ -39,7 +60,7 @@ inline void *safe_malloc(size_t Sz) {
     // non-zero, if the space requested was zero.
     if (Sz == 0)
       return safe_malloc(1);
-    throw std::bad_alloc();
+    report_bad_alloc_error("Allocation failed");
   }
   return Result;
 }

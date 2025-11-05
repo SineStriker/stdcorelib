@@ -401,7 +401,7 @@ namespace stdc {
             // exception (limited in size)
             while (true) {
                 char buf[4096];
-                int errpipe_data_size = read(errread, buf, 50000);
+                int errpipe_data_size = read(errread, buf, 4096);
                 if (errpipe_data_size <= 0)
                     break;
                 errpipe_data.append(buf, errpipe_data_size);

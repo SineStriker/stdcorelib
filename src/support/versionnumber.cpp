@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <charconv>
 #include <typeinfo>
+#include <tuple>
 
 #include "algorithms.h"
 

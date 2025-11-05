@@ -9,6 +9,7 @@ option(STDCORELIB_BUILD_STATIC "Build static library" OFF)
 option(STDCORELIB_BUILD_SHARED "Build shared library" OFF)
 option(STDCORELIB_BUILD_TESTS "Build test cases" OFF)
 option(STDCORELIB_BUILD_EXAMPLES "Build examples" OFF)
+option(STDCORELIB_ENABLE_EXCEPTIONS "Disable exceptions" ON)
 option(STDCORELIB_INSTALL "Install library" ON)
 
 # ----------------------------------
@@ -125,6 +126,17 @@ add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 target_sources(${PROJECT_NAME} PRIVATE ${_src})
 target_compile_definitions(${PROJECT_NAME} PRIVATE STDCORELIB_LIBRARY)
+
+if(STDCORELIB_ENABLE_EXCEPTIONS)
+    target_compile_options(${PROJECT_NAME} PRIVATE LLVM_ENABLE_EXCEPTIONS)
+else()
+    if(MSVC)
+        target_compile_options(${PROJECT_NAME} PRIVATE /EHsc-)
+    else()
+        target_compile_options(${PROJECT_NAME} PRIVATE -fno-exceptions)
+    endif()
+endif()
+
 target_include_directories(${PROJECT_NAME} INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
