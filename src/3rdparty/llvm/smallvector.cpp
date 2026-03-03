@@ -15,7 +15,6 @@
 #include <string>
 #include <tuple>
 
-#ifndef LLVM_ENABLE_EXCEPTIONS
 #include "logging.h"
 
 namespace llvm {
@@ -35,7 +34,6 @@ static const char *Twine(std::string &t) {
 
 }
 
-#endif
 
 namespace llvm {
 
