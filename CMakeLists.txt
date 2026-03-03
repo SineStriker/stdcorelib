@@ -128,7 +128,7 @@ target_sources(${PROJECT_NAME} PRIVATE ${_src})
 target_compile_definitions(${PROJECT_NAME} PRIVATE STDCORELIB_LIBRARY)
 
 if(STDCORELIB_ENABLE_EXCEPTIONS)
-    target_compile_options(${PROJECT_NAME} PRIVATE LLVM_ENABLE_EXCEPTIONS)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE LLVM_ENABLE_EXCEPTIONS)
 else()
     if(MSVC)
         target_compile_options(${PROJECT_NAME} PRIVATE /EHsc-)
