@@ -323,7 +323,10 @@ namespace stdc {
         std::wstring org = winapi::kernel32::GetDllDirectoryW();
         ::SetDllDirectoryW(path.c_str());
 #else
-        std::string org = getenv(PRIOR_LIBRARY_PATH_KEY);
+        std::string org;
+        if (const char *env = std::getenv(PRIOR_LIBRARY_PATH_KEY); env) {
+            org = env;
+        }
         putenv((char *) (PRIOR_LIBRARY_PATH_KEY "=" + path.string()).c_str());
 #endif
         return org;
