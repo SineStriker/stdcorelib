@@ -201,7 +201,7 @@ namespace stdc {
         constexpr void operator-(int) const noexcept = delete;
 
         constexpr bool test_flag(Enum value) const noexcept {
-            return testFlags(value);
+            return test_flags(value);
         }
 
         constexpr bool test_flags(flags values) const noexcept {
@@ -209,7 +209,7 @@ namespace stdc {
         }
 
         constexpr bool test_any_flag(Enum value) const noexcept {
-            return testAnyFlags(value);
+            return test_any_flags(value);
         }
 
         constexpr bool test_any_flags(flags values) const noexcept {
