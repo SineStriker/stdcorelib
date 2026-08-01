@@ -43,7 +43,7 @@ namespace stdc {
         //
         // Color mode
         //
-        enum class color_mode {
+        enum color_mode {
             automatic,      // decide per target: style it only when it is a terminal
             never,          // never emit styling, whatever the target
             vt,             // always emit ANSI escape sequences
@@ -56,10 +56,19 @@ namespace stdc {
         /// Overrides how styling is emitted, process wide. Use it to back a \c --color=always
         /// switch or to honour \c NO_COLOR. Under the default, \c automatic, a file is styled
         /// only when it is a terminal, so redirected output stays free of escape sequences.
+        ///
+        /// Also drops what has been detected about the targets seen so far, so call it again
+        /// with the current mode after a \c freopen() to force them to be probed anew.
         STDCORELIB_EXPORT void set_color_mode(color_mode mode);
 
         /// Returns the mode that will actually be used for \a file, that is \c automatic already
         /// resolved against it. Never returns \c automatic itself.
+        ///
+        /// Worth asking before building output that is only worth the effort in color:
+        /// \code
+        ///     if (console::resolve_color_mode(stdout) != console::never) { ... }
+        /// \endcode
+        /// It is the isatty() check, except that it also respects an explicit mode.
         STDCORELIB_EXPORT color_mode resolve_color_mode(FILE *file);
 
         //

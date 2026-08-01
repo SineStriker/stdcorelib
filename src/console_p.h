@@ -24,7 +24,7 @@ namespace stdc::console::detail {
 
     /// Returns the SGR escape sequence that takes a terminal from \a from to \a to, or an empty
     /// string when there is nothing to write. Pure: it touches no state and writes nowhere, which
-    /// is the point -- it is the only part of the colour path a unit test can reach, since
+    /// is the point -- it is the only part of the color path a unit test can reach, since
     /// everything around it needs a real terminal.
     ///
     /// Two things to know about the output:

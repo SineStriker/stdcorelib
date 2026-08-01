@@ -1,13 +1,14 @@
 #include <stdcorelib/console.h>
 
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
 
 // Private header: the escape sequence builder is not part of the public API, but it is the only
-// piece of the colour path a test can reach without a real terminal.
+// piece of the color path a test can reach without a real terminal.
 #include "console_p.h"
 
 using namespace stdc;
@@ -74,7 +75,7 @@ namespace {
         FILE *_file = nullptr;
     };
 
-    // Restores the process colour mode on the way out, so one case cannot leak into the next.
+    // Restores the process color mode on the way out, so one case cannot leak into the next.
     class ColorModeGuard {
     public:
         explicit ColorModeGuard(color_mode mode) : _saved(get_color_mode()) {
@@ -229,6 +230,54 @@ BOOST_AUTO_TEST_CASE(test_color_mode_override) {
 #endif
 }
 
+// What a target is gets probed once and remembered, so these check the remembering cannot go
+// stale or wrong.
+BOOST_AUTO_TEST_CASE(test_target_detection_is_cached) {
+    TempFile f;
+    BOOST_REQUIRE(f.get() != nullptr);
+
+    // repeated questions about the same target agree
+    auto first = resolve_color_mode(f.get());
+    for (int i = 0; i < 5; ++i) {
+        BOOST_CHECK(resolve_color_mode(f.get()) == first);
+    }
+    BOOST_CHECK(first == color_mode::never);
+
+    // stdout and stderr are the targets the cache actually exists for
+    auto out = resolve_color_mode(stdout);
+    auto err = resolve_color_mode(stderr);
+    BOOST_CHECK(resolve_color_mode(stdout) == out);
+    BOOST_CHECK(resolve_color_mode(stderr) == err);
+
+    // setting a mode drops what was remembered, and the answers still come back right
+    set_color_mode(get_color_mode());
+    BOOST_CHECK(resolve_color_mode(f.get()) == first);
+    BOOST_CHECK(resolve_color_mode(stdout) == out);
+
+    // More live targets than the cache has slots. Every one still resolves correctly; the ones
+    // that do not fit are simply probed each time.
+    {
+        std::vector<std::unique_ptr<TempFile>> files;
+        for (int i = 0; i < 8; ++i) {
+            files.push_back(std::make_unique<TempFile>());
+            BOOST_REQUIRE(files.back()->get() != nullptr);
+        }
+        for (const auto &file : files) {
+            BOOST_CHECK(resolve_color_mode(file->get()) == color_mode::never);
+        }
+    }
+
+    // Churn through short-lived files, which the C runtime is free to hand back at the same
+    // address. A cached entry must not be trusted for one of those.
+    for (int i = 0; i < 16; ++i) {
+        TempFile scratch;
+        BOOST_REQUIRE(scratch.get() != nullptr);
+        BOOST_CHECK(resolve_color_mode(scratch.get()) == color_mode::never);
+        console::u8fputs("x", scratch.get());
+        BOOST_CHECK_EQUAL(scratch.contents(), "x");
+    }
+}
+
 // With vt forced, the bytes written to a file are the real escape sequences.
 BOOST_AUTO_TEST_CASE(test_forced_vt_emits_escapes) {
     ColorModeGuard guard(color_mode::vt);
@@ -246,7 +295,7 @@ BOOST_AUTO_TEST_CASE(test_forced_vt_emits_escapes) {
         BOOST_CHECK_EQUAL(escaped(f.contents()), "<ESC>[32mgo<ESC>[0m");
     }
 
-    // no colour and no style means nothing to emit
+    // no color and no style means nothing to emit
     {
         TempFile f;
         console::fputs(nostyle, nocolor, nocolor, "bare", f.get());
@@ -328,7 +377,7 @@ BOOST_AUTO_TEST_CASE(test_sgr_reset_sequence) {
     BOOST_CHECK_EQUAL(sgr_reset_sequence({bold, nocolor, nocolor}), "\033[0m");
     BOOST_CHECK_EQUAL(sgr_reset_sequence({bold, red, blue}), "\033[0m");
 
-    // even one whose colour has no code of its own
+    // even one whose color has no code of its own
     BOOST_CHECK_EQUAL(sgr_reset_sequence({nostyle, black, nocolor}), "\033[0m");
 }
 

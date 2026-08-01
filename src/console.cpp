@@ -18,39 +18,121 @@
 
 namespace stdc {
 
-    // Returns the console handle behind \a file, or INVALID_HANDLE_VALUE when the target is not
-    // a console -- a file, a pipe, or anything else that has no attributes to set. Everything
-    // that decides how to style output asks this about the *target*, never about the process's
-    // own stdout, so redirected output is never styled just because stdout happens to be a
-    // terminal.
+    // Everything below asks about the *target* being written to, never about the process's own
+    // stdout, so redirected output is not styled just because stdout happens to be a terminal.
+
+    // What the target turned out to be. Independent of the configured color mode, so it can be
+    // remembered across writes.
+    enum target_kind {
+        target_not_a_terminal,
+        target_vt,
+        target_legacy, // a Windows console that would not take virtual terminal processing
+    };
+
 #ifdef _WIN32
-    static HANDLE console_handle_of(FILE *file) {
-        if (!file) {
-            return INVALID_HANDLE_VALUE;
-        }
-        int fd = ::_fileno(file);
-        if (fd < 0) {
-            return INVALID_HANDLE_VALUE;
-        }
-        auto handle = reinterpret_cast<HANDLE>(::_get_osfhandle(fd));
-        if (handle == INVALID_HANDLE_VALUE) {
-            return INVALID_HANDLE_VALUE;
-        }
-        DWORD mode;
-        return ::GetConsoleMode(handle, &mode) ? handle : INVALID_HANDLE_VALUE;
-    }
+    using target_id = HANDLE;
+    static const target_id invalid_target_id = INVALID_HANDLE_VALUE;
+#else
+    using target_id = int;
+    static const target_id invalid_target_id = -1;
 #endif
 
-    static bool is_terminal(FILE *file) {
+    // The descriptor behind a file, without asking the OS anything about it. No system call, so
+    // it is cheap enough to check on every write -- which is what lets a remembered answer be
+    // matched against the file it was actually probed through.
+    static target_id target_id_of(FILE *file) {
         if (!file) {
-            return false;
+            return invalid_target_id;
         }
 #ifdef _WIN32
-        return console_handle_of(file) != INVALID_HANDLE_VALUE;
+        int fd = ::_fileno(file);
+        if (fd < 0) {
+            return invalid_target_id;
+        }
+        return reinterpret_cast<HANDLE>(::_get_osfhandle(fd));
 #else
         int fd = ::fileno(file);
-        return fd >= 0 && ::isatty(fd) != 0;
+        return fd < 0 ? invalid_target_id : fd;
 #endif
+    }
+
+    // Asks the OS what the target is, and on Windows switches virtual terminal processing on
+    // while it is there. This is the part that costs system calls and, on a console, changes
+    // state -- so it is done once per target rather than once per write.
+    static target_kind detect_target(FILE *file) {
+        target_id id = target_id_of(file);
+        if (id == invalid_target_id) {
+            return target_not_a_terminal;
+        }
+#ifdef _WIN32
+        DWORD mode = 0;
+        if (!::GetConsoleMode(id, &mode)) {
+            return target_not_a_terminal;
+        }
+        if (mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) {
+            return target_vt;
+        }
+        return ::SetConsoleMode(id, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) ? target_vt
+                                                                               : target_legacy;
+#else
+        return ::isatty(id) ? target_vt : target_not_a_terminal;
+#endif
+    }
+
+    // A handful of slots is plenty: in practice this only ever sees stdout and stderr. A target
+    // that does not fit is simply probed every time, which is correct, just not free.
+    //
+    // An entry is trusted only while the file still resolves to the descriptor it was probed
+    // through. That check costs nothing and catches a FILE being closed and its address reused.
+    // It does not catch freopen() swapping the target underneath the same descriptor, which is
+    // what set_color_mode() clearing the table is for.
+    struct target_cache_entry {
+        FILE *file;
+        target_id id;
+        target_kind kind;
+    };
+
+    static constexpr int target_cache_slots = 4;
+    static target_cache_entry g_target_cache[target_cache_slots]{};
+    static int g_target_cache_size = 0;
+
+    static std::mutex &target_cache_mtx() {
+        static std::mutex instance;
+        return instance;
+    }
+
+    static void clear_target_cache() {
+        std::lock_guard<std::mutex> lock(target_cache_mtx());
+        g_target_cache_size = 0;
+    }
+
+    static target_kind target_kind_of(FILE *file) {
+        target_id id = target_id_of(file);
+        if (id == invalid_target_id) {
+            return target_not_a_terminal;
+        }
+
+        std::lock_guard<std::mutex> lock(target_cache_mtx());
+
+        int slot = -1;
+        for (int i = 0; i < g_target_cache_size; ++i) {
+            if (g_target_cache[i].file == file) {
+                slot = i;
+                break;
+            }
+        }
+        if (slot >= 0 && g_target_cache[slot].id == id) {
+            return g_target_cache[slot].kind;
+        }
+
+        target_kind kind = detect_target(file);
+        if (slot < 0 && g_target_cache_size < target_cache_slots) {
+            slot = g_target_cache_size++;
+        }
+        if (slot >= 0) {
+            g_target_cache[slot] = {file, id, kind};
+        }
+        return kind;
     }
 
     class ConsoleOutputGuard {
@@ -66,8 +148,10 @@ namespace stdc {
 #ifdef _WIN32
                 // Switching the code page is a process wide side effect, so only pay it when the
                 // target really is a console; for a file or a pipe it would change nothing there
-                // and disturb whatever else is writing to the console.
-                _console = console_handle_of(file);
+                // and disturb whatever else is writing to the console. Both calls below are
+                // answered from the cache, so this costs no system call of its own.
+                _console = target_kind_of(file) != target_not_a_terminal ? target_id_of(file)
+                                                                         : INVALID_HANDLE_VALUE;
                 if (_console != INVALID_HANDLE_VALUE) {
                     _codepage = ::GetConsoleOutputCP();
                     ::SetConsoleOutputCP(CP_UTF8);
@@ -326,7 +410,7 @@ namespace stdc {
 
         namespace detail {
 
-            // The SGR code for a foreground colour, or nullptr when there is none. Both `nocolor`
+            // The SGR code for a foreground color, or nullptr when there is none. Both `nocolor`
             // and `black` land in the default branch: neither has ever had a code here, and
             // giving them one now would change how existing markup renders.
             static const char *fg_code(int fg) {
@@ -436,6 +520,9 @@ namespace stdc {
         */
         void set_color_mode(color_mode mode) {
             g_color_mode.store(mode, std::memory_order_relaxed);
+            // Also the way to make a target be probed again, which a program that has swapped one
+            // out with freopen() needs.
+            clear_target_cache();
         }
 
         /*!
@@ -454,27 +541,19 @@ namespace stdc {
                 return mode;
             }
 
-            // Everything below asks about the target, never about the process's own stdout.
-            if (!is_terminal(file)) {
-                return color_mode::never;
-            }
+            // Probing the target is the expensive half, and on a console it also turns virtual
+            // terminal processing on, so it happens once per target and is remembered.
+            switch (target_kind_of(file)) {
+                case target_vt:
+                    return color_mode::vt;
 #ifdef _WIN32
-            HANDLE handle = console_handle_of(file);
-            DWORD console_mode = 0;
-            if (!::GetConsoleMode(handle, &console_mode)) {
-                return color_mode::windows_legacy;
-            }
-            if (console_mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) {
-                return color_mode::vt;
-            }
-            // A console that will not take virtual terminal processing has to go through the
-            // console API instead.
-            return ::SetConsoleMode(handle, console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-                       ? color_mode::vt
-                       : color_mode::windows_legacy;
-#else
-            return color_mode::vt;
+                case target_legacy:
+                    return color_mode::windows_legacy;
 #endif
+                default:
+                    break;
+            }
+            return color_mode::never;
         }
 
         int fputs(int style, int fg, int bg, const char *buf, FILE *file) {
