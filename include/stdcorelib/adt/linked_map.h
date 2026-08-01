@@ -50,6 +50,11 @@ namespace stdc {
         }
 
         linked_map &operator=(const linked_map &other) {
+            // NOTE: the self check is required, not just an optimization: clear() below would
+            // otherwise wipe the very list the loop is about to read from.
+            if (this == &other) {
+                return *this;
+            }
             clear();
             for (const auto &item : other.m_list) {
                 append(item.first, item.second);
@@ -58,6 +63,9 @@ namespace stdc {
         }
 
         linked_map &operator=(linked_map &&other) noexcept {
+            if (this == &other) {
+                return *this;
+            }
             m_list = std::move(other.m_list);
             m_map = std::move(other.m_map);
             return *this;

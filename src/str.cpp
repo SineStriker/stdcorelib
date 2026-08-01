@@ -229,7 +229,10 @@ namespace stdc {
             if (sv.empty()) {
                 return {};
             }
-            return winapi::kernel32::WideCharToMultiByte(CP_ACP, WC_ERR_INVALID_CHARS, sv);
+            // NOTE: WC_ERR_INVALID_CHARS is only accepted for CP_UTF8 and CP_GB18030. Passing it
+            // for any other CP_ACP code page makes WideCharToMultiByte fail with
+            // ERROR_INVALID_FLAGS, which would turn every conversion into an empty string.
+            return winapi::kernel32::WideCharToMultiByte(CP_ACP, 0, sv);
         }
 #endif
 
