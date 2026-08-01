@@ -73,6 +73,18 @@
 #  define STDCORELIB_UNLIKELY(EXPR) (EXPR)
 #endif
 
+#ifndef __has_cpp_attribute
+#  define __has_cpp_attribute(x) 0
+#endif
+
+#if __has_cpp_attribute(no_unique_address) >= 201803L
+#  define STDCORELIB_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#elif defined(_MSC_VER) && _MSC_VER >= 1929
+#  define STDCORELIB_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
+#else
+#  define STDCORELIB_NO_UNIQUE_ADDRESS
+#endif
+
 #ifndef _TSTR
 #  ifdef _WIN32
 #    define _TSTR(T) L##T

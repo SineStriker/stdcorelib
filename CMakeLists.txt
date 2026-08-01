@@ -58,7 +58,6 @@ set(STDCORELIB_INSTALL_NAME ${PROJECT_NAME})
 if(TRUE)
     file(GLOB _common_src src/*.cpp)
     file(GLOB_RECURSE _subdir_src
-        src/3rdparty/*.cpp
         src/support/*.cpp
         src/adt/*.cpp
         src/stlextra/*.cpp
@@ -127,9 +126,7 @@ add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 target_sources(${PROJECT_NAME} PRIVATE ${_src})
 target_compile_definitions(${PROJECT_NAME} PRIVATE STDCORELIB_LIBRARY)
 
-if(STDCORELIB_ENABLE_EXCEPTIONS)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE LLVM_ENABLE_EXCEPTIONS)
-else()
+if(NOT STDCORELIB_ENABLE_EXCEPTIONS)
     if(MSVC)
         target_compile_options(${PROJECT_NAME} PRIVATE /EHsc-)
     else()

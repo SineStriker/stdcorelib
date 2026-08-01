@@ -43,5 +43,4 @@ cmake --build build --config Release --target install
 - [qtbase](https://github.com/qt/qtbase)
 - [Python](https://github.com/python/cpython)
 - [xmake](https://github.com/xmake-io/xmake)
-- [llvm-project](https://github.com/llvm/llvm-project)
 - [Registry](https://github.com/m4x1m1l14n/Registry)

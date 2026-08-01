@@ -576,7 +576,7 @@ namespace stdc {
         int cfputs(const std::string_view &buf, FILE *file) {
             using namespace str;
 
-            llvm::SmallVector<varexp_part, 10> parts;
+            vlarray<varexp_part, 10> parts;
             if (!varexp_split(buf, parts)) {
                 return std::fwrite(buf.data(), sizeof(char), buf.size(), file);
             }

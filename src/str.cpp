@@ -1,6 +1,6 @@
 #include "str.h"
 
-#include "3rdparty/llvm/smallvector.h"
+#include "vlarray.h"
 
 #ifdef _WIN32
 #  include "winapi.h"
@@ -25,7 +25,7 @@ namespace stdc {
         /*!
             \internal
         */
-        bool varexp_split(const std::string_view &s, llvm::SmallVectorImpl<varexp_part> &result) {
+        bool varexp_split(const std::string_view &s, vlarray_base<varexp_part> &result) {
             varexp_part buf{
                 varexp_part_type::literal,
                 s.data(),
@@ -258,7 +258,7 @@ namespace stdc {
                 const char *data;
                 size_t size;
             };
-            llvm::SmallVector<Part, 10> parts;
+            vlarray<Part, 10> parts;
 
             const auto &push_back = [&parts](const char *data, size_t size) {
                 parts.push_back({data, size});
@@ -339,7 +339,7 @@ namespace stdc {
         */
         std::string varexp(const std::string_view &s,
                            const std::function<std::string(const std::string_view &)> &find) {
-            llvm::SmallVector<varexp_part, 10> parts;
+            vlarray<varexp_part, 10> parts;
             if (!varexp_split(s, parts)) {
                 return {};
             }
@@ -388,10 +388,10 @@ namespace stdc {
                 // 如果栈上缓冲区足够，直接输出
                 return std::string(stack_buffer, len);
             }
-            
+
             // 如果栈上缓冲区不足，则在堆上分配足够的空间
             std::string heap_buffer;
-            heap_buffer.resize(len + 1);  // +1 用于 '\0'
+            heap_buffer.resize(len + 1); // +1 用于 '\0'
 
             // 使用副本重新格式化
             len = std::vsnprintf(heap_buffer.data(), len + 1, fmt, args_copy);

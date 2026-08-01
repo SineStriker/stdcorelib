@@ -11,7 +11,7 @@
 #include "winapi.h"
 #include "str.h"
 #include "scope_guard.h"
-#include "3rdparty/llvm/smallvector.h"
+#include "vlarray.h"
 
 namespace fs = std::filesystem;
 
@@ -433,8 +433,7 @@ namespace stdc {
     }
 
     // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1157
-    static inline LPHANDLE _get_handle_list(const llvm::SmallVector<HANDLE, 10> &handles,
-                                            SIZE_T *size) {
+    static inline LPHANDLE _get_handle_list(const vlarray<HANDLE, 10> &handles, SIZE_T *size) {
         if (handles.empty()) {
             return nullptr;
         }
@@ -466,8 +465,7 @@ namespace stdc {
 
     // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1223
     static std::tuple<std::error_code, const char *>
-        _get_attribute_list(const llvm::SmallVector<HANDLE, 10> &handles,
-                            AttributeList *attribute_list) {
+        _get_attribute_list(const vlarray<HANDLE, 10> &handles, AttributeList *attribute_list) {
         DWORD err;
         const char *err_api = nullptr;
         BOOL result;
@@ -558,7 +556,7 @@ namespace stdc {
         }
 
         // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1495
-        llvm::SmallVector<HANDLE, 10> handle_list;
+        vlarray<HANDLE, 10> handle_list;
         if (startupinfo) {
             auto it = startupinfo->lpAttributeList.find("handle_list");
             if (it != startupinfo->lpAttributeList.end()) {
@@ -611,7 +609,7 @@ namespace stdc {
 
         // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1373
         // prepare environment variables
-        llvm::SmallVector<wchar_t, 1024> env_str;
+        vlarray<wchar_t, 1024> env_str;
         if (!env.empty()) {
             for (const auto &item : env) {
                 env_str.insert(env_str.end(), item.first.begin(), item.first.end());

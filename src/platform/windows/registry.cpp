@@ -8,7 +8,7 @@
 #include "str.h"
 #include "console.h"
 
-#include "3rdparty/llvm/smallvector.h"
+#include "vlarray.h"
 
 #ifdef _MSC_VER
 #  include <intrin.h>
@@ -617,7 +617,7 @@ namespace stdc::windows {
         }
 
         // Get the value.
-        llvm::SmallVector<unsigned char, 512> data(dataSize);
+        vlarray<unsigned char, 512> data(dataSize);
         std::fill(data.data(), data.data() + dataSize, 0u);
 
         ret = RegQueryValueExW(_hkey, subKeyC, nullptr, nullptr, data.data(), &dataSize);

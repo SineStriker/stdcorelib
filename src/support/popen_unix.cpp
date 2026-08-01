@@ -13,7 +13,7 @@
 #include "str.h"
 #include "scope_guard.h"
 
-#include "3rdparty/llvm/smallvector.h"
+#include "vlarray.h"
 
 namespace stdc {
 
@@ -329,7 +329,7 @@ namespace stdc {
         auto &errpipe_read = errpipe[0];
         auto &errpipe_write = errpipe[1];
         {
-            llvm::SmallVector<int> low_fds_to_close;
+            vlarray<int> low_fds_to_close;
             const auto &close_low_fds_guard = make_scope_guard([&] {
                 for (int fd : std::as_const(low_fds_to_close)) {
                     close(fd);
