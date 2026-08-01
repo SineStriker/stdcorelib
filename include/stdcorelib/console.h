@@ -41,6 +41,28 @@ namespace stdc {
         };
 
         //
+        // Color mode
+        //
+        enum class color_mode {
+            automatic,      // decide per target: style it only when it is a terminal
+            never,          // never emit styling, whatever the target
+            vt,             // always emit ANSI escape sequences
+            windows_legacy, // always drive the Windows console API; means `never` elsewhere
+        };
+
+        /// Returns the mode the process is set to, \c automatic unless it has been changed.
+        STDCORELIB_EXPORT color_mode get_color_mode();
+
+        /// Overrides how styling is emitted, process wide. Use it to back a \c --color=always
+        /// switch or to honour \c NO_COLOR. Under the default, \c automatic, a file is styled
+        /// only when it is a terminal, so redirected output stays free of escape sequences.
+        STDCORELIB_EXPORT void set_color_mode(color_mode mode);
+
+        /// Returns the mode that will actually be used for \a file, that is \c automatic already
+        /// resolved against it. Never returns \c automatic itself.
+        STDCORELIB_EXPORT color_mode resolve_color_mode(FILE *file);
+
+        //
         // General APIs
         //
         STDCORELIB_EXPORT int fputs(int style, int fg, int bg, const char *buf, FILE *file);
@@ -76,7 +98,7 @@ namespace stdc {
                            Args &&...args) {
             return console::puts(style, fg, bg, formatN(format, std::forward<Args>(args)...));
         }
-        
+
         // @overload: println
         inline int println() {
             return std::putchar('\n');

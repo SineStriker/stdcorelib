@@ -2,16 +2,56 @@
 
 #ifdef _WIN32
 #  include "stdc_windows.h"
+#  include <io.h>
+#else
+#  include <unistd.h>
 #endif
 
+#include <atomic>
 #include <mutex>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
 
+#include "console_p.h"
 #include "str_p.h"
 
 namespace stdc {
+
+    // Returns the console handle behind \a file, or INVALID_HANDLE_VALUE when the target is not
+    // a console -- a file, a pipe, or anything else that has no attributes to set. Everything
+    // that decides how to style output asks this about the *target*, never about the process's
+    // own stdout, so redirected output is never styled just because stdout happens to be a
+    // terminal.
+#ifdef _WIN32
+    static HANDLE console_handle_of(FILE *file) {
+        if (!file) {
+            return INVALID_HANDLE_VALUE;
+        }
+        int fd = ::_fileno(file);
+        if (fd < 0) {
+            return INVALID_HANDLE_VALUE;
+        }
+        auto handle = reinterpret_cast<HANDLE>(::_get_osfhandle(fd));
+        if (handle == INVALID_HANDLE_VALUE) {
+            return INVALID_HANDLE_VALUE;
+        }
+        DWORD mode;
+        return ::GetConsoleMode(handle, &mode) ? handle : INVALID_HANDLE_VALUE;
+    }
+#endif
+
+    static bool is_terminal(FILE *file) {
+        if (!file) {
+            return false;
+        }
+#ifdef _WIN32
+        return console_handle_of(file) != INVALID_HANDLE_VALUE;
+#else
+        int fd = ::fileno(file);
+        return fd >= 0 && ::isatty(fd) != 0;
+#endif
+    }
 
     class ConsoleOutputGuard {
     public:
@@ -22,18 +62,29 @@ namespace stdc {
 
             void enter(FILE *file) {
                 global_mtx().lock();
-#ifdef _WIN32
-                _codepage = ::GetConsoleOutputCP();
-                ::SetConsoleOutputCP(CP_UTF8);
-#endif
                 _file = file;
+#ifdef _WIN32
+                // Switching the code page is a process wide side effect, so only pay it when the
+                // target really is a console; for a file or a pipe it would change nothing there
+                // and disturb whatever else is writing to the console.
+                _console = console_handle_of(file);
+                if (_console != INVALID_HANDLE_VALUE) {
+                    _codepage = ::GetConsoleOutputCP();
+                    ::SetConsoleOutputCP(CP_UTF8);
+                }
+#endif
+                attach();
             }
 
             void leave() {
                 reset();
 #ifdef _WIN32
-                ::SetConsoleOutputCP(_codepage);
+                if (_console != INVALID_HANDLE_VALUE) {
+                    ::SetConsoleOutputCP(_codepage);
+                    _console = INVALID_HANDLE_VALUE;
+                }
 #endif
+                _file = nullptr;
                 global_mtx().unlock();
             }
 
@@ -41,6 +92,10 @@ namespace stdc {
             virtual void reset() = 0;
 
         protected:
+            // Runs once the target is in place, for whatever a backend has to read off it.
+            virtual void attach() {
+            }
+
             FILE *_file = nullptr;
 
             static const int _style_init = console::nostyle;
@@ -51,139 +106,62 @@ namespace stdc {
             int _fg = _fg_init;
             int _bg = _bg_init;
 
+            console::detail::attributes current() const {
+                return {_style, _fg, _bg};
+            }
+
+            void set_current(const console::detail::attributes &attrs) {
+                _style = attrs.style;
+                _fg = attrs.fg;
+                _bg = attrs.bg;
+            }
+
             static std::mutex &global_mtx() {
                 static std::mutex _instance;
                 return _instance;
             }
 
 #ifdef _WIN32
+            HANDLE _console = INVALID_HANDLE_VALUE;
+
         private:
             UINT _codepage{};
 #endif
+        };
+
+        // Writes no attributes at all. Used whenever the target cannot show them, which is the
+        // case for every file and pipe -- and is what makes the text path deterministic enough
+        // to unit test.
+        class PlainOutput : public BaseOutput {
+        public:
+            void change(int style, int fg, int bg) override {
+                (void) style;
+                (void) fg;
+                (void) bg;
+            }
+            void reset() override {
+            }
         };
 
         class VTOutput : public BaseOutput {
         public:
             VTOutput() = default;
             void change(int style, int fg, int bg) override {
-                const char *strList[10];
-                int strListSize = 0;
-                auto str_push = [&](const char *s) {
-                    strList[strListSize] = s;
-                    strListSize++;
-                };
-                if (fg != _fg) {
-                    _fg = fg;
-
-                    bool light = fg & console::intensified;
-                    const char *colorStr = nullptr;
-                    switch (fg & 0xF) {
-                        case console::red:
-                            colorStr = light ? "91" : "31";
-                            break;
-                        case console::green:
-                            colorStr = light ? "92" : "32";
-                            break;
-                        case console::blue:
-                            colorStr = light ? "94" : "34";
-                            break;
-                        case console::yellow:
-                            colorStr = light ? "93" : "33";
-                            break;
-                        case console::purple:
-                            colorStr = light ? "95" : "35";
-                            break;
-                        case console::cyan:
-                            colorStr = light ? "96" : "36";
-                            break;
-                        case console::white:
-                            colorStr = light ? "97" : "37";
-                            break;
-                        default:
-                            break;
-                    }
-                    if (colorStr) {
-                        str_push(colorStr);
-                    }
+                console::detail::attributes next{style, fg, bg};
+                auto seq = console::detail::sgr_sequence(current(), next);
+                if (!seq.empty()) {
+                    std::ignore = std::fputs(seq.c_str(), _file);
                 }
-                if (bg != _bg) {
-                    _bg = bg;
-
-                    bool light = bg & console::intensified;
-                    const char *colorStr = nullptr;
-                    switch (bg & 0xF) {
-                        case console::red:
-                            colorStr = light ? "101" : "41";
-                            break;
-                        case console::green:
-                            colorStr = light ? "102" : "42";
-                            break;
-                        case console::blue:
-                            colorStr = light ? "104" : "44";
-                            break;
-                        case console::yellow:
-                            colorStr = light ? "103" : "43";
-                            break;
-                        case console::purple:
-                            colorStr = light ? "105" : "45";
-                            break;
-                        case console::cyan:
-                            colorStr = light ? "106" : "46";
-                            break;
-                        case console::white:
-                            colorStr = light ? "107" : "47";
-                            break;
-                        default:
-                            break;
-                    }
-                    if (colorStr) {
-                        str_push(colorStr);
-                    }
-                }
-                if (style != _style) {
-                    _style = style;
-
-                    if (style & console::bold) {
-                        str_push("1");
-                    }
-                    if (style & console::italic) {
-                        str_push("3");
-                    }
-                    if (style & console::underline) {
-                        str_push("4");
-                    }
-                    if (style & console::strikethrough) {
-                        str_push("9");
-                    }
-                }
-                if (strListSize > 0) {
-                    char buf[20];
-                    int bufSize = 0;
-                    auto buf_puts = [&buf, &bufSize](const char *s) {
-                        for (; *s != '\0'; ++s) {
-                            buf[bufSize++] = *s;
-                        }
-                    };
-                    buf_puts("\033[");
-                    for (int i = 0; i < strListSize - 1; ++i) {
-                        buf_puts(strList[i]);
-                        buf_puts(";");
-                    }
-                    buf_puts(strList[strListSize - 1]);
-                    buf_puts("m");
-                    buf[bufSize] = '\0';
-                    std::ignore = fputs(buf, _file);
-                }
+                // Assigned even when nothing was emitted, so an attribute that has no escape code
+                // of its own still counts as the state we are now in.
+                set_current(next);
             }
 
             void reset() override {
-                if (_fg != _fg_init || _bg != _bg_init || _style != _style_init) {
-                    const char *resetColor = "\033[0m";
-                    std::ignore = fputs(resetColor, _file);
-
-                    _fg = _fg_init;
-                    _bg = _bg_init;
-                    _style = _style_init;
+                auto seq = console::detail::sgr_reset_sequence(current());
+                if (!seq.empty()) {
+                    std::ignore = std::fputs(seq.c_str(), _file);
+                    set_current({});
                 }
             }
         };
@@ -191,12 +169,18 @@ namespace stdc {
 #ifdef _WIN32
         class WindowsLegacyOutput : public BaseOutput {
         public:
-            WindowsLegacyOutput() {
-                _hConsole = ::GetStdHandle(STD_OUTPUT_HANDLE);
-                if (_hConsole != INVALID_HANDLE_VALUE) {
-                    ::GetConsoleScreenBufferInfo(_hConsole, &_csbi);
+            WindowsLegacyOutput() = default;
+
+        protected:
+            // The attributes to restore are read off the target that was just attached, not off
+            // the process's stdout.
+            void attach() override {
+                if (_console != INVALID_HANDLE_VALUE) {
+                    ::GetConsoleScreenBufferInfo(_console, &_csbi);
                 }
             }
+
+        public:
             void change(int style, int fg, int bg) override {
                 (void) style;
 
@@ -273,15 +257,15 @@ namespace stdc {
                     }
                 }
 
-                if (needSet && _hConsole != INVALID_HANDLE_VALUE) {
-                    ::SetConsoleTextAttribute(_hConsole, winColor);
+                if (needSet && _console != INVALID_HANDLE_VALUE) {
+                    ::SetConsoleTextAttribute(_console, winColor);
                 }
             }
 
             void reset() override {
                 if (_fg != _fg_init || _bg != _bg_init) {
-                    if (_hConsole != INVALID_HANDLE_VALUE) {
-                        ::SetConsoleTextAttribute(_hConsole, _csbi.wAttributes);
+                    if (_console != INVALID_HANDLE_VALUE) {
+                        ::SetConsoleTextAttribute(_console, _csbi.wAttributes);
                     }
 
                     _fg = _fg_init;
@@ -290,55 +274,47 @@ namespace stdc {
             }
 
         private:
-            HANDLE _hConsole;
-            CONSOLE_SCREEN_BUFFER_INFO _csbi;
+            CONSOLE_SCREEN_BUFFER_INFO _csbi{};
         };
 #endif
 
-        static BaseOutput &output() {
-            static BaseOutput &instance = []() -> BaseOutput & {
-#ifdef _WIN32
-                bool ensureVTProcessing = false;
-                HANDLE hConsole = ::GetStdHandle(STD_OUTPUT_HANDLE);
-                DWORD mode = 0;
-                bool suc = ::GetConsoleMode(hConsole, &mode);
-                if (::GetConsoleMode(hConsole, &mode)) {
-                    if ((mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0) {
-                        mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-                        if (::SetConsoleMode(hConsole, mode)) {
-                            ensureVTProcessing = true;
-                        }
-                    } else {
-                        ensureVTProcessing = true;
-                    }
+        static BaseOutput &output_for(FILE *file) {
+            switch (console::resolve_color_mode(file)) {
+                case console::color_mode::vt: {
+                    static VTOutput instance;
+                    return instance;
                 }
-
-                if (!ensureVTProcessing) {
+#ifdef _WIN32
+                case console::color_mode::windows_legacy: {
                     static WindowsLegacyOutput instance;
                     return instance;
                 }
 #endif
-                static VTOutput instance;
-                return instance;
-            }();
+                default:
+                    break;
+            }
+            static PlainOutput instance;
             return instance;
         }
 
-        ConsoleOutputGuard(FILE *file) {
-            output().enter(file);
+        ConsoleOutputGuard(FILE *file) : _output(&output_for(file)) {
+            _output->enter(file);
         }
 
         ~ConsoleOutputGuard() {
-            output().leave();
+            _output->leave();
         }
 
         void change(int style, int fg, int bg) {
-            output().change(style, fg, bg);
+            _output->change(style, fg, bg);
         }
 
         void reset() {
-            output().reset();
+            _output->reset();
         }
+
+    private:
+        BaseOutput *_output;
     };
 
     /*！
@@ -347,6 +323,159 @@ namespace stdc {
     */
 
     namespace console {
+
+        namespace detail {
+
+            // The SGR code for a foreground colour, or nullptr when there is none. Both `nocolor`
+            // and `black` land in the default branch: neither has ever had a code here, and
+            // giving them one now would change how existing markup renders.
+            static const char *fg_code(int fg) {
+                const bool light = fg & intensified;
+                switch (fg & 0xF) {
+                    case red:
+                        return light ? "91" : "31";
+                    case green:
+                        return light ? "92" : "32";
+                    case blue:
+                        return light ? "94" : "34";
+                    case yellow:
+                        return light ? "93" : "33";
+                    case purple:
+                        return light ? "95" : "35";
+                    case cyan:
+                        return light ? "96" : "36";
+                    case white:
+                        return light ? "97" : "37";
+                    default:
+                        return nullptr;
+                }
+            }
+
+            static const char *bg_code(int bg) {
+                const bool light = bg & intensified;
+                switch (bg & 0xF) {
+                    case red:
+                        return light ? "101" : "41";
+                    case green:
+                        return light ? "102" : "42";
+                    case blue:
+                        return light ? "104" : "44";
+                    case yellow:
+                        return light ? "103" : "43";
+                    case purple:
+                        return light ? "105" : "45";
+                    case cyan:
+                        return light ? "106" : "46";
+                    case white:
+                        return light ? "107" : "47";
+                    default:
+                        return nullptr;
+                }
+            }
+
+            std::string sgr_sequence(const attributes &from, const attributes &to) {
+                std::string codes;
+                const auto &push = [&codes](const char *code) {
+                    if (!codes.empty()) {
+                        codes += ';';
+                    }
+                    codes += code;
+                };
+
+                if (to.fg != from.fg) {
+                    if (const char *code = fg_code(to.fg)) {
+                        push(code);
+                    }
+                }
+                if (to.bg != from.bg) {
+                    if (const char *code = bg_code(to.bg)) {
+                        push(code);
+                    }
+                }
+                if (to.style != from.style) {
+                    if (to.style & bold) {
+                        push("1");
+                    }
+                    if (to.style & italic) {
+                        push("3");
+                    }
+                    if (to.style & underline) {
+                        push("4");
+                    }
+                    if (to.style & strikethrough) {
+                        push("9");
+                    }
+                }
+
+                if (codes.empty()) {
+                    return {};
+                }
+                return "\033[" + codes + "m";
+            }
+
+            std::string sgr_reset_sequence(const attributes &from) {
+                if (from == attributes{}) {
+                    return {};
+                }
+                return "\033[0m";
+            }
+
+        }
+
+        static std::atomic<color_mode> g_color_mode{color_mode::automatic};
+
+        /*!
+            Returns the color mode the process is set to.
+        */
+        color_mode get_color_mode() {
+            return g_color_mode.load(std::memory_order_relaxed);
+        }
+
+        /*!
+            Overrides how styling is emitted, process wide.
+        */
+        void set_color_mode(color_mode mode) {
+            g_color_mode.store(mode, std::memory_order_relaxed);
+        }
+
+        /*!
+            Returns the color mode that will actually be used for \a file.
+        */
+        color_mode resolve_color_mode(FILE *file) {
+            auto mode = g_color_mode.load(std::memory_order_relaxed);
+            if (mode != color_mode::automatic) {
+#ifndef _WIN32
+                // No console API to drive here. Writing nothing beats writing escape sequences
+                // the caller did not ask for.
+                if (mode == color_mode::windows_legacy) {
+                    return color_mode::never;
+                }
+#endif
+                return mode;
+            }
+
+            // Everything below asks about the target, never about the process's own stdout.
+            if (!is_terminal(file)) {
+                return color_mode::never;
+            }
+#ifdef _WIN32
+            HANDLE handle = console_handle_of(file);
+            DWORD console_mode = 0;
+            if (!::GetConsoleMode(handle, &console_mode)) {
+                return color_mode::windows_legacy;
+            }
+            if (console_mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) {
+                return color_mode::vt;
+            }
+            // A console that will not take virtual terminal processing has to go through the
+            // console API instead.
+            return ::SetConsoleMode(handle, console_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+                       ? color_mode::vt
+                       : color_mode::windows_legacy;
+#else
+            return color_mode::vt;
+#endif
+        }
 
         int fputs(int style, int fg, int bg, const char *buf, FILE *file) {
             ConsoleOutputGuard cog(file);
