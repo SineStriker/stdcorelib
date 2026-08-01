@@ -37,7 +37,7 @@ namespace stdc {
     template <class Container>
     inline void delete_all(const Container &c) {
         if constexpr (is_map<Container>::value) {
-            for (auto it = c.begin(); it!= c.end(); ++it) {
+            for (auto it = c.begin(); it != c.end(); ++it) {
                 delete it->second;
             }
         } else {
@@ -45,8 +45,17 @@ namespace stdc {
         }
     }
 
+    /// Folds \a key into \a seed, for building one hash out of several values.
+    ///
+    /// The mixing is order dependent, which is the whole point: a plain xor would make
+    /// \c hash(a, hash(b)) and \c hash(b, hash(a)) equal, so every permutation of a composite
+    /// key would land in the same bucket.
     inline constexpr size_t hash(size_t key, size_t seed = 0) noexcept {
-        return size_t(key & (~0U)) ^ seed;
+        if constexpr (sizeof(size_t) >= 8) {
+            return seed ^ (key + size_t(0x9e3779b97f4a7c15ULL) + (seed << 12) + (seed >> 4));
+        } else {
+            return seed ^ (key + size_t(0x9e3779b9UL) + (seed << 6) + (seed >> 2));
+        }
     }
 
     template <class Container, class T>

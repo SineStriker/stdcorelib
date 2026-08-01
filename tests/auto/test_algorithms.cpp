@@ -118,24 +118,40 @@ BOOST_AUTO_TEST_CASE(test_contains) {
 }
 
 BOOST_AUTO_TEST_CASE(test_hash) {
-    // hash() keeps the low 32 bits of the key and xors in the seed
-    static_assert(hash(0) == 0);
-    static_assert(hash(1) == 1);
+    // deterministic, and usable in a constant expression
+    static_assert(hash(1) == hash(1));
+    static_assert(hash(1, 2) == hash(1, 2));
+    BOOST_CHECK_EQUAL(hash(123), hash(123));
+    BOOST_CHECK_EQUAL(hash(123, 456), hash(123, 456));
 
-    BOOST_CHECK_EQUAL(hash(123), size_t(123));
-    BOOST_CHECK_EQUAL(hash(123, 0), size_t(123));
-
-    // the seed is xored in, so seeding twice with the same value cancels out
-    BOOST_CHECK_EQUAL(hash(0, 0xABCD), size_t(0xABCD));
-    BOOST_CHECK_EQUAL(hash(123, 0) ^ 0xABCD, hash(123, 0xABCD));
-
-    // different keys give different results (within the low 32 bits)
+    // different keys and different seeds land somewhere different
     BOOST_CHECK(hash(1) != hash(2));
+    BOOST_CHECK(hash(1, 0) != hash(1, 1));
+    BOOST_CHECK(hash(0) != hash(1));
 
-    // only the low 32 bits of the key survive
-    BOOST_CHECK_EQUAL(hash(size_t(0xFFFFFFFFull)), size_t(0xFFFFFFFFull));
+    // Order dependent, which is the point of the mixing. A plain xor fold would make these two
+    // equal and every permutation of a composite key would collide with the others.
+    BOOST_CHECK(hash(1, hash(2)) != hash(2, hash(1)));
+    BOOST_CHECK(hash(3, hash(1, hash(2))) != hash(1, hash(2, hash(3))));
+
+    // The whole width of the key counts. The old fold masked the key with ~0U, so on a 64 bit
+    // size_t everything above bit 31 was simply dropped.
     if constexpr (sizeof(size_t) > 4) {
-        BOOST_CHECK_EQUAL(hash(size_t(1) << 32), size_t(0));
+        BOOST_CHECK(hash(size_t(1) << 32) != hash(size_t(0)));
+        BOOST_CHECK(hash(size_t(1) << 40) != hash(size_t(1) << 41));
+        BOOST_CHECK(hash(size_t(0x1'0000'0001ull)) != hash(size_t(0x1ull)));
+    }
+
+    // no accidental fixed point: a zero key does not simply hand the seed back
+    BOOST_CHECK(hash(0, 0xABCD) != size_t(0xABCD));
+
+    // spot check that a run of keys does not produce duplicates
+    {
+        std::set<size_t> seen;
+        for (size_t i = 0; i < 1000; ++i) {
+            seen.insert(hash(i));
+        }
+        BOOST_CHECK_EQUAL(seen.size(), 1000u);
     }
 }
 

@@ -1,3 +1,4 @@
+#include <set>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -153,15 +154,34 @@ BOOST_AUTO_TEST_CASE(test_hash) {
     BOOST_CHECK_EQUAL(hasher(VersionNumber(1, 2, 3)), hasher(VersionNumber(1, 2, 3)));
     BOOST_CHECK_EQUAL(hasher(VersionNumber()), hasher(VersionNumber()));
 
-    // different versions normally hash differently
+    // different versions hash differently
     BOOST_CHECK(hasher(VersionNumber(1, 2, 3)) != hasher(VersionNumber(1, 2, 4)));
     BOOST_CHECK(hasher(VersionNumber(1, 0)) != hasher(VersionNumber(2, 0)));
 
-    // ...but the components are folded together with xor, which is commutative, so any
-    // permutation of them collides. Legal for a hash, just weak: keep it in mind before
-    // using VersionNumber as a key in a container that has to stay fast.
-    BOOST_CHECK_EQUAL(hasher(VersionNumber(1, 2, 3)), hasher(VersionNumber(3, 2, 1)));
-    BOOST_CHECK_EQUAL(hasher(VersionNumber(1, 2)), hasher(VersionNumber(2, 1)));
+    // The components are folded in order, so a permutation of them does not collide. They used
+    // to be xored together, which is commutative, and 1.2.3 hashed the same as 3.2.1.
+    BOOST_CHECK(hasher(VersionNumber(1, 2, 3)) != hasher(VersionNumber(3, 2, 1)));
+    BOOST_CHECK(hasher(VersionNumber(1, 2)) != hasher(VersionNumber(2, 1)));
+    BOOST_CHECK(hasher(VersionNumber(1, 2, 3, 4)) != hasher(VersionNumber(4, 3, 2, 1)));
+
+    // a component moving between positions is a different version and hashes differently
+    BOOST_CHECK(hasher(VersionNumber(1, 0, 0)) != hasher(VersionNumber(0, 1, 0)));
+    BOOST_CHECK(hasher(VersionNumber(0, 0, 1)) != hasher(VersionNumber(0, 1, 0)));
+
+    // no wide spread of collisions across a realistic range of versions
+    {
+        std::set<size_t> hashes;
+        int count = 0;
+        for (int major = 0; major < 12; ++major) {
+            for (int minor = 0; minor < 12; ++minor) {
+                for (int patch = 0; patch < 12; ++patch) {
+                    hashes.insert(hasher(VersionNumber(major, minor, patch)));
+                    ++count;
+                }
+            }
+        }
+        BOOST_CHECK_EQUAL(hashes.size(), size_t(count));
+    }
 
     // usable as a key in the unordered containers
     std::unordered_set<VersionNumber> set;
