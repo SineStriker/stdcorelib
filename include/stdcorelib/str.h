@@ -121,7 +121,7 @@ namespace stdc {
                 if constexpr (std::is_same_v<T2, bool>) {
                     return t ? "true" : "false";
                 } else if constexpr (std::is_same_v<T2, char>) {
-                    return std::string(t);
+                    return std::string(1, t);
                 } else if constexpr (std::is_same_v<T2, wchar_t>) {
                     return conv<std::wstring>::to_utf8(&t, 1);
                 } else if constexpr (std::is_integral_v<T2>) {

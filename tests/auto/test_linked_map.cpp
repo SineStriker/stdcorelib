@@ -133,26 +133,131 @@ BOOST_AUTO_TEST_CASE(test_ordering) {
                          {"c", 3},
     });
 
-    // NOTE: insert(iterator, key, value) is not exercised here because it does not compile:
-    // it hands its const_iterator position to insert_impl(), which takes a mutable one.
+    // insert lands the entry before the given position
+    BOOST_CHECK(map.insert(map.find("c"), "b2", 22).second);
+    check_order(map, {
+                         {"a",  1 },
+                         {"b",  2 },
+                         {"b2", 22},
+                         {"c",  3 },
+    });
 
-    // a duplicate key is rejected, and does not move or update the existing entry
+    // inserting at begin() is a prepend, at end() an append
+    BOOST_CHECK(map.insert(map.begin(), "start", 0).second);
+    BOOST_CHECK(map.insert(map.end(), "stop", 9).second);
+    BOOST_CHECK_EQUAL(to_vector(map).front().first, "start");
+    BOOST_CHECK_EQUAL(to_vector(map).back().first, "stop");
+
+    // a duplicate key is rejected wherever it is offered, and does not move or update the
+    // existing entry
     BOOST_CHECK(!map.prepend("c", 99).second);
     BOOST_CHECK(!map.append("a", 99).second);
+    BOOST_CHECK(!map.insert(map.begin(), "a", 99).second);
     check_order(map, {
-                         {"a", 1},
-                         {"b", 2},
-                         {"c", 3},
+                         {"start", 0 },
+                         {"a",     1 },
+                         {"b",     2 },
+                         {"b2",    22},
+                         {"c",     3 },
+                         {"stop",  9 },
     });
 
     // operator[] appends when the key is new, and updates in place when it is not
     map["z"] = 26;
-    BOOST_CHECK_EQUAL(map.size(), 4u);
+    BOOST_CHECK_EQUAL(map.size(), 7u);
     BOOST_CHECK(to_vector(map).back().first == "z");
 
     map["a"] = 100;
-    BOOST_CHECK_EQUAL(map.size(), 4u);
-    BOOST_CHECK(to_vector(map).front() == std::make_pair(std::string("a"), 100));
+    BOOST_CHECK_EQUAL(map.size(), 7u);
+    BOOST_CHECK(to_vector(map)[1] == std::make_pair(std::string("a"), 100));
+}
+
+BOOST_AUTO_TEST_CASE(test_construct) {
+    const auto expect = std::vector<std::pair<std::string, int>>{
+        {"1", 1},
+        {"2", 2},
+        {"3", 3},
+    };
+
+    // initializer list, in order
+    {
+        Map map = {
+            {"1", 1},
+            {"2", 2},
+            {"3", 3},
+        };
+        check_order(map, expect);
+    }
+
+    // a duplicate key in the list keeps the first occurrence
+    {
+        Map map = {
+            {"a", 1},
+            {"a", 2},
+            {"b", 3},
+        };
+        BOOST_CHECK_EQUAL(map.size(), 2u);
+        BOOST_CHECK_EQUAL(map.value("a"), 1);
+    }
+
+    // an empty list
+    {
+        Map map = {};
+        BOOST_CHECK(map.empty());
+    }
+
+    // from any iterator range over pairs, not just this map's own iterators
+    {
+        std::vector<std::pair<std::string, int>> src = expect;
+        Map map(src.begin(), src.end());
+        check_order(map, expect);
+    }
+    {
+        auto source = make_map();
+        Map map(source.begin(), source.end());
+        check_order(map, expect);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(test_swap) {
+    auto a = make_map();
+    Map b;
+    b.append("x", 24);
+
+    a.swap(b);
+
+    BOOST_CHECK_EQUAL(a.size(), 1u);
+    BOOST_CHECK_EQUAL(a.value("x"), 24);
+    BOOST_CHECK(!a.contains("1"));
+
+    check_order(b, {
+                       {"1", 1},
+                       {"2", 2},
+                       {"3", 3},
+    });
+
+    // the lookup index followed the list across, so both halves still work
+    BOOST_CHECK(b.find("2") != b.end());
+    BOOST_CHECK_EQUAL(b.find("2")->second, 2);
+    b.append("4", 4);
+    BOOST_CHECK_EQUAL(b.size(), 4u);
+    a.append("y", 25);
+    BOOST_CHECK_EQUAL(a.size(), 2u);
+
+    // swapping back restores both
+    a.swap(b);
+    BOOST_CHECK_EQUAL(a.size(), 4u);
+    BOOST_CHECK_EQUAL(b.size(), 2u);
+
+    // swapping with an empty map, and with itself
+    Map empty;
+    a.swap(empty);
+    BOOST_CHECK(a.empty());
+    BOOST_CHECK_EQUAL(empty.size(), 4u);
+
+    empty.swap(empty);
+    BOOST_CHECK_EQUAL(empty.size(), 4u);
+    BOOST_CHECK_EQUAL(empty.value("1"), 1);
 }
 
 BOOST_AUTO_TEST_CASE(test_lookup) {
@@ -380,6 +485,20 @@ BOOST_AUTO_TEST_CASE(test_iterators) {
     // an iterator converts to a const_iterator
     {
         Map::const_iterator cit = map.begin();
+        BOOST_CHECK_EQUAL(cit.key(), "1");
+        BOOST_CHECK(cit == map.cbegin());
+    }
+
+    // a const_iterator walks both ways, prefix and postfix
+    {
+        auto cit = map.cbegin();
+        BOOST_CHECK_EQUAL((++cit).key(), "2");
+        auto old = cit++;
+        BOOST_CHECK_EQUAL(old.key(), "2");
+        BOOST_CHECK_EQUAL(cit.key(), "3");
+        BOOST_CHECK_EQUAL((--cit).key(), "2");
+        auto old2 = cit--;
+        BOOST_CHECK_EQUAL(old2.key(), "2");
         BOOST_CHECK_EQUAL(cit.key(), "1");
         BOOST_CHECK(cit == map.cbegin());
     }

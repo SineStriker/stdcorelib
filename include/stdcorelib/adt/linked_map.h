@@ -77,8 +77,10 @@ namespace stdc {
 
         template <typename InputIterator>
         linked_map(InputIterator f, InputIterator l) {
+            // Dereference rather than call key()/value(), so that any iterator over pairs works
+            // here, including the plain `const std::pair<K, V> *` an initializer_list hands over.
             for (; f != l; ++f)
-                append(f.key(), f.value());
+                append(f->first, f->second);
         }
 
         inline bool operator==(const linked_map &other) const {
@@ -91,7 +93,7 @@ namespace stdc {
 
         void swap(linked_map &other) noexcept {
             std::swap(m_list, other.m_list);
-            std::move(m_map, other.m_map);
+            std::swap(m_map, other.m_map);
         }
 
         // clang-format off
@@ -141,9 +143,9 @@ namespace stdc {
             inline bool operator==(const const_iterator &o) const { return i == o.i; }
             inline bool operator!=(const const_iterator &o) const { return i != o.i; }
             inline const_iterator &operator++() { i++; return *this; }
-            inline const_iterator operator++(int) { iterator r = *this; i++; return r; }
+            inline const_iterator operator++(int) { const_iterator r = *this; i++; return r; }
             inline const_iterator &operator--() { i--; return *this; }
-            inline const_iterator operator--(int) { iterator r = *this; i--; return r; }
+            inline const_iterator operator--(int) { const_iterator r = *this; i--; return r; }
 
             inline const K &key() const { return i->first; }
             inline const V &value() const { return i->second; }
@@ -320,7 +322,10 @@ namespace stdc {
         }
 
     private:
-        std::pair<iterator, bool> insert_impl(typename _ListType::iterator it, const K &key,
+        // The position is taken as a const_iterator so that both the public insert() overloads
+        // (which carry one) and append()/prepend() (which pass a mutable begin()/end()) reach it.
+        // std::list::emplace() accepts a const_iterator and hands back a mutable one.
+        std::pair<iterator, bool> insert_impl(typename _ListType::const_iterator it, const K &key,
                                               const V &val) {
             auto res = m_map.insert(std::make_pair(key, m_list.end()));
             auto &org_it = res.first->second;
@@ -333,7 +338,10 @@ namespace stdc {
             return std::make_pair(iterator(org_it), false);
         }
 
-        std::pair<iterator, bool> insert_impl(typename _ListType::iterator it, const K &key,
+        // The position is taken as a const_iterator so that both the public insert() overloads
+        // (which carry one) and append()/prepend() (which pass a mutable begin()/end()) reach it.
+        // std::list::emplace() accepts a const_iterator and hands back a mutable one.
+        std::pair<iterator, bool> insert_impl(typename _ListType::const_iterator it, const K &key,
                                               V &&val) {
             auto res = m_map.insert(std::make_pair(key, m_list.end()));
             auto &org_it = res.first->second;

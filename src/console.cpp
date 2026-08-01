@@ -609,6 +609,7 @@ namespace stdc {
                         if (start < p) {
                             ret += std::fwrite(start, sizeof(char), p - start, file);
                         }
+                        break;
                     }
                     case varexp_part_type::variable: {
                         std::string_view part_view(part.data, part.size);

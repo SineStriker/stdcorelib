@@ -238,6 +238,11 @@ BOOST_AUTO_TEST_CASE(test_to_string) {
     BOOST_CHECK_EQUAL(str::to_string(std::string("hello")), "hello");
     BOOST_CHECK_EQUAL(str::to_string(std::string_view("hello")), "hello");
 
+    // a single char becomes a one-character string, not an integer
+    BOOST_CHECK_EQUAL(str::to_string('x'), "x");
+    BOOST_CHECK_EQUAL(str::to_string('0'), "0");
+    BOOST_CHECK_EQUAL(str::to_string(char(0)).size(), 1u);
+
     // wide input is converted to UTF-8
     BOOST_CHECK_EQUAL(str::to_string(L"wide"), "wide");
     BOOST_CHECK_EQUAL(str::to_string(std::wstring(L"wide")), "wide");
@@ -296,6 +301,8 @@ BOOST_AUTO_TEST_CASE(test_format) {
 
     // mixed argument types are converted through to_string()
     BOOST_CHECK_EQUAL(formatN("%1 %2 %3 %4", 1, true, 2.5, "s"), "1 true 2.5 s");
+    BOOST_CHECK_EQUAL(formatN("%1%2%3", 'a', 'b', 'c'), "abc");
+    BOOST_CHECK_EQUAL(formatN("%1 %2", 'x', L'y'), "x y");
 
     // an empty argument substitutes nothing
     BOOST_CHECK_EQUAL(formatN("[%1]", ""), "[]");
