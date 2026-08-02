@@ -98,6 +98,7 @@ using namespace stdc;
 
 auto dir  = system::application_directory();      // from the OS, not from argv[0]
 auto args = system::command_line_arguments();     // UTF-8, from the wide command line on Windows
+auto env  = system::environment();                // UTF-8 too, however the platform stores it
 auto text = path::to_utf8(dir / "config.json");   // path::string() is the lossy one on Windows
 auto tidy = path::clean_path(messy);              // resolves . and .. without touching the disk
 ```
@@ -210,7 +211,7 @@ Every operation comes in two forms: one taking an `std::error_code` and `noexcep
 | `scope_guard.h` | Run something on the way out, unless `dismiss()` says otherwise |
 | `support/versionnumber.h` | A four-part version that parses, prints, compares and hashes |
 | `vla.h` | `VLA_ALLOC` and `VLA_NEW`, stack arrays sized at run time |
-| `pimpl.h` | The `__stdc_impl_t` boilerplate used across the library |
+| `pimpl.h` | The `stdc_impl_t` boilerplate used across the library |
 
 ```cpp
 stdc::vlarray<int, 16> v;      // no allocation until the 17th element
