@@ -21,6 +21,7 @@
 #include <limits>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include "str.h"
 #include "scope_guard.h"
@@ -67,6 +68,39 @@ namespace stdc {
     void Popen::Impl::_cleanup() {
         close_std_files();
         _reap();
+    }
+
+    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L272
+    //
+    // Children nobody is going to wait for. Until someone does, each one sits in the process
+    // table as a zombie, so the list is swept whenever a new child is started. That is what
+    // Python's _active list does, and it costs nothing while no process is being spawned.
+    static std::mutex &abandoned_mutex() {
+        static std::mutex mtx;
+        return mtx;
+    }
+
+    static std::vector<pid_t> &abandoned_pids() {
+        static std::vector<pid_t> pids;
+        return pids;
+    }
+
+    static void reap_abandoned() {
+        std::lock_guard<std::mutex> lock(abandoned_mutex());
+        auto &pids = abandoned_pids();
+        pids.erase(std::remove_if(pids.begin(), pids.end(),
+                                  [](pid_t child) {
+                                      int status;
+                                      pid_t ret = waitpid(child, &status, WNOHANG);
+                                      // Gone, or not ours to collect. Either way, stop looking.
+                                      return ret == child || (ret == -1 && errno != EINTR);
+                                  }),
+                   pids.end());
+    }
+
+    void Popen::Impl::_release_child() {
+        std::lock_guard<std::mutex> lock(abandoned_mutex());
+        abandoned_pids().push_back(pid_t(pid));
     }
 
     bool Popen::Impl::_get_devnull() {
@@ -577,6 +611,9 @@ namespace stdc {
                                      int errread, int errwrite, int gid,
                                      const std::vector<int> &gids, int uid) {
         assert(!args.empty());
+
+        // Starting a child is the moment to collect the ones nobody is waiting for.
+        reap_abandoned();
 
         if (shell) {
             // /bin/sh, not bash, is the one unix guarantees.

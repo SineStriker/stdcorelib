@@ -129,9 +129,12 @@ namespace stdc {
 
     Popen::Impl::~Impl() {
         if (_child_created && !returncode) {
-            // ###FIXME: we cannot run detached process now.
-            std::ignore = kill_impl();
-            std::ignore = _wait();
+            if (detached) {
+                _release_child();
+            } else {
+                std::ignore = kill_impl();
+                std::ignore = _wait();
+            }
         }
         _cleanup();
     }
@@ -452,6 +455,12 @@ namespace stdc {
         return *this;
     }
 
+    Popen &Popen::detached(bool detached) {
+        __stdc_impl_t;
+        impl.detached = detached;
+        return *this;
+    }
+
     Popen &Popen::pipesize(int pipesize) {
         __stdc_impl_t;
         impl.pipesize = pipesize;
@@ -632,6 +641,11 @@ namespace stdc {
     int Popen::pid() const {
         __stdc_impl_t;
         return impl.pid;
+    }
+
+    bool Popen::detached() const {
+        __stdc_impl_t;
+        return impl.detached;
     }
 
     std::optional<int> Popen::returncode() const {

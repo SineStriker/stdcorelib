@@ -8,11 +8,14 @@
 
 #include <boost/test/unit_test.hpp>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#  include <stdcorelib/platform/windows/stdc_windows.h>
+#else
 #  include <csignal>
 #  include <cstring>
 #  include <dirent.h>
 #  include <fcntl.h>
+#  include <sys/wait.h>
 #  include <unistd.h>
 #endif
 
@@ -37,6 +40,9 @@ namespace {
     const char *ExitZero = "exit 0";
     const char *ExitThree = "exit 3";
     const char *BigOutput = "for /L %i in (1,1,5000) do @echo 0123456789012345678901234567890123";
+    // Long enough that the process is certainly still up when we look, short enough that a
+    // leaked one goes away on its own.
+    const char *SleepLong = "ping -n 20 127.0.0.1 >nul";
     const std::vector<std::string> FilterX = {"findstr", "x"};
 #else
     const char *ShellExe = "/bin/sh";
@@ -50,8 +56,38 @@ namespace {
     const char *ExitThree = "exit 3";
     const char *BigOutput = "i=0; while [ $i -lt 5000 ]; do "
                             "echo 0123456789012345678901234567890123; i=$((i+1)); done";
+    const char *SleepLong = "sleep 20";
     const std::vector<std::string> FilterX = {"grep", "x"};
 #endif
+
+    // Whether a pid still names a live process, asked from outside the Popen that started it.
+    bool process_alive(int pid) {
+#ifdef _WIN32
+        HANDLE h = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, DWORD(pid));
+        if (!h) {
+            return false;
+        }
+        DWORD code = 0;
+        bool alive = ::GetExitCodeProcess(h, &code) && code == STILL_ACTIVE;
+        ::CloseHandle(h);
+        return alive;
+#else
+        return ::kill(pid_t(pid), 0) == 0;
+#endif
+    }
+
+    void hard_kill(int pid) {
+#ifdef _WIN32
+        if (HANDLE h = ::OpenProcess(PROCESS_TERMINATE, FALSE, DWORD(pid))) {
+            ::TerminateProcess(h, 1);
+            ::CloseHandle(h);
+        }
+#else
+        ::kill(pid_t(pid), SIGKILL);
+        int status;
+        ::waitpid(pid_t(pid), &status, 0);
+#endif
+    }
 
     std::vector<std::string> shell_args(const char *script) {
         return {ShellExe, ShellFlag, script};
@@ -727,6 +763,67 @@ BOOST_AUTO_TEST_CASE(test_kill) {
 
     // killing an already-dead process is a no-op, not a failure
     BOOST_CHECK(p.kill());
+}
+
+// A Popen owns its child by default and takes it down on the way out. detached() is how to ask
+// for Python's behavior instead, where the child simply carries on.
+BOOST_AUTO_TEST_CASE(test_detached) {
+    // the default: destroying the object ends the child
+    {
+        int pid = -1;
+        {
+            Popen p;
+            std::string err;
+            p.args(shell_args(SleepLong));
+            BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+            pid = p.pid();
+            BOOST_REQUIRE(pid > 0);
+            BOOST_CHECK(process_alive(pid));
+            BOOST_CHECK(!p.detached());
+        }
+        BOOST_CHECK(!process_alive(pid));
+    }
+
+    // detached: it outlives us
+    {
+        int pid = -1;
+        {
+            Popen p;
+            std::string err;
+            p.args(shell_args(SleepLong)).detached(true);
+            BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+            BOOST_CHECK(p.detached());
+            pid = p.pid();
+            BOOST_REQUIRE(pid > 0);
+        }
+        BOOST_CHECK(process_alive(pid));
+        hard_kill(pid);
+    }
+
+    // the flag decides what the destructor does, so setting it after start() works too
+    {
+        int pid = -1;
+        {
+            Popen p;
+            std::string err;
+            p.args(shell_args(SleepLong));
+            BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+            pid = p.pid();
+            p.detached(true);
+        }
+        BOOST_CHECK(process_alive(pid));
+        hard_kill(pid);
+    }
+
+    // a child that already exited leaves nothing behind either way
+    {
+        Popen p;
+        std::string err;
+        p.args(shell_args(ExitZero)).detached(true);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE(p.wait(Timeout));
+        BOOST_CHECK_EQUAL(*p.returncode(), 0);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

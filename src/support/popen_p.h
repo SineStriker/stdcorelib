@@ -48,6 +48,7 @@ namespace stdc {
 
         bool text = false;
         bool close_fds = true;
+        bool detached = false;
         int pipesize = -1;
 
 #ifdef _WIN32
@@ -116,6 +117,10 @@ namespace stdc {
         /// Releases the OS process handle once the exit status is known. Separate from _cleanup()
         /// so that waiting for a child leaves its pipes open for reading.
         void _reap();
+
+        /// Lets go of a child that is to keep running, arranging for its status to be collected
+        /// so that it does not linger as a zombie.
+        void _release_child();
 
         void _cleanup();
 

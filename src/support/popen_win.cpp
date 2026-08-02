@@ -37,6 +37,11 @@ namespace stdc {
         _reap();
     }
 
+    void Popen::Impl::_release_child() {
+        // Windows has no zombies to collect. Closing our handle is all it takes, and _cleanup()
+        // does that next.
+    }
+
     /// Returns whether a standard handle can be used. GetStdHandle returns NULL when the process
     /// has no such handle, which is the case for every GUI subsystem process, and
     /// INVALID_HANDLE_VALUE when the call failed.

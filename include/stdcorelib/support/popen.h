@@ -187,6 +187,17 @@ namespace stdc {
         /// \sa pass_fds(), for the exceptions
         Popen &close_fds(bool close_fds);
 
+        /// Whether the child outlives this object. Off by default, so destroying a Popen whose
+        /// child is still running kills it.
+        ///
+        /// This one may be set at any time, before or after start(), since all it decides is
+        /// what the destructor does. Python never kills the child and this is how to ask for the
+        /// same.
+        ///
+        /// \note It does not detach the child from the console or the session. That is what
+        ///       creationflags() and start_new_session() are for.
+        Popen &detached(bool detached);
+
         /// The capacity of the pipes created for this child, in bytes. The kernel rounds up,
         /// and caps it at \c /proc/sys/fs/pipe-max-size for an unprivileged caller.
         Popen &pipesize(int pipesize); // linux only (ignored on other platforms)
@@ -316,6 +327,8 @@ namespace stdc {
         Stream &stderr_() const;
 
         int pid() const;
+
+        bool detached() const;
 
         /// The exit status, or nothing while the child is still running.
         ///
