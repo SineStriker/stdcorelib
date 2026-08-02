@@ -160,7 +160,7 @@ namespace stdc {
     bool SharedLibrary::open(const fs::path &path, int hints) {
         stdc_impl_t;
         if (impl.hDll) {
-            std::ignore = close();
+            return true;
         }
         impl.path = path;
         if (impl.open(hints)) {
@@ -217,6 +217,9 @@ namespace stdc {
 
 #if !defined(_WIN32) && !defined(__APPLE__)
     static bool checkVersionSuffix(const std::string_view &suffix) {
+        if (suffix.empty() || suffix.front() == '.' || suffix.back() == '.') {
+            return false;
+        }
         size_t start = 0;
         while (start < suffix.size()) {
             size_t dotPos = suffix.find('.', start);
@@ -228,7 +231,8 @@ namespace stdc {
                 part = suffix.substr(start, dotPos - start);
                 start = dotPos + 1;
             }
-            if (!std::all_of(part.begin(), part.end(), ::isdigit)) {
+            if (part.empty() || !std::all_of(part.begin(), part.end(),
+                                             [](unsigned char c) { return std::isdigit(c); })) {
                 return false;
             }
         }
@@ -258,7 +262,8 @@ namespace stdc {
             if (suffix.empty()) {
                 return true; // 仅有 .so，无版本号
             }
-            return checkVersionSuffix(suffix); // 确保后缀全为数字
+            return suffix.front() == '.' && suffix.size() > 1 &&
+                   checkVersionSuffix(suffix.substr(1));
         }
         return false;
 #endif
@@ -273,7 +278,9 @@ namespace stdc {
         if (const char *env = std::getenv(PRIOR_LIBRARY_PATH_KEY); env) {
             org = env;
         }
-        putenv((char *) (PRIOR_LIBRARY_PATH_KEY "=" + path.string()).c_str());
+        if (setenv(PRIOR_LIBRARY_PATH_KEY, path.string().c_str(), 1) != 0) {
+            return {};
+        }
 #endif
         return org;
     }
@@ -288,10 +295,11 @@ namespace stdc {
         }
         return winapi::kernel32::GetModuleFileNameW(hModule);
 #else
-        Dl_info dl_info;
-        dladdr(const_cast<void *>(addr), &dl_info);
-        auto buf = dl_info.dli_fname;
-        return buf;
+        Dl_info dl_info{};
+        if (!addr || dladdr(const_cast<void *>(addr), &dl_info) == 0 || !dl_info.dli_fname) {
+            return {};
+        }
+        return dl_info.dli_fname;
 #endif
     }
 

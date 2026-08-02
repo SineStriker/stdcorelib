@@ -60,6 +60,27 @@ BOOST_AUTO_TEST_CASE(test_reg_read_write) {
     BOOST_VERIFY(testKey.setValue(TEST_BINARY_NULL.first, TEST_BINARY_NULL.second, ec));
     BOOST_VERIFY(testKey.setValue(TEST_DEFAULT.first, TEST_DEFAULT.second, ec));
 
+    // String values stored through the wrapper include the terminators required by the
+    // registry formats. Also install a deliberately unterminated external value to verify that
+    // the reader respects the byte count instead of scanning past the allocation.
+    HKEY nativeKey = nullptr;
+    BOOST_REQUIRE_EQUAL(
+        RegOpenKeyExW(HKEY_CURRENT_USER, TEST_KEY.c_str(), 0, KEY_READ | KEY_WRITE, &nativeKey),
+        ERROR_SUCCESS);
+    auto nativeKeyGuard = stdc::make_scope_guard([&]() { RegCloseKey(nativeKey); });
+    DWORD storedSize = 0;
+    BOOST_REQUIRE_EQUAL(RegQueryValueExW(nativeKey, TEST_STRING.first.c_str(), nullptr, nullptr,
+                                         nullptr, &storedSize),
+                        ERROR_SUCCESS);
+    BOOST_CHECK_EQUAL(storedSize, (TEST_STRING.second.toString().size() + 1) * sizeof(wchar_t));
+
+    const wchar_t unterminated[] = L"external";
+    BOOST_REQUIRE_EQUAL(RegSetValueExW(nativeKey, L"unterminated", 0, REG_SZ,
+                                       reinterpret_cast<const BYTE *>(unterminated),
+                                       DWORD(sizeof(unterminated) - sizeof(wchar_t))),
+                        ERROR_SUCCESS);
+    BOOST_CHECK(testKey.value(L"unterminated", ec).toString() == L"external");
+
     // Get values
     {
         RegValue val = testKey.value(TEST_STRING.first, ec);

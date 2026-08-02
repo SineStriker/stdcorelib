@@ -5,6 +5,7 @@
 #include <variant>
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 
 #include "winapi.h"
 #include "str.h"
@@ -20,26 +21,30 @@ namespace stdc::windows {
 
     // TODO: support when the host system is not little-endian
     template <class T>
-    static T qFromLittleEndian(const uint8_t *data) {
-        return *reinterpret_cast<const T *>(data);
+    static T qFromLittleEndian(const void *data) {
+        T value;
+        std::memcpy(&value, data, sizeof(value));
+        return value;
     }
 
     template <class T>
-    static T qFromBigEndian(const uint8_t *data) {
+    static T qFromBigEndian(const void *data) {
+        T value;
+        std::memcpy(&value, data, sizeof(value));
 #ifdef _MSC_VER
         if constexpr (sizeof(T) == sizeof(short))
-            return (T) _byteswap_ushort(*reinterpret_cast<const USHORT *>(data));
+            return (T) _byteswap_ushort(value);
         else if constexpr (sizeof(T) == sizeof(int))
-            return (T) _byteswap_ulong(*reinterpret_cast<const ULONG *>(data));
+            return (T) _byteswap_ulong(value);
         else if constexpr (sizeof(T) == sizeof(int64_t))
-            return (T) _byteswap_uint64(*reinterpret_cast<const UINT64 *>(data));
+            return (T) _byteswap_uint64(value);
 #else
         if constexpr (sizeof(T) == sizeof(short))
-            return (T) __builtin_bswap16(*reinterpret_cast<const short *>(data));
+            return (T) __builtin_bswap16(value);
         else if constexpr (sizeof(T) == sizeof(int))
-            return (T) __builtin_bswap32(*reinterpret_cast<const int *>(data));
+            return (T) __builtin_bswap32(value);
         else if constexpr (sizeof(T) == sizeof(int64_t))
-            return (T) __builtin_bswap64(*reinterpret_cast<const int64_t *>(data));
+            return (T) __builtin_bswap64(value);
 #endif
         return {};
     }
@@ -606,10 +611,13 @@ namespace stdc::windows {
         }
 
         // Get the value.
-        vlarray<unsigned char, 512> data(dataSize);
-        std::fill(data.data(), data.data() + dataSize, 0u);
+        // Registry strings are not guaranteed to be terminated. Keep two zero wchar_t values
+        // beyond the returned bytes so malformed external values remain safe to parse.
+        vlarray<wchar_t, 256> data((dataSize + sizeof(wchar_t) - 1) / sizeof(wchar_t) + 2);
+        std::fill(data.begin(), data.end(), 0u);
 
-        ret = RegQueryValueExW(_hkey, subKeyC, nullptr, nullptr, data.data(), &dataSize);
+        ret = RegQueryValueExW(_hkey, subKeyC, nullptr, nullptr,
+                               reinterpret_cast<BYTE *>(data.data()), &dataSize);
         if (ret != ERROR_SUCCESS) {
             ec = make_status_error_code(ret);
             return RegValue(RegValue::Invalid);
@@ -618,29 +626,38 @@ namespace stdc::windows {
         switch (dataType) {
             case REG_SZ: {
                 if (dataSize > 0) {
-                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()));
+                    size_t size = dataSize / sizeof(wchar_t);
+                    const auto *str = data.data();
+                    if (size && str[size - 1] == L'\0')
+                        --size;
+                    return RegValue(str, int(size));
                 }
                 return RegValue(RegValue::Type::String);
             }
             case REG_EXPAND_SZ: {
                 if (dataSize > 0) {
-                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()), -1,
-                                    RegValue::ExpandString);
+                    size_t size = dataSize / sizeof(wchar_t);
+                    const auto *str = data.data();
+                    if (size && str[size - 1] == L'\0')
+                        --size;
+                    return RegValue(str, int(size), RegValue::ExpandString);
                 }
                 return RegValue(RegValue::Type::ExpandString);
             }
             case REG_LINK: {
                 if (dataSize > 0) {
-                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()), -1,
-                                    RegValue::Link);
+                    size_t size = dataSize / sizeof(wchar_t);
+                    const auto *str = data.data();
+                    if (size && str[size - 1] == L'\0')
+                        --size;
+                    return RegValue(str, int(size), RegValue::Link);
                 }
                 return RegValue(RegValue::Type::Link);
             }
 
             case REG_MULTI_SZ: {
                 if (dataSize > 0) {
-                    return RegValue(reinterpret_cast<const wchar_t *>(data.data()),
-                                    dataSize / sizeof(wchar_t), RegValue::StringList);
+                    return RegValue(data.data(), dataSize / sizeof(wchar_t), RegValue::StringList);
                 }
                 return RegValue(RegValue::StringList);
             }
@@ -656,12 +673,18 @@ namespace stdc::windows {
             }
 
             case REG_DWORD: // Same as REG_DWORD_LITTLE_ENDIAN
+                if (dataSize < sizeof(uint32_t))
+                    return RegValue(RegValue::Invalid);
                 return qFromLittleEndian<uint32_t>(data.data());
 
             case REG_DWORD_BIG_ENDIAN:
+                if (dataSize < sizeof(uint32_t))
+                    return RegValue(RegValue::Invalid);
                 return qFromBigEndian<uint32_t>(data.data());
 
             case REG_QWORD: // Same as REG_QWORD_LITTLE_ENDIAN
+                if (dataSize < sizeof(uint64_t))
+                    return RegValue(RegValue::Invalid);
                 return qFromLittleEndian<uint64_t>(data.data());
 
             default:
@@ -680,10 +703,18 @@ namespace stdc::windows {
 
         const auto &writeString = [&](DWORD type) {
             auto data = value.toStringView();
+            std::wstring terminated(data);
+            if (type == REG_MULTI_SZ) {
+                if (terminated.empty() || terminated.back() != L'\0')
+                    terminated.push_back(L'\0');
+                if (terminated.size() < 2 || terminated[terminated.size() - 2] != L'\0')
+                    terminated.push_back(L'\0');
+            } else {
+                terminated.push_back(L'\0');
+            }
             return RegSetValueExW(_hkey, name.c_str(), 0, type,
-                                  data.empty() ? nullptr
-                                               : reinterpret_cast<const BYTE *>(data.data()),
-                                  data.size() * sizeof(wchar_t));
+                                  reinterpret_cast<const BYTE *>(terminated.data()),
+                                  DWORD(terminated.size() * sizeof(wchar_t)));
         };
 
         LSTATUS ret = ERROR_SUCCESS;

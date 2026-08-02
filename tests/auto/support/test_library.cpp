@@ -102,14 +102,14 @@ BOOST_AUTO_TEST_CASE(test_reopen) {
         return;
     }
 
-    // opening an already-open library closes the previous one first
+    // An already-open object is left alone, even if the new path cannot be loaded.
     SharedLibrary lib;
     BOOST_REQUIRE(lib.open(candidate.path));
     auto first = lib.handle();
-    BOOST_REQUIRE(lib.open(candidate.path));
+    BOOST_REQUIRE(lib.open("no_such_library_9f3a.dll"));
     BOOST_CHECK(lib.isOpen());
+    BOOST_CHECK_EQUAL(lib.handle(), first);
     BOOST_CHECK(lib.resolve(candidate.symbol) != nullptr);
-    (void) first;
 
     // opening the same library from two objects is fine, and both resolve
     SharedLibrary other;
@@ -125,8 +125,8 @@ BOOST_AUTO_TEST_CASE(test_move) {
     }
 
     // move construct: the destination takes over the handle
-    // NOTE: the source holds a pimpl pointer that the move leaves null, so a moved-from
-    // SharedLibrary must not be touched again, not even to ask isOpen().
+    // The moved-from object has no pimpl and must not be used again except for destruction or
+    // assignment.
     {
         SharedLibrary source;
         BOOST_REQUIRE(source.open(candidate.path));
@@ -192,12 +192,17 @@ BOOST_AUTO_TEST_CASE(test_is_library) {
     BOOST_CHECK(SharedLibrary::isLibrary("libfoo.so.6"));     // versioned
     BOOST_CHECK(SharedLibrary::isLibrary("libfoo.so.1.2.3")); // multi-part version
     BOOST_CHECK(!SharedLibrary::isLibrary("foo.so.beta"));    // not a version
+    BOOST_CHECK(!SharedLibrary::isLibrary("foo.so1"));
+    BOOST_CHECK(!SharedLibrary::isLibrary("foo.so.1."));
+    BOOST_CHECK(!SharedLibrary::isLibrary("foo.so..1"));
     BOOST_CHECK(!SharedLibrary::isLibrary("foo.dll"));
     BOOST_CHECK(!SharedLibrary::isLibrary("foo"));
 #endif
 }
 
 BOOST_AUTO_TEST_CASE(test_locate_library_path) {
+    BOOST_CHECK(SharedLibrary::locateLibraryPath(nullptr).empty());
+
     auto candidate = system_library();
     if (candidate.path.empty()) {
         return;
