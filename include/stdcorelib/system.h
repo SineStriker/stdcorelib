@@ -16,7 +16,7 @@ namespace stdc {
         /// \name Where the running program is
         /// @{
 
-        /// The executable's own path, taken from the OS rather than from argv[0], which the
+        /// The executable's own path, taken from the OS rather than from \c argv[0], which the
         /// parent process is free to have set to anything.
         STDCORELIB_EXPORT std::filesystem::path application_path();
 
@@ -35,19 +35,24 @@ namespace stdc {
         /// \name Command line
         /// @{
 
-        /// The arguments as UTF-8, including argv[0]. On Windows these come from the wide
-        /// command line, so a path main() could not spell survives intact.
+        /// The arguments as UTF-8, including \c argv[0].
         ///
-        /// The view stays valid for the life of the process.
+        /// \return a view over storage that lives as long as the process
+        /// \note On Windows these come from the wide command line, so a path \c main() could not
+        ///       spell survives intact.
         STDCORELIB_EXPORT array_view<std::string> command_line_arguments();
 
-        /// Splits a command line the way the host would, undoing the quoting rules that
+        /// Splits \a command the way the host would, undoing the quoting that
         /// join_command_line() applies.
+        ///
+        /// \sa join_command_line()
         STDCORELIB_EXPORT std::vector<std::string>
             split_command_line(const std::string_view &command);
 
-        /// Joins arguments into one command line, quoting each so that the receiving program
-        /// takes it apart into the same pieces.
+        /// Joins \a args into one command line, quoting each so that the receiving program takes
+        /// it apart into the same pieces.
+        ///
+        /// \sa split_command_line()
         STDCORELIB_EXPORT std::string join_command_line(const std::vector<std::string> &args);
 
         /// @}

@@ -8,14 +8,14 @@
 
 namespace stdc {
 
-    /// A read-only view of a contiguous array, close to std::span<const T> from C++20.
+    /// A read-only view of a contiguous array, close to \c std::span<const \c T> from C++20.
     ///
-    /// It converts implicitly from a std::vector, a std::array, a C array, a pointer and a
+    /// It converts implicitly from a \c std::vector, a \c std::array, a C array, a pointer and a
     /// length, or a single object, which is what makes it worth taking as a parameter instead of
     /// one overload per container.
     ///
-    /// It borrows and never owns. The array has to outlive the view, so binding one to a
-    /// temporary leaves it dangling at the end of the statement.
+    /// \warning It borrows and never owns. The array has to outlive the view, so binding one to
+    ///          a temporary leaves it dangling at the end of the statement.
     template <class T>
     class array_view {
     public:
@@ -117,38 +117,46 @@ namespace stdc {
             return std::equal(begin(), end(), RHS.begin());
         }
 
-        /// slice(i, j) - Chop off the first \p i elements of the array, and keep \p j
-        /// elements in the array.
+        /// \name Slicing
+        /// @{
+
+        /// Drops the first \a i elements and keeps the \a j that follow.
+        ///
+        /// \pre <tt>i + j <= size()</tt>
         array_view<T> slice(size_t i, size_t j) const {
             assert(i + j <= size() && "Invalid specifier");
             return array_view<T>(data() + i, j);
         }
 
-        /// slice(n) - Chop off the first i elements of the array.
+        /// Drops the first \a i elements and keeps the rest.
         array_view<T> slice(size_t i) const {
             return drop_front(i);
         }
 
-        /// Drop the first \p i elements of the array.
+        /// A view without the first \a i elements.
+        ///
+        /// \pre <tt>i <= size()</tt>
         array_view<T> drop_front(size_t i = 1) const {
             assert(size() >= i && "Dropping more elements than exist");
             return slice(i, size() - i);
         }
 
-        /// Drop the last \p i elements of the array.
+        /// A view without the last \a i elements.
+        ///
+        /// \pre <tt>i <= size()</tt>
         array_view<T> drop_back(size_t i = 1) const {
             assert(size() >= i && "Dropping more elements than exist");
             return slice(0, size() - i);
         }
 
-        /// Return a copy of *this with only the first \p i elements.
+        /// A view of the first \a i elements, or all of them if there are fewer.
         array_view<T> take_front(size_t i = 1) const {
             if (i >= size())
                 return *this;
             return drop_back(size() - i);
         }
 
-        /// Return a copy of *this with only the last \p i elements.
+        /// A view of the last \a i elements, or all of them if there are fewer.
         array_view<T> take_back(size_t i = 1) const {
             if (i >= size())
                 return *this;
@@ -156,29 +164,31 @@ namespace stdc {
         }
 
         /// @}
-        /// @name Operator Overloads
+
+        /// \name Operator overloads
         /// @{
+
         const T &operator[](size_t index) const {
             assert(index < _size && "Invalid index!");
             return _data[index];
         }
 
-        /// Disallow accidental assignment from a temporary.
+        /// Assigning a temporary would leave the view dangling, so both of these are deleted.
         ///
-        /// The declaration here is extra complicated so that "arrayRef = {}"
-        /// continues to select the move assignment operator.
+        /// The declaration is this involved so that <tt>view = {}</tt> keeps selecting the move
+        /// assignment operator.
         template <typename T1>
         std::enable_if_t<std::is_same<T1, T>::value, array_view<T>> &
             operator=(T1 &&Temporary) = delete;
 
-        /// Disallow accidental assignment from a temporary.
-        ///
-        /// The declaration here is extra complicated so that "arrayRef = {}"
-        /// continues to select the move assignment operator.
+        // @overload
         template <typename T1>
         std::enable_if_t<std::is_same<T1, T>::value, array_view<T>> &
             operator=(std::initializer_list<T1>) = delete;
 
+        /// @}
+
+        /// A copy of the elements, which the caller then owns.
         std::vector<T> vec() const {
             return std::vector<T>(_data, _data + _size);
         }

@@ -95,7 +95,12 @@ namespace stdc {
         LogContext _context;
     };
 
-    /// Yet another logging category implementation of Qt QLoggingCategory.
+    /// A named channel with independently switchable levels, after Qt's \c QLoggingCategory.
+    ///
+    /// Each category registers itself on construction and picks up whatever filter rules are
+    /// already in effect.
+    ///
+    /// \sa setFilterRules()
     class STDCORELIB_EXPORT LogCategory {
     public:
         explicit LogCategory(const char *name);
@@ -115,25 +120,34 @@ namespace stdc {
 
         static LogCategoryFilter logFilter();
 
-        /// Replaces the category filter, or restores the default one when given nullptr, and
-        /// re-runs it over every registered category. A custom filter takes over entirely, so the
-        /// rules apply only if it defers to the default.
+        /// Replaces the category filter and re-runs it over every registered category.
+        ///
+        /// \param filter the new filter, or \c nullptr to restore the default one
+        /// \note A custom filter takes over entirely, so setFilterRules() has no effect unless
+        ///       that filter chooses to consult the rules itself.
         static void setLogFilter(LogCategoryFilter filter);
 
         static std::string filterRules();
 
         /// Installs Qt-style filter rules controlling which levels each category emits.
         ///
-        /// Rules are separated by newlines or ';', and a '#' starts a comment line. Each rule
-        /// reads `category[.level] = true|false`, where category may carry a single leading
-        /// and/or trailing '*' wildcard and otherwise matches exactly, and level is one of
-        /// trace/debug/success/info/warning/critical/fatal. Omitting the level affects all of
-        /// them. Rules apply in order over an all-enabled baseline, so a later match wins:
+        /// Rules are separated by newlines or \c ;, and a \c # starts a comment line. Each rule
+        /// reads <tt>category[.level] = true|false</tt>, where:
+        ///   \li category may carry a single leading and/or trailing \c * wildcard, and
+        ///       otherwise matches exactly
+        ///   \li level is one of \c trace, \c debug, \c success, \c info, \c warning,
+        ///       \c critical or \c fatal, and omitting it affects every level
+        ///
+        /// Rules apply in order over an all-enabled baseline, so a later match wins.
+        ///
         /// \code
         ///   *.debug = false          // silence debug everywhere
         ///   stdc.io = false          // silence the stdc.io category
         ///   stdc.io.warning = true   // except for its warnings
         /// \endcode
+        ///
+        /// \note This affects every category in the process, not just this one, despite being a
+        ///       member. A malformed rule is skipped rather than reported.
         void setFilterRules(std::string rules);
 
         static LogCategory &defaultCategory();
@@ -181,19 +195,21 @@ namespace stdc {
 
 /// What the macros below fall back to when no LogCategory is in scope. A category of your own
 /// provides a member of the same name, which unqualified lookup finds first.
+///
+/// \internal
 static inline const stdc::LogCategory &_stdcGetLogCategory() {
     return stdc::LogCategory::defaultCategory();
 }
 
-/// Logs one record at LEVEL, tagged with the file, line and function it came from.
+/// Logs one record at \a LEVEL, tagged with the file, line and function it came from.
 ///
-/// Written on a category, it goes to that one. Written bare, it goes to the default category.
-/// The message uses formatN() placeholders (%1, %2, ...), and the F variants below take printf
-/// conversions instead.
+/// Written on a category it goes to that one, written bare it goes to the default category. The
+/// message uses formatN() placeholders (\c %1, \c %2, ...), and the \c F variants below take
+/// printf conversions instead.
 ///
-/// This expands to an ordinary call, so the arguments are evaluated whether the level is
-/// enabled or not. Unlike Qt's qCDebug, which short circuits, anything expensive belongs behind
-/// an isLevelEnabled() check of your own.
+/// \warning This expands to an ordinary call, so the arguments are evaluated whether the level
+///          is enabled or not. Unlike Qt's \c qCDebug, which short circuits, anything expensive
+///          belongs behind an isLevelEnabled() check of your own.
 ///
 /// \code
 ///   stdc::LogCategory lc("app.io");

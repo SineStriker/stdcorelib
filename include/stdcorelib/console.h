@@ -10,19 +10,22 @@ namespace stdc {
 
     namespace console {
 
-        /// Text attributes. Several may be combined with |.
+        /// Text attributes, combined with \c |.
         enum style {
-            nostyle = 0x0,
+            nostyle = 0x0, ///< no attribute at all
             bold = 0x1,
             italic = 0x2,
             underline = 0x4,
             strikethrough = 0x8,
         };
 
-        /// The eight base colors, each with a brighter variant. Only one at a time.
+        /// The eight base colors, each with a brighter variant.
+        ///
+        /// Unlike \ref style these do not combine. Pass one, not a bitwise or of several.
+        /// \c intensified is the exception, being the bit the \c light names already carry.
         enum color {
-            nocolor = 0,
-            intensified = 0x10,
+            nocolor = 0,        ///< leave the terminal's own color alone
+            intensified = 0x10, ///< the brightness bit, on its own
 
             red = 0x1,
             green = 0x2,
@@ -47,20 +50,30 @@ namespace stdc {
 
         /// How styling reaches the target.
         enum color_mode {
-            automatic,      // decide per target: style it only when it is a terminal
-            never,          // never emit styling, whatever the target
-            vt,             // always emit ANSI escape sequences
-            windows_legacy, // always drive the Windows console API, means `never` elsewhere
+            automatic,      ///< decide per target, styling it only when it is a terminal
+            never,          ///< never emit styling, whatever the target
+            vt,             ///< always emit ANSI escape sequences
+            windows_legacy, ///< always drive the Windows console API, meaning \c never elsewhere
         };
 
+        /// Returns the mode the process is set to.
+        /// \sa set_color_mode()
         STDCORELIB_EXPORT color_mode get_color_mode();
 
-        /// Overrides the mode process wide, which is where a --color=always or NO_COLOR flag
-        /// belongs. Also drops what has been detected about the targets seen so far, so call it
-        /// again with the current mode after a freopen() to force them to be probed anew.
+        /// Overrides the mode process wide.
+        ///
+        /// This is where a \c --color=always or \c NO_COLOR flag belongs.
+        ///
+        /// \param mode the mode to force, or \c automatic to go back to deciding per target
+        /// \note Also drops what has been detected about the targets seen so far. Call this again
+        ///       with the current mode after a \c freopen() to force them to be probed anew.
         STDCORELIB_EXPORT void set_color_mode(color_mode mode);
 
-        /// Returns the mode that will actually be used for \a file. Never returns `automatic`.
+        /// Returns the mode that will actually be used for \a file.
+        ///
+        /// \param file the target to resolve against, which is probed on the first call and
+        ///        remembered afterwards
+        /// \return one of \c never, \c vt or \c windows_legacy, never \c automatic
         STDCORELIB_EXPORT color_mode resolve_color_mode(FILE *file);
 
         /// @}
@@ -68,19 +81,25 @@ namespace stdc {
         /// \name General output
         /// @{
 
-        /// Writes \a buf with the given attributes and puts them back afterwards. \a style is a
-        /// bitwise or of `style` values, \a fg and \a bg are one `color` each. Whether anything
-        /// is emitted at all is up to resolve_color_mode() for that file, so a redirected stream
-        /// gets the text alone.
+        /// Writes \a buf to \a file with the given attributes, then puts them back.
         ///
         /// The string is taken as UTF-8 and transcoded for a Windows console.
+        ///
+        /// \param style a bitwise or of \ref style values, or \c nostyle
+        /// \param fg one \ref color value, or \c nocolor
+        /// \param bg likewise, for the background
+        /// \param buf the text, which is written whether or not the attributes are
+        /// \param file the target
+        /// \return the number of bytes of \a buf written, escape sequences not counted
+        /// \note Whether the attributes are emitted at all rests on resolve_color_mode() for
+        ///       \a file, so a redirected stream receives the text alone.
         STDCORELIB_EXPORT int fputs(int style, int fg, int bg, const char *buf, FILE *file);
 
         // @overload: fputs
         STDCORELIB_EXPORT int fputs(int style, int fg, int bg, const std::string_view &buf,
                                     FILE *file);
 
-        /// Like fputs(), to stdout and followed by a newline.
+        /// Like fputs(), to \c stdout and followed by a newline.
         STDCORELIB_EXPORT int puts(int style, int fg, int bg, const char *buf);
 
         // @overload: puts
@@ -98,7 +117,9 @@ namespace stdc {
 
         STDCORELIB_EXPORT int vprintf(int style, int fg, int bg, const char *fmt, va_list args);
 
-        /// Like fputs(), with formatN() placeholders (%1, %2, ...) rather than printf ones.
+        /// Like fputs(), with formatN() placeholders (\c %1, \c %2, ...) rather than printf
+        /// conversions.
+        /// \sa formatN()
         template <class... Args>
         inline int print(int style, int fg, int bg, const std::string_view &format,
                          Args &&...args) {
@@ -121,8 +142,10 @@ namespace stdc {
         /// \name Plain output
         /// @{
 
-        /// The same writers with no attributes at all. Still worth preferring over std::fputs on
-        /// Windows, where the console needs UTF-8 text transcoded before it will render.
+        /// The same writers with no attributes at all.
+        ///
+        /// \note Still worth preferring over \c std::fputs on Windows, where the console needs
+        ///       UTF-8 text transcoded before it will render.
         inline int u8fputs(const char *buf, FILE *file) {
             return console::fputs(nostyle, nocolor, nocolor, buf, file);
         }
@@ -171,7 +194,12 @@ namespace stdc {
         /// @{
 
         /// One line each in a conventional color, for programs that want the four usual
-        /// severities without picking colors themselves. Formatting is formatN()'s.
+        /// severities without picking colors themselves.
+        ///
+        /// All four go to \c stdout. For severities that route by destination, and for category
+        /// filtering, use the logging facility instead.
+        ///
+        /// \sa formatN(), stdc::Logger
         template <class... Args>
         inline int debug(const std::string_view &format, Args &&...args) {
             return println(nostyle, lightblue, nocolor, format, std::forward<Args>(args)...);
@@ -205,38 +233,47 @@ namespace stdc {
         /// \name Inline color markup
         /// @{
 
-        /// Writes \a buf, reading `${...}` as attribute changes rather than as text. This is the
-        /// alternative to threading style, fg and bg arguments through every call.
+        /// Writes \a buf, reading \c ${...} as attribute changes rather than as text.
         ///
-        /// A group holds one or more names separated by spaces, and `$$` writes a literal `$`.
+        /// The alternative to threading \a style, \a fg and \a bg arguments through every call.
+        /// A group holds one or more names separated by spaces, and \c $$ writes a literal \c $.
         /// The names are:
-        ///   - a color: red, green, blue, yellow, purple, cyan, white, black, nocolor, each also
-        ///     available with a `light` prefix
-        ///   - the same again behind `@`, which sets the background instead of the foreground
-        ///   - a style: bold, italic, underline, strikethrough, nostyle
-        ///   - intensified, or @intensified, to brighten whichever color is already in effect
-        ///   - reset, or clear, to drop back to plain text
+        ///   \li a color: \c red, \c green, \c blue, \c yellow, \c purple, \c cyan, \c white,
+        ///       \c black or \c nocolor, each also available with a \c light prefix
+        ///   \li the same again behind \c @, which sets the background instead of the foreground
+        ///   \li a style: \c bold, \c italic, \c underline, \c strikethrough or \c nostyle
+        ///   \li \c intensified, or \c @intensified, to brighten whichever color is in effect
+        ///   \li \c reset, or \c clear, to drop back to plain text
         ///
-        /// A name that is none of these is dropped and changes nothing. Attributes start out
-        /// plain on every call and are restored when it returns, so they never leak into what is
-        /// written next.
+        /// \param buf the text and the markup within it
+        /// \param file the target
+        /// \return the number of bytes written, the markup and any escape sequences not counted
+        /// \note A name that is none of the above is dropped and changes nothing, so a typo
+        ///       costs the styling rather than the text.
+        /// \note Attributes start out plain on every call and are restored when it returns, so
+        ///       they never leak into what is written next.
         ///
         /// \code
         ///   cprintln("${lightgreen}ok ${@blue bold}on blue ${reset}plain, 50$$ off");
         /// \endcode
+        ///
+        /// \sa fputs(), which takes the same attributes as arguments
         STDCORELIB_EXPORT int cfputs(const char *buf, FILE *file);
 
         // @overload: cfputs
         STDCORELIB_EXPORT int cfputs(const std::string_view &buf, FILE *file);
 
-        /// Like cfputs(), to stdout and followed by a newline.
+        /// Like cfputs(), to \c stdout and followed by a newline.
         STDCORELIB_EXPORT int cputs(const char *buf);
 
         // @overload: cputs
         STDCORELIB_EXPORT int cputs(const std::string_view &buf);
 
-        /// Like cfputs(), with printf-style formatting. A `%` conversion may produce a `${...}`
-        /// group of its own, which is then read the same way.
+        /// Like cfputs(), with printf-style formatting.
+        ///
+        /// \warning The markup is read after the formatting, so a \c %s expanding to text that
+        ///          holds \c ${ or \c $$ has it eaten rather than printed. Write text you do not
+        ///          control with u8fprintf() instead.
         STDCORELIB_EXPORT int cfprintf(FILE *file, const char *fmt, ...)
             STDCORELIB_PRINTF_FORMAT(2, 3);
 
@@ -246,7 +283,7 @@ namespace stdc {
 
         STDCORELIB_EXPORT int cvprintf(const char *fmt, va_list args);
 
-        /// Like cfputs(), with formatN() placeholders (%1, %2, ...).
+        /// Like cfputs(), with formatN() placeholders (\c %1, \c %2, ...).
         template <class... Args>
         inline int cprint(const std::string_view &format, Args &&...args) {
             return cfputs(formatN(format, std::forward<Args>(args)...), stdout);

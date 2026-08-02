@@ -13,10 +13,12 @@
 
 #ifdef _STDCORELIB_ALLOCA
 
-/**
- * @brief Allocate a buffer on stack with the given type and size (Uninitialized).
- *
- */
+/// Allocates an uninitialized buffer of \a SIZE elements of \a TYPE on the stack, and declares
+/// \a NAME as a pointer to it.
+///
+/// \warning The storage dies with the enclosing function, not the enclosing scope, so a loop
+///          that allocates on every pass keeps growing the frame. Nothing frees it either, which
+///          is why the size has to be bounded by something the caller controls.
 #  define VLA_ALLOC(TYPE, NAME, SIZE)                                                              \
       TYPE *NAME = (TYPE *) _STDCORELIB_ALLOCA((SIZE) * sizeof(TYPE))
 
@@ -44,10 +46,10 @@ namespace stdc::vla::detail {
 
 }
 
-/**
- * @brief Allocate a C++ class array on stack with the given type and size (Initialized).
- *
- */
+/// Like VLA_ALLOC(), for a type that needs constructing. A guard in the same scope default
+/// constructs the elements and destroys them on the way out.
+///
+/// \sa VLA_ALLOC()
 #  define VLA_NEW(TYPE, NAME, SIZE)                                                                \
       const size_t NAME##_VLA_SIZE__ = (SIZE);                                                     \
       VLA_ALLOC(TYPE, NAME, NAME##_VLA_SIZE__);                                                    \

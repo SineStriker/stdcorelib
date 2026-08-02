@@ -15,10 +15,11 @@
 
 namespace stdc {
 
-    /// Creates and controls a child process, following Python's subprocess.Popen.
+    /// Creates and controls a child process, after Python's \c subprocess.Popen.
     ///
-    /// The setters build the process up and return *this, so they chain. Nothing happens until
-    /// start(). After that the child is running and the streams that were set to PIPE are open.
+    /// The setters build the process up and return \c *this, so they chain. Nothing happens
+    /// until start(). After that the child is running and the streams that were set to \c PIPE
+    /// are open.
     ///
     /// \code
     ///   Popen proc;
@@ -35,18 +36,19 @@ namespace stdc {
     ///   int code = proc.returncode().value_or(-1);
     /// \endcode
     ///
-    /// Reading a pipe by hand instead of through communicate() works, but only one of them at a
-    /// time. A pipe blocks its writer once full, so a child that fills stderr while the parent
-    /// is still draining stdout will wait forever. communicate() exists to get this right.
+    /// \warning Reading a pipe by hand rather than through communicate() works for one pipe,
+    ///          not for two. A pipe blocks its writer once full, so a child filling stderr while
+    ///          the parent is still draining stdout waits forever. communicate() exists to get
+    ///          this right.
     ///
     /// \sa https://docs.python.org/3/library/subprocess.html
     class STDCORELIB_EXPORT Popen {
     public:
-        /// What to connect a standard stream to, beyond a descriptor or a FILE * of your own.
+        /// What to connect a standard stream to, beyond a descriptor or a \c FILE * of your own.
         enum IOType {
             PIPE = 1, ///< a new pipe, readable or writable from this side afterwards
             DEVNULL,  ///< the null device
-            STDOUT,   ///< stderr only: send it wherever stdout goes
+            STDOUT,   ///< stderr_() only: send it wherever stdout goes
         };
 
         struct IODev {
@@ -95,21 +97,26 @@ namespace stdc {
         };
 #endif
 
-        /// One end of a pipe to the child, as an ordinary iostream. Only open for a stream that
-        /// was set to PIPE.
+        /// One end of a pipe to the child, as an ordinary \c std::iostream.
+        ///
+        /// Only open for a stream that was set to \c PIPE, which is_open() reports.
         class STDCORELIB_EXPORT Stream : public std::iostream {
         public:
             Stream();
             ~Stream() override;
 
-            /// Closes this end. On the child's stdin this is what signals end of input, without
-            /// which a child that reads to EOF never finishes. Doing it twice is harmless.
+            /// Closes this end. Doing it twice is harmless.
+            ///
+            /// \note On the child's stdin this is what signals end of input, without which a
+            ///       child reading to EOF never finishes.
             void close();
 
             bool is_open() const;
 
-            /// The same pipe as a FILE *, for the C interfaces that take nothing else. Owned by
-            /// the Stream, so do not fclose it.
+            /// The same pipe as a \c FILE *, for the C interfaces that take nothing else.
+            ///
+            /// \warning Owned by the Stream. Do not \c fclose it, and do not keep it past
+            ///          close(), which leaves it dangling.
             FILE *file() const;
 
         private:
@@ -134,17 +141,19 @@ namespace stdc {
         /// All of these take effect at start() and mean nothing after it.
         /// @{
 
-        /// The program to run. Defaults to args()[0], so it is only needed to run a program
-        /// under a name of its own choosing.
+        /// The program to run. Defaults to the first entry of args(), so this is only needed to
+        /// run a program under an \c argv[0] of its own choosing.
         Popen &executable(const std::filesystem::path &executable);
 
-        /// The argument vector, argv[0] included. A name with no separator in it is looked up
-        /// along PATH.
+        /// The argument vector, \c argv[0] included. A name with no separator in it is looked
+        /// up along \c PATH.
         Popen &args(const std::vector<std::string> &args);
 
         /// Hands the command to the system shell rather than executing it directly, so its
-        /// redirections and expansions apply. Also its quoting, which is why untrusted input has
-        /// no business here.
+        /// redirections and expansions apply.
+        ///
+        /// \warning The shell's quoting rules apply too, so untrusted input reaching \a shell is
+        ///          a command injection.
         Popen &shell(bool shell);
 
         /// The child's working directory. Inherited if left unset.
@@ -152,51 +161,71 @@ namespace stdc {
 
         /// The child's environment, which replaces ours rather than adding to it. Inherited if
         /// left unset.
+        ///
+        /// \note Replacing it drops \c PATH along with everything else, so a bare program name
+        ///       will not be found unless \a env carries one.
         Popen &env(const std::map<std::string, std::string> &env);
 
-        /// Where each standard stream goes: a PIPE to talk over, DEVNULL to discard, a
-        /// descriptor or FILE * to hand it somewhere of your own, or STDOUT on stderr_() to fold
-        /// the two together. Inherited if left unset.
+        /// Where each standard stream goes. Inherited if left unset.
+        ///
+        /// \param dev \c PIPE to talk over, \c DEVNULL to discard, a descriptor or \c FILE * to
+        ///        hand it somewhere of your own, or \c STDOUT on stderr_() alone to fold the two
+        ///        together
         Popen &stdin_(IODev dev);
         Popen &stdout_(IODev dev);
         Popen &stderr_(IODev dev);
 
-        /// Opens the pipes in text mode, which on Windows translates between CRLF and LF as
-        /// they are read and written. Nothing changes elsewhere.
+        /// Opens the pipes in text mode, which on Windows translates between \c CRLF and \c LF
+        /// as they are read and written. Nothing changes elsewhere.
         Popen &text(bool text);
 
         /// Whether the child starts with only the standard streams open. On by default, so a
         /// descriptor of ours is not left in a process that never asked for it.
+        ///
+        /// \sa pass_fds(), for the exceptions
         Popen &close_fds(bool close_fds);
 
+        /// The capacity of the pipes created for this child, in bytes. The kernel rounds up,
+        /// and caps it at \c /proc/sys/fs/pipe-max-size for an unprivileged caller.
         Popen &pipesize(int pipesize); // linux only (ignored on other platforms)
 
 #ifdef _WIN32
         Popen &startupinfo(const StartupInfo *startupinfo); // windows only
         Popen &creationflags(int creationflags);            // windows only
 #else
-        /// Runs in the child after the pipes are in place and before exec. It shares nothing
-        /// with this process any more, so anything that could block on a lock another thread
-        /// held at fork time may deadlock there.
+        /// Runs in the child after the pipes are in place and before exec.
+        ///
+        /// \warning The child has one thread, the one that called \c fork. Any lock another
+        ///          thread held at that moment is still held and will never be released, so
+        ///          allocating or locking here can deadlock the child outright.
         Popen &preexec_fn(const std::function<void()> &preexec_fn); // unix only
 
         /// Puts the signal dispositions this process changed back to their defaults, so the
-        /// child does not inherit an ignored SIGPIPE it never asked for. On by default.
+        /// child does not inherit an ignored \c SIGPIPE it never asked for. On by default.
         Popen &restore_signals(bool restore_signals); // unix only
 
+        /// Runs \c setsid() in the child, putting it in a session of its own so a terminal
+        /// signal aimed at this process group misses it.
         Popen &start_new_session(bool start_new_session); // unix only
 
-        /// Descriptors to leave open across exec despite close_fds. Setting this forces
-        /// close_fds on.
+        /// Descriptors to leave open across exec despite close_fds().
+        ///
+        /// \note Setting this forces close_fds() on, since the two disagree otherwise.
         Popen &pass_fds(const std::vector<int> &pass_fds); // unix only
 
-        /// Credentials for the child, all of which need privilege. start() fails otherwise.
+        /// Credentials for the child.
+        ///
+        /// \pre The calling process is privileged. start() fails with \c EPERM otherwise.
+        /// \note extra_groups() replaces the supplementary group list rather than adding to it.
         Popen &group(int group);                                   // unix only
         Popen &extra_groups(const std::vector<int> &extra_groups); // unix only
         Popen &user(int user);                                     // unix only
         Popen &user(const char *user);                             // unix only
 
-        Popen &umask(int umask);                 // unix only
+        /// The file creation mask for the child, or -1 to inherit ours.
+        Popen &umask(int umask); // unix only
+
+        /// The process group to join, or 0 to start one of its own. -1 inherits ours.
         Popen &process_group(int process_group); // unix only
 #endif
 
@@ -206,8 +235,11 @@ namespace stdc {
         /// \name Starting
         /// @{
 
-        /// Starts the process. On failure returns false and writes the details to \a err_msg,
-        /// leaving the reason in error_code().
+        /// Starts the process.
+        ///
+        /// \param err_msg filled in with a readable description when this fails, if not null
+        /// \retval true the child is running, and any \c PIPE stream is open
+        /// \retval false nothing was started, with the reason in error_code()
         bool start(std::string *err_msg = nullptr);
 
         /// The error from the last operation, cleared at the start of each one.
@@ -219,33 +251,50 @@ namespace stdc {
         /// \name Waiting
         /// @{
 
-        /// Whether the child has exited, without waiting for it. False also means "still
-        /// running", which is not an error, so tell the two apart by returncode().
+        /// Whether the child has exited, without waiting for it.
+        ///
+        /// \retval true it has exited, and returncode() now holds the status
+        /// \retval false it is still running, which is not an error, or the check itself failed
+        /// \note Tell those two apart by returncode(), or by error_code() being clear.
         bool poll();
 
-        /// Waits for the child to exit, up to \a timeout milliseconds, or forever if negative.
-        /// Returns false on timeout. The pipes stay readable afterwards.
+        /// Waits for the child to exit.
+        ///
+        /// \param timeout how long to wait, in milliseconds, or negative to wait forever
+        /// \retval false the timeout ran out, or the wait failed
+        /// \note The pipes stay readable afterwards, so output can still be collected.
         bool wait(int timeout = -1);
 
-        /// Writes \a input to the child, reads stdout and stderr to the end, and waits. This is
-        /// the only safe way to do all three, since draining one pipe at a time deadlocks as
+        /// Writes \a input to the child, reads stdout and stderr to the end, and waits.
+        ///
+        /// The only safe way to do all three, since draining one pipe at a time deadlocks as
         /// soon as the other one fills.
         ///
-        /// Closes stdin after writing, which is what lets a child reading to end of input
-        /// finish. A child still running at \a timeout is killed rather than left behind, and
-        /// error_code() then says so.
+        /// \param input written to the child's stdin, which is then closed so that a child
+        ///        reading to end of input can finish
+        /// \param timeout how long to allow, in milliseconds, or negative for no limit
+        /// \return what the child wrote to stdout and to stderr, each empty if that stream was
+        ///         not a \c PIPE
+        /// \note A child still running at \a timeout is killed rather than left behind, and
+        ///       error_code() then reports a timeout.
         std::tuple<std::string, std::string> communicate(const std::string &input = {},
                                                          int timeout = -1);
 
+        /// Sends \a sig to the child. On Windows only \c WS_CTRL_C_EVENT and
+        /// \c WS_CTRL_BREAK_EVENT are accepted.
         bool send_signal(int sig);
 
-        /// Requests the process to close, like QProcess::terminate. Posts WM_CLOSE to its windows
-        /// on Windows and sends SIGTERM elsewhere. The process may ignore it. A console program
-        /// has no message loop and never sees it. Use kill() to force it.
+        /// Requests the process to close, like \c QProcess::terminate. Posts \c WM_CLOSE to its
+        /// windows on Windows and sends \c SIGTERM elsewhere.
+        ///
+        /// \note This is a request. The process may ignore it, and a console program has no
+        ///       message loop to see it in the first place.
+        /// \sa kill(), to force it
         bool terminate();
 
-        /// Ends the process outright, which it cannot refuse. Anything it was part way through
-        /// writing is lost.
+        /// Ends the process outright, which it cannot refuse.
+        ///
+        /// \warning Anything the child was part way through writing is lost.
         bool kill();
 
         /// @}
@@ -257,15 +306,19 @@ namespace stdc {
         const std::filesystem::path &executable() const;
         array_view<std::string> args() const;
 
-        /// Returns the pipe for the stream. Not open unless it was set to PIPE.
+        /// The pipe for that stream. Not open unless it was set to \c PIPE.
+        ///
+        /// \warning These reference storage inside the Popen, so they do not outlive it.
         Stream &stdin_() const;
         Stream &stdout_() const;
         Stream &stderr_() const;
 
         int pid() const;
 
-        /// The exit status, or nothing while the child is still running. A child killed by a
-        /// signal reports the negated signal number, as in Python.
+        /// The exit status, or nothing while the child is still running.
+        ///
+        /// \note A child killed by a signal reports the negated signal number, as in Python, so
+        ///       a \c SIGKILL comes back as -9.
         std::optional<int> returncode() const;
 
         /// @}

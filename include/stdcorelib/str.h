@@ -112,9 +112,11 @@ namespace stdc {
                                                                       bool native);
         };
 
-        /// Renders \a t as UTF-8. Handles the arithmetic types, char and wchar_t, and anything
-        /// str::conv has a specialization for, which is how formatN() takes a path or a wide
-        /// string without the caller converting first.
+        /// Renders \a t as UTF-8.
+        ///
+        /// Handles the arithmetic types, \c char and \c wchar_t, and anything \c str::conv has a
+        /// specialization for, which is how formatN() takes a path or a wide string without the
+        /// caller converting first.
         template <class T>
         std::string to_string(T &&t) {
             using T1 = std::remove_reference_t<T>;
@@ -156,9 +158,12 @@ namespace stdc {
             return join(array_view<std::string_view>(v.begin(), v.size()), delimiter);
         }
 
-        /// Splits \a s on every occurrence of \a delimiter, keeping empty pieces. The views point
-        /// into \a s, which therefore has to outlive them. The overload taking an rvalue string
-        /// copies instead, since there would be nothing left to point at.
+        /// Splits \a s on every occurrence of \a delimiter, keeping empty pieces.
+        ///
+        /// \return the fields, always at least one. An empty \a s gives one empty field.
+        /// \warning The views point into \a s, which therefore has to outlive them. The overload
+        ///          taking an rvalue \c std::string returns copies instead, since there would be
+        ///          nothing left to point at.
         STDCORELIB_EXPORT std::vector<std::string_view> split(const std::string_view &s,
                                                               const std::string_view &delimiter);
 
@@ -172,18 +177,22 @@ namespace stdc {
             return split(std::string_view(s), delimiter);
         }
 
-        /// Substitutes %1, %2, ... in \a fmt with \a args, counting from one. A placeholder with
-        /// no argument behind it is left as it stands.
+        /// Substitutes \c %1, \c %2, ... in \a fmt with \a args, counting from one.
+        ///
+        /// \note A placeholder with no argument behind it is left as it stands.
         STDCORELIB_EXPORT std::string format(const std::string_view &fmt,
                                              const array_view<std::string> &args);
 
-        /// format() with the arguments spelled out, each run through to_string() first. Note
-        /// that the placeholders are %1, %2, not printf conversions, so the arguments carry
-        /// their own types and there is nothing to get wrong between the two.
+        /// format() with the arguments spelled out, each run through to_string() first.
+        ///
+        /// The placeholders are \c %1, \c %2, not printf conversions, so the arguments carry
+        /// their own types and there is no conversion specifier to get wrong.
         ///
         /// \code
         ///   formatN("%1 took %2 ms", name, elapsed);
         /// \endcode
+        ///
+        /// \sa format(), to_string()
         template <class Arg1, class... Args>
         std::string formatN(const std::string_view &fmt, Arg1 &&arg1, Args &&...args) {
             return format(fmt, {
@@ -207,13 +216,15 @@ namespace stdc {
             return fmt;
         }
 
-        /// Expands `${name}` in \a s, asking \a find for each name. A name \a find has no answer
-        /// for expands to nothing.
+        /// Expands \c ${name} in \a s, asking \a find for each name.
         ///
-        /// `$$` writes one literal `$`, so `$${A}` leaves `${A}` standing. A `$` that no brace
-        /// follows is literal on its own. Names nest, and the inner ones resolve first, so
-        /// `${${A}_${B}}` looks up the name the two of them spell. An unbalanced brace is an
-        /// error and the whole result comes back empty.
+        /// \c $$ writes one literal \c $, so \c $${A} leaves \c ${A} standing. A \c $ that no
+        /// brace follows is literal on its own. Names nest, and the inner ones resolve first, so
+        /// \c ${${A}_${B}} looks up the name the two of them spell.
+        ///
+        /// \param s the text to expand
+        /// \param find asked for each name, and returning nothing is how a name goes away
+        /// \return the expanded text, or an empty string if a brace was left unbalanced
         STDCORELIB_EXPORT std::string
             varexp(const std::string_view &s,
                    const std::function<std::string(const std::string_view &)> &find);
