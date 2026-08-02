@@ -7,6 +7,8 @@
 #include <array>
 #include <algorithm>
 #include <cassert>
+#include <set>
+#include <thread>
 
 #include "winapi.h"
 #include "str.h"
@@ -21,14 +23,25 @@ namespace stdc {
 
     constexpr UINT KillProcessExitCode = 0xf291;
 
+    void Popen::Impl::_reap() {
+        if (_handle != InvalidHandle) {
+            CloseHandle(_handle);
+            _handle = InvalidHandle;
+        }
+        // pid and tid are left alone: they stay readable after the child exits, as they do in
+        // Python.
+    }
+
     void Popen::Impl::_cleanup() {
         close_std_files();
+        _reap();
+    }
 
-        CloseHandle(_handle);
-        _handle = InvalidHandle;
-
-        pid = -1;
-        tid = -1;
+    // Returns whether a standard handle is one we can actually use. GetStdHandle hands back NULL
+    // when the process simply has no such handle -- which is every GUI subsystem process -- and
+    // INVALID_HANDLE_VALUE when the call itself failed.
+    static inline bool is_usable_std_handle(HANDLE handle) {
+        return handle != nullptr && handle != INVALID_HANDLE_VALUE;
     }
 
     static inline std::error_code make_last_error_code() {
@@ -60,10 +73,17 @@ namespace stdc {
         // handle that if passed in lpAttributeList["handle_list"], will
         // cause it to fail.
         Container res;
-        std::copy_if(
-            handle_list.begin(), handle_list.end(), std::back_inserter(res), [](HANDLE handle) {
-                return (((intptr_t) handle & 0x3) != 0x3 || GetFileType(handle) != FILE_TYPE_CHAR);
-            });
+        std::set<HANDLE> seen;
+        for (HANDLE handle : handle_list) {
+            if (((intptr_t) handle & 0x3) == 0x3 && GetFileType(handle) == FILE_TYPE_CHAR) {
+                continue;
+            }
+            // UpdateProcThreadAttribute rejects a list with the same handle twice.
+            if (!seen.insert(handle).second) {
+                continue;
+            }
+            res.push_back(handle);
+        }
         return res;
     }
 
@@ -158,7 +178,7 @@ namespace stdc {
         switch (stdin_dev.kind) {
             case IODev::None: {
                 p2cread = GetStdHandle(STD_INPUT_HANDLE);
-                if (p2cread == INVALID_HANDLE_VALUE) {
+                if (!is_usable_std_handle(p2cread)) {
                     HANDLE tmp_pipe;
                     if (!create_pipe(p2cread, tmp_pipe)) {
                         return false;
@@ -216,7 +236,7 @@ namespace stdc {
         switch (stdout_dev.kind) {
             case IODev::None: {
                 c2pwrite = GetStdHandle(STD_OUTPUT_HANDLE);
-                if (c2pwrite == INVALID_HANDLE_VALUE) {
+                if (!is_usable_std_handle(c2pwrite)) {
                     HANDLE tmp_pipe;
                     if (!create_pipe(tmp_pipe, c2pwrite)) {
                         return false;
@@ -275,7 +295,7 @@ namespace stdc {
         switch (stderr_dev.kind) {
             case IODev::None: {
                 errwrite = GetStdHandle(STD_ERROR_HANDLE);
-                if (errwrite == INVALID_HANDLE_VALUE) {
+                if (!is_usable_std_handle(errwrite)) {
                     HANDLE tmp_pipe;
                     if (!create_pipe(tmp_pipe, errwrite)) {
                         return false;
@@ -389,7 +409,7 @@ namespace stdc {
         std::string args;
         if (!program.empty()) {
             std::string programName = program;
-            if (!starts_with(programName, '\"') && ends_with(programName, '\"') &&
+            if (!starts_with(programName, '\"') && !ends_with(programName, '\"') &&
                 str::contains(programName, ' '))
                 programName = '\"' + programName + '\"';
             std::replace(programName.begin(), programName.end(), '/', '\\');
@@ -400,17 +420,20 @@ namespace stdc {
 
         for (size_t i = 0; i < arguments.size(); ++i) {
             std::string tmp = arguments.at(i);
-            // Quotes are escaped and their preceding backslashes are doubled.
-            size_t index = tmp.find('"');
-            while (index != std::string::npos) {
+            // Quotes are escaped and their preceding backslashes are doubled. The counters here
+            // have to stay signed: the inner loop walks down past zero to stop, which an unsigned
+            // one would do by wrapping around instead.
+            ptrdiff_t index = ptrdiff_t(tmp.find('"'));
+            while (index >= 0) {
                 // Escape quote
                 tmp.insert(tmp.begin() + (index++), '\\');
                 // Double preceding backslashes (ignoring the one we just inserted)
-                for (size_t i = index - 2; i >= 0 && tmp.at(i) == '\\'; --i) {
-                    tmp.insert(tmp.begin() + i, '\\');
+                for (ptrdiff_t j = index - 2; j >= 0 && tmp.at(j) == '\\'; --j) {
+                    tmp.insert(tmp.begin() + j, '\\');
                     index++;
                 }
-                index = tmp.find('"', index + 1);
+                auto next = tmp.find('"', size_t(index) + 1);
+                index = next == std::string::npos ? -1 : ptrdiff_t(next);
             }
             if (tmp.empty() || str::contains(tmp, ' ') || str::contains(tmp, '\t')) {
                 // The argument must not end with a \ since this would be interpreted
@@ -459,7 +482,11 @@ namespace stdc {
             DeleteProcThreadAttributeList(attribute_list->attribute_list);
             HeapFree(GetProcessHeap(), 0, attribute_list->attribute_list);
         }
-        HeapFree(GetProcessHeap(), 0, attribute_list->handle_list);
+        // This runs a second time on the error path, where the struct has already been zeroed.
+        // HeapFree is not documented to accept a null pointer.
+        if (attribute_list->handle_list != NULL) {
+            HeapFree(GetProcessHeap(), 0, attribute_list->handle_list);
+        }
         memset(attribute_list, 0, sizeof(*attribute_list));
     }
 
@@ -687,7 +714,7 @@ namespace stdc {
                     return false;
                 }
                 returncode = exitCode;
-                _cleanup();
+                _reap();
                 return true;
             }
             case WAIT_FAILED: {
@@ -697,7 +724,8 @@ namespace stdc {
             default:
                 break;
         }
-        error_code = make_last_error_code();
+        // Still running. Not an error: the caller tells the two apart by whether returncode()
+        // came back set.
         return false;
     }
 
@@ -730,7 +758,7 @@ namespace stdc {
             return false;
         }
         returncode = exitCode;
-        _cleanup();
+        _reap();
         return true;
     }
 
@@ -754,7 +782,7 @@ namespace stdc {
                 return false;
             }
             returncode = exitCode;
-            _cleanup();
+            _reap();
             return true;
         }
         error_code.assign(err, windows_utf8_category());
@@ -776,14 +804,15 @@ namespace stdc {
         if (returncode) {
             return true;
         }
-        if (!EnumWindows(qt_terminateApp, (LPARAM) pid)) {
-            error_code = make_last_error_code();
+        if (!_child_created || tid < 0) {
+            error_code = std::make_error_code(std::errc::no_such_process);
             return false;
         }
-        if (!PostThreadMessageW(tid, WM_CLOSE, 0, 0)) {
-            error_code = make_last_error_code();
-            return false;
-        }
+        // Both calls are a request, not a guarantee: a process with no windows and no message
+        // loop will not notice either of them. Qt ignores the return values here for exactly that
+        // reason -- "found nothing to close" is not a failure -- and so do we.
+        std::ignore = EnumWindows(qt_terminateApp, (LPARAM) pid);
+        std::ignore = PostThreadMessageW(tid, WM_CLOSE, 0, 0);
         return true;
     }
 
@@ -805,10 +834,66 @@ namespace stdc {
         return false;
     }
 
+    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1862
+    //
+    // A pipe holds only so much before the writer blocks, so draining stdout and stderr cannot
+    // wait until the child has exited, and cannot be done one after the other either. Python
+    // gives each pipe a reader thread on Windows; this does the same.
     std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
                                                                        int timeout) {
-        // TODO
-        return {};
+        error_code.clear();
+
+        if (!_child_created) {
+            error_code = std::make_error_code(std::errc::no_such_process);
+            return {};
+        }
+
+        const auto &read_all = [](FILE *file, std::string &dest) {
+            char buf[4096];
+            size_t n;
+            while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
+                dest.append(buf, n);
+            }
+        };
+
+        std::string out, err;
+        std::thread out_thread, err_thread;
+        if (stdout_file) {
+            out_thread = std::thread(read_all, stdout_file, std::ref(out));
+        }
+        if (stderr_file) {
+            err_thread = std::thread(read_all, stderr_file, std::ref(err));
+        }
+
+        // Hand over the input and close the pipe, which is the only thing that tells a child
+        // reading to end of input that there is no more coming.
+        if (stdin_file) {
+            if (!input.empty()) {
+                std::ignore = std::fwrite(input.data(), 1, input.size(), stdin_file);
+            }
+            std::fflush(stdin_file);
+            close_stdin();
+        }
+        _communication_started = true;
+
+        // On a timeout the child is killed rather than left behind: its exit is what closes the
+        // write ends, and without that the reader threads below would never finish.
+        if (!_wait(timeout)) {
+            auto wait_error = error_code;
+            std::ignore = kill_impl();
+            std::ignore = _wait();
+            error_code =
+                wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
+        }
+
+        if (out_thread.joinable()) {
+            out_thread.join();
+        }
+        if (err_thread.joinable()) {
+            err_thread.join();
+        }
+        close_std_files();
+        return {out, err};
     }
 
 }

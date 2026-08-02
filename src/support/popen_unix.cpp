@@ -21,8 +21,13 @@ namespace stdc {
         return std::error_code(errno, std::system_category());
     }
 
+    void Popen::Impl::_reap() {
+        // Nothing to release here: waitpid() has already reaped the child.
+    }
+
     void Popen::Impl::_cleanup() {
         close_std_files();
+        _reap();
 
         // TODO
 

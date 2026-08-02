@@ -122,9 +122,18 @@ namespace stdc {
         //
         bool poll();
         bool wait(int timeout = -1);
+
+        // Closes this side of the child's stdin, which is how the child is told there is no more
+        // input. A child reading to end of input will not exit until this happens.
+        void close_stdin();
+
         std::tuple<std::string, std::string> communicate(const std::string &input = {},
                                                          int timeout = -1);
         bool send_signal(int sig);
+
+        // Asks the process to close, the way QProcess::terminate does: WM_CLOSE to its windows on
+        // Windows, SIGTERM elsewhere. A process may ignore it, and one without a message loop --
+        // any console program -- will not notice at all. kill() is the one that cannot be refused.
         bool terminate();
         bool kill();
 

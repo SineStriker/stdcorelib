@@ -106,7 +106,13 @@ namespace stdc {
         // Methods
         //
         bool done();
+        void close_stdin();
         void close_std_files();
+
+        // Releases the OS process handle once the exit status is in hand. Kept apart from
+        // _cleanup() so that waiting for a child does not also close the pipes its output is
+        // still sitting in.
+        void _reap();
 
         void _cleanup();
 

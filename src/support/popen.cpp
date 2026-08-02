@@ -141,19 +141,23 @@ namespace stdc {
         return result;
     }
 
-    void Popen::Impl::close_std_files() {
-        if (stdout_file) {
-            fclose(stdout_file);
-            stdin_file = nullptr;
-        }
-        if (stderr_file) {
-            fclose(stderr_file);
-            stdin_file = nullptr;
-        }
+    void Popen::Impl::close_stdin() {
         if (stdin_file) {
             fclose(stdin_file);
             stdin_file = nullptr;
         }
+    }
+
+    void Popen::Impl::close_std_files() {
+        if (stdout_file) {
+            fclose(stdout_file);
+            stdout_file = nullptr;
+        }
+        if (stderr_file) {
+            fclose(stderr_file);
+            stderr_file = nullptr;
+        }
+        close_stdin();
     }
 
 }
@@ -385,6 +389,14 @@ namespace stdc {
         __stdc_impl_t;
         // we don't wait for the next Ctrl+C like python
         return impl._wait(timeout);
+    }
+
+    /*!
+        Closes this side of the child's stdin pipe, so the child sees end of input.
+    */
+    void Popen::close_stdin() {
+        __stdc_impl_t;
+        impl.close_stdin();
     }
 
     std::tuple<std::string, std::string> Popen::communicate(const std::string &input, int timeout) {
