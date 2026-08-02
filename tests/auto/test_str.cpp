@@ -70,12 +70,19 @@ BOOST_AUTO_TEST_CASE(test_split) {
 }
 
 BOOST_AUTO_TEST_CASE(test_join) {
-    // a braced list is ambiguous between the string and string_view overloads, so the argument
-    // type has to be named
-    BOOST_CHECK_EQUAL(str::join(std::vector<std::string>{"a", "b", "c"}, "-"), "a-b-c");
-    BOOST_CHECK_EQUAL(str::join(std::vector<std::string>{"a"}, "-"), "a");
-    BOOST_CHECK_EQUAL(str::join(std::vector<std::string>{"a", "b"}, ""), "ab");
-    BOOST_CHECK_EQUAL(str::join(std::vector<std::string>{"", ""}, ","), ",");
+    // A braced list used to be ambiguous between the string and the string_view overload, so the
+    // argument type had to be named. The initializer_list overload takes it now.
+    BOOST_CHECK_EQUAL(str::join({"a", "b", "c"}, "-"), "a-b-c");
+    BOOST_CHECK_EQUAL(str::join({"a"}, "-"), "a");
+    BOOST_CHECK_EQUAL(str::join({"a", "b"}, ""), "ab");
+    BOOST_CHECK_EQUAL(str::join({"", ""}, ","), ",");
+
+    // a braced list of std::string, and of string_view, reach it too
+    BOOST_CHECK_EQUAL(str::join({std::string("a"), std::string("b")}, "-"), "a-b");
+    {
+        std::string_view a = "a", b = "b";
+        BOOST_CHECK_EQUAL(str::join({a, b}, "-"), "a-b");
+    }
 
     // an empty list joins to nothing
     {

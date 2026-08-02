@@ -7,6 +7,7 @@
 #include <vector>
 #include <type_traits>
 #include <filesystem>
+#include <initializer_list>
 #include <map>
 #include <algorithm>
 #include <functional>
@@ -142,6 +143,22 @@ namespace stdc {
         // @overload: join(vector<string_view>, string_view)
         STDCORELIB_EXPORT std::string join(const array_view<std::string_view> &v,
                                            const std::string_view &delimiter);
+
+        // @overload: join(initializer_list<string_view>, string_view)
+        //
+        // A braced list is ambiguous between the two overloads above whenever its elements
+        // convert to both std::string and std::string_view -- which string literals do, and so
+        // does std::string. (A braced list of string_view is fine on its own, because
+        // string_view to std::string is explicit.) The const char * trick used further down does
+        // not apply here: a braced list is list-initialized, not ranked as a standard conversion.
+        //
+        // What does settle it is [over.ics.rank]: a list-initialization sequence that converts to
+        // std::initializer_list<X> ranks above one that does not, so this overload takes every
+        // braced list outright.
+        inline std::string join(std::initializer_list<std::string_view> v,
+                                const std::string_view &delimiter) {
+            return join(array_view<std::string_view>(v.begin(), v.size()), delimiter);
+        }
 
         STDCORELIB_EXPORT std::vector<std::string_view> split(const std::string_view &s,
                                                               const std::string_view &delimiter);
