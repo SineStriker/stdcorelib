@@ -60,7 +60,7 @@ namespace stdc {
         /// @}
 
         /// The environment of the current process, as UTF-8.
-        static std::map<std::string, std::string> environment();
+        STDCORELIB_EXPORT std::map<std::string, std::string> environment();
 
     }
 

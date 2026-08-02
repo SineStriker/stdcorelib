@@ -144,4 +144,27 @@ BOOST_AUTO_TEST_CASE(test_command_line_round_trip) {
     }
 }
 
+// This was declared static in the header, which gave it internal linkage and left every caller
+// with a link error against a definition that was right there in the library.
+BOOST_AUTO_TEST_CASE(test_environment) {
+    auto env = system::environment();
+    BOOST_REQUIRE(!env.empty());
+
+    // PATH is the one variable every platform this builds on defines
+    auto it = env.find("PATH");
+    if (it == env.end()) {
+        it = env.find("Path"); // Windows keeps the name in whatever case it was given
+    }
+    BOOST_REQUIRE(it != env.end());
+    BOOST_CHECK(!it->second.empty());
+
+    // The separator never ends up inside a name, except at the front: cmd.exe keeps the current
+    // directory of each drive in variables called =C:, =D: and so on, which the parser allows on
+    // purpose by starting its search one character in.
+    for (const auto &pair : env) {
+        BOOST_CHECK(!pair.first.empty());
+        BOOST_CHECK_MESSAGE(pair.first.find('=', 1) == std::string::npos, pair.first);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
