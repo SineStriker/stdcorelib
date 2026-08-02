@@ -123,6 +123,14 @@ BOOST_AUTO_TEST_CASE(test_reopen) {
     BOOST_CHECK(shut.resolve(candidate.symbol) == nullptr);
     BOOST_CHECK(!shut.lastError().empty());
 
+    // a call that succeeded leaves nothing behind, so an empty message means no failure
+    BOOST_CHECK(lib.resolve(candidate.symbol) != nullptr);
+    BOOST_CHECK(lib.lastError().empty());
+
+    // and a missing symbol is reported by the system rather than by us
+    BOOST_CHECK(lib.resolve("no_such_symbol_9f3a") == nullptr);
+    BOOST_CHECK(!lib.lastError().empty());
+
     // opening the same library from two objects is fine, and both resolve
     SharedLibrary other;
     BOOST_REQUIRE(other.open(candidate.path));

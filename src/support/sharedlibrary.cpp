@@ -34,14 +34,18 @@ namespace stdc {
 
         bool released = false;
 
-        // Set when a call fails for a reason of ours rather than the system's, since neither
-        // GetLastError() nor dlerror() would have anything to say about those. Cleared at the
-        // start of every operation, so it never outlives the call it belongs to.
+        // Why the last operation failed, captured where it failed. Cleared at the start of
+        // every operation, so it never outlives the call it belongs to.
+        //
+        // The system error has to be read at the point of failure rather than later: on Windows
+        // GetLastError() is thread global and any call in between overwrites it, and dlerror()
+        // clears itself as soon as it is read.
         mutable std::string error;
 
         virtual ~Impl();
 
         static inline int nativeLoadHints(int loadHints);
+        static void clearSysError();
         static std::string sysErrorMessage();
 
         bool open(int hints = 0);
@@ -79,6 +83,17 @@ namespace stdc {
 #endif
     }
 
+    // Run before a call whose failure we want to report, so that what sysErrorMessage() reads
+    // afterwards belongs to that call. dlerror() holds whatever the last dl call left and hands
+    // it to whoever asks first, and GetLastError() is not cleared on success.
+    void SharedLibrary::Impl::clearSysError() {
+#ifdef _WIN32
+        ::SetLastError(ERROR_SUCCESS);
+#else
+        std::ignore = dlerror();
+#endif
+    }
+
     std::string SharedLibrary::Impl::sysErrorMessage() {
 #ifdef _WIN32
         return wstring_conv::to_utf8(windows::SystemError(::GetLastError(), 0));
@@ -93,6 +108,7 @@ namespace stdc {
 
     bool SharedLibrary::Impl::open(int hints) {
         auto absPath = fs::absolute(path);
+        clearSysError();
 
         auto handle =
 #ifdef _WIN32
@@ -102,6 +118,7 @@ namespace stdc {
 #endif
             ;
         if (!handle) {
+            error = sysErrorMessage();
             return false;
         }
 
@@ -123,6 +140,7 @@ namespace stdc {
         if (!hDll) {
             return true;
         }
+        clearSysError();
 
         if (!
 #ifdef _WIN32
@@ -131,6 +149,7 @@ namespace stdc {
             (dlclose(hDll) == 0)
 #endif
         ) {
+            error = sysErrorMessage();
             return false;
         }
 
@@ -142,6 +161,7 @@ namespace stdc {
         if (!hDll) {
             return nullptr;
         }
+        clearSysError();
 
         auto addr =
 #ifdef _WIN32
@@ -150,6 +170,9 @@ namespace stdc {
             dlsym(hDll, name)
 #endif
             ;
+        if (!addr) {
+            error = sysErrorMessage();
+        }
         return reinterpret_cast<void *>(addr);
     }
 
@@ -221,10 +244,7 @@ namespace stdc {
 
     std::string SharedLibrary::lastError() const {
         stdc_impl_t;
-        if (!impl.error.empty()) {
-            return impl.error;
-        }
-        return Impl::sysErrorMessage();
+        return impl.error;
     }
 
     void SharedLibrary::release() {

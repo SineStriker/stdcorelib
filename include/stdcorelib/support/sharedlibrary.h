@@ -72,12 +72,10 @@ namespace stdc {
         /// \pre The library is open.
         void *resolve(const char *name) const;
 
-        /// The reason the last operation on this object failed.
+        /// The reason the last operation on this object failed, or empty if it succeeded.
         ///
-        /// \warning Only meaningful straight after one that reported failure. When the library
-        ///          has nothing of its own to report this falls through to \c GetLastError() or
-        ///          \c dlerror(), neither of which is cleared on success, so asking at any other
-        ///          moment gives an answer left behind by something unrelated.
+        /// Captured where the failure happened rather than read from the system on demand, so
+        /// nothing that ran in between can have overwritten it.
         std::string lastError() const;
 
         /// Gives up ownership, so the destructor will not unload.
