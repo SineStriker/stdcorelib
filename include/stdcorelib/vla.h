@@ -8,12 +8,12 @@
 #include <new>
 
 #if defined(_MSC_VER)
-#  define _STDCORELIB_ALLOCA(size) _alloca(size)
+#  define STDCORELIB_ALLOCA(size) _alloca(size)
 #elif defined(__GNUC__) || defined(__clang__)
-#  define _STDCORELIB_ALLOCA(size) alloca(size)
+#  define STDCORELIB_ALLOCA(size) alloca(size)
 #endif
 
-#ifdef _STDCORELIB_ALLOCA
+#ifdef STDCORELIB_ALLOCA
 
 /// Allocates an uninitialized buffer of \a SIZE elements of \a TYPE on the stack, and declares
 /// \a NAME as a pointer to it.
@@ -21,8 +21,7 @@
 /// \warning The storage dies with the enclosing function, not the enclosing scope, so a loop
 ///          that allocates on every pass keeps growing the frame. Nothing frees it either, which
 ///          is why the size has to be bounded by something the caller controls.
-#  define VLA_ALLOC(TYPE, NAME, SIZE)                                                              \
-      TYPE *NAME = (TYPE *) _STDCORELIB_ALLOCA((SIZE) * sizeof(TYPE))
+#  define VLA_ALLOC(TYPE, NAME, SIZE) TYPE *NAME = (TYPE *) STDCORELIB_ALLOCA((SIZE) * sizeof(TYPE))
 
 namespace stdc::vla::detail {
 
@@ -53,9 +52,9 @@ namespace stdc::vla::detail {
 ///
 /// \sa VLA_ALLOC()
 #  define VLA_NEW(TYPE, NAME, SIZE)                                                                \
-      const size_t NAME##_VLA_SIZE__ = (SIZE);                                                     \
-      VLA_ALLOC(TYPE, NAME, NAME##_VLA_SIZE__);                                                    \
-      ::stdc::vla::detail::ScopeGuard<TYPE> NAME##_VLA_GUARD__(NAME, NAME##_VLA_SIZE__);
+      const size_t NAME##_vla_size_ = (SIZE);                                                      \
+      VLA_ALLOC(TYPE, NAME, NAME##_vla_size_);                                                     \
+      ::stdc::vla::detail::ScopeGuard<TYPE> NAME##_vla_guard_(NAME, NAME##_vla_size_);
 
 #endif
 

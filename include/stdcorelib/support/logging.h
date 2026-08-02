@@ -180,7 +180,7 @@ namespace stdc {
             }
         }
 
-        inline const LogCategory &_stdcGetLogCategory() const {
+        inline const LogCategory &stdcGetLogCategory() const {
             return *this;
         }
 
@@ -199,7 +199,7 @@ namespace stdc {
 /// provides a member of the same name, which unqualified lookup finds first.
 ///
 /// \internal
-static inline const stdc::LogCategory &_stdcGetLogCategory() {
+static inline const stdc::LogCategory &stdcGetLogCategory() {
     return stdc::LogCategory::defaultCategory();
 }
 
@@ -221,7 +221,7 @@ static inline const stdc::LogCategory &_stdcGetLogCategory() {
 ///   stdcWarning("something to say about nothing in particular");
 /// \endcode
 #define stdcLog(LEVEL, ...)                                                                        \
-    _stdcGetLogCategory().log<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
+    stdcGetLogCategory().log<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define stdcTrace(...)    stdcLog(Trace, __VA_ARGS__)
 #define stdcDebug(...)    stdcLog(Debug, __VA_ARGS__)
 #define stdcSuccess(...)  stdcLog(Success, __VA_ARGS__)
@@ -231,7 +231,7 @@ static inline const stdc::LogCategory &_stdcGetLogCategory() {
 #define stdcFatal(...)    stdcLog(Fatal, __VA_ARGS__)
 
 #define stdcLogF(LEVEL, ...)                                                                       \
-    _stdcGetLogCategory().logf<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
+    stdcGetLogCategory().logf<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define stdcTraceF(...)    stdcLogF(Trace, __VA_ARGS__)
 #define stdcDebugF(...)    stdcLogF(Debug, __VA_ARGS__)
 #define stdcSuccessF(...)  stdcLogF(Success, __VA_ARGS__)

@@ -13,13 +13,13 @@ namespace stdc {
         std::filesystem::path clean_path(const std::filesystem::path &path) {
             fs::path result;
             for (const auto &part : path) {
-                if (part == _TSTR("..")) {
-                    if (!result.empty() && result.filename() != _TSTR("..")) {
+                if (part == STDC_TSTR("..")) {
+                    if (!result.empty() && result.filename() != STDC_TSTR("..")) {
                         result = result.parent_path();
                     } else {
                         result /= part;
                     }
-                } else if (part != _TSTR(".")) {
+                } else if (part != STDC_TSTR(".")) {
                     result /= part;
                 }
             }

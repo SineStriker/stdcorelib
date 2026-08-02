@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(test_disabled_level_never_reaches_the_callback) {
     BOOST_CHECK_EQUAL(lastLevel, int(Logger::Warning));
 }
 
-// The macros resolve an in-scope category through _stdcGetLogCategory(), and fall back to the
+// The macros resolve an in-scope category through stdcGetLogCategory(), and fall back to the
 // default one when there is none.
 BOOST_AUTO_TEST_CASE(test_macros) {
     LoggingGuard guard;

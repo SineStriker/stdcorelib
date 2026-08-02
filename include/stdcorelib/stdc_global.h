@@ -87,11 +87,11 @@
 #  define STDCORELIB_NO_UNIQUE_ADDRESS
 #endif
 
-#ifndef _TSTR
+#ifndef STDC_TSTR
 #  ifdef _WIN32
-#    define _TSTR(T) L##T
+#    define STDC_TSTR(T) L##T
 #  else
-#    define _TSTR(T) T
+#    define STDC_TSTR(T) T
 #  endif
 #endif
 

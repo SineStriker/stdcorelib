@@ -45,23 +45,23 @@ namespace stdc::pimpl::detail {
     }
 
     // Used by macros
-    template <class _ThisType>
+    template <class ThisType>
     struct get_decl_trait {
-        using _ImplType = typename std::remove_pointer_t<_ThisType>;
-        using _DeclType = typename _ImplType::Decl;
-        using type = std::conditional_t<std::is_const_v<_ImplType>, const _DeclType, _DeclType>;
+        using ImplType = typename std::remove_pointer_t<ThisType>;
+        using DeclType = typename ImplType::Decl;
+        using type = std::conditional_t<std::is_const_v<ImplType>, const DeclType, DeclType>;
     };
 
 }
 
-#define __stdc_impl_get(T)                                                                         \
+#define stdc_impl_get(T)                                                                           \
     ::stdc::pimpl::detail::get_impl_helper<typename T::Impl>(static_cast<T *>(this)->_impl)
-#define __stdc_decl_get(T) static_cast<T *>(_decl)
+#define stdc_decl_get(T) static_cast<T *>(_decl)
 
-#define __stdc_impl(T) auto &impl = *__stdc_impl_get(T)
-#define __stdc_decl(T) auto &decl = *__stdc_decl_get(T)
+#define stdc_impl(T) auto &impl = *stdc_impl_get(T)
+#define stdc_decl(T) auto &decl = *stdc_decl_get(T)
 
-#define __stdc_impl_t __stdc_impl(std::remove_pointer_t<decltype(this)>)
-#define __stdc_decl_t __stdc_decl(::stdc::pimpl::detail::get_decl_trait<decltype(this)>::type)
+#define stdc_impl_t stdc_impl(std::remove_pointer_t<decltype(this)>)
+#define stdc_decl_t stdc_decl(::stdc::pimpl::detail::get_decl_trait<decltype(this)>::type)
 
 #endif // STDCORELIB_PIMPL_H

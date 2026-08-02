@@ -158,7 +158,7 @@ namespace stdc {
     SharedLibrary &SharedLibrary::operator=(SharedLibrary &&other) noexcept = default;
 
     bool SharedLibrary::open(const fs::path &path, int hints) {
-        __stdc_impl_t;
+        stdc_impl_t;
         if (impl.hDll) {
             std::ignore = close();
         }
@@ -172,7 +172,7 @@ namespace stdc {
     }
 
     bool SharedLibrary::close() {
-        __stdc_impl_t;
+        stdc_impl_t;
         if (impl.released) {
             impl.released = false;
             impl.hDll = nullptr;
@@ -187,22 +187,22 @@ namespace stdc {
     }
 
     bool SharedLibrary::isOpen() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.hDll != nullptr;
     }
 
     fs::path SharedLibrary::path() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.path;
     }
 
     void *SharedLibrary::handle() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.hDll;
     }
 
     void *SharedLibrary::resolve(const char *name) const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.resolve(name);
     }
 
@@ -211,7 +211,7 @@ namespace stdc {
     }
 
     void SharedLibrary::release() {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.released = true;
     }
 

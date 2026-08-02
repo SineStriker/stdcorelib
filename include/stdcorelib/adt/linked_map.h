@@ -24,19 +24,19 @@ namespace stdc {
         Map<K, typename decltype(m_list)::iterator, Mods...> m_map;
 
     public:
-        using _ListType = decltype(m_list);
-        using _MapType = decltype(m_map);
+        using ListType = decltype(m_list);
+        using MapType = decltype(m_map);
 
         using key_type = K;
         using mapped_type = V;
-        using value_type = typename _ListType::value_type;
+        using value_type = typename ListType::value_type;
         using size_type = size_t;
-        using difference_type = typename _ListType::difference_type;
-        using allocator_type = typename _MapType::allocator_type;
+        using difference_type = typename ListType::difference_type;
+        using allocator_type = typename MapType::allocator_type;
         using reference = value_type &;
         using const_reference = const value_type &;
-        using pointer = typename _ListType::pointer;
-        using const_pointer = typename _ListType::const_pointer;
+        using pointer = typename ListType::pointer;
+        using const_pointer = typename ListType::const_pointer;
 
         linked_map() = default;
 
@@ -99,10 +99,10 @@ namespace stdc {
         public:
             iterator() = default;
 
-            using iterator_category = typename _ListType::iterator::iterator_category;
-            using value_type        = typename _ListType::value_type;
-            using difference_type   = typename _ListType::difference_type;
-            using pointer           = typename _ListType::pointer;
+            using iterator_category = typename ListType::iterator::iterator_category;
+            using value_type        = typename ListType::value_type;
+            using difference_type   = typename ListType::difference_type;
+            using pointer           = typename ListType::pointer;
             using reference         = value_type &;
 
             inline std::pair<const K, V> &operator*() const { return *i; }
@@ -118,19 +118,19 @@ namespace stdc {
             inline V &value() const { return i->second; }
 
         private:
-            explicit iterator(const typename _ListType::iterator &i) : i(i) {
+            explicit iterator(const typename ListType::iterator &i) : i(i) {
             }
-            typename _ListType::iterator i;
+            typename ListType::iterator i;
             friend class linked_map;
             friend class const_iterator;
         };
 
         class const_iterator {
         public:
-            using iterator_category = typename _ListType::const_iterator::iterator_category;
-            using value_type        = typename _ListType::value_type;
-            using difference_type   = typename _ListType::difference_type;
-            using pointer           = typename _ListType::const_pointer;
+            using iterator_category = typename ListType::const_iterator::iterator_category;
+            using value_type        = typename ListType::value_type;
+            using difference_type   = typename ListType::difference_type;
+            using pointer           = typename ListType::const_pointer;
             using reference         = const value_type &;
 
             const_iterator() = default;
@@ -149,9 +149,9 @@ namespace stdc {
             inline const V &value() const { return i->second; }
 
         private:
-            explicit const_iterator(const typename _ListType::const_iterator &i) : i(i) {
+            explicit const_iterator(const typename ListType::const_iterator &i) : i(i) {
             }
-            typename _ListType::const_iterator i;
+            typename ListType::const_iterator i;
             friend class linked_map;
         };
         // clang-format on
@@ -320,7 +320,7 @@ namespace stdc {
         }
 
     private:
-        std::pair<iterator, bool> insert_impl(typename _ListType::const_iterator it, const K &key,
+        std::pair<iterator, bool> insert_impl(typename ListType::const_iterator it, const K &key,
                                               const V &val) {
             auto res = m_map.insert(std::make_pair(key, m_list.end()));
             auto &org_it = res.first->second;
@@ -333,7 +333,7 @@ namespace stdc {
             return std::make_pair(iterator(org_it), false);
         }
 
-        std::pair<iterator, bool> insert_impl(typename _ListType::const_iterator it, const K &key,
+        std::pair<iterator, bool> insert_impl(typename ListType::const_iterator it, const K &key,
                                               V &&val) {
             auto res = m_map.insert(std::make_pair(key, m_list.end()));
             auto &org_it = res.first->second;

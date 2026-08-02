@@ -396,122 +396,122 @@ namespace stdc {
     }
 
     Popen &Popen::executable(const std::filesystem::path &executable) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.executable = executable;
         return *this;
     }
 
     Popen &Popen::args(const std::vector<std::string> &args) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.args = args;
         return *this;
     }
 
     Popen &Popen::shell(bool shell) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.shell = shell;
         return *this;
     }
 
     Popen &Popen::cwd(const std::filesystem::path &cwd) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.cwd = cwd;
         return *this;
     }
 
     Popen &Popen::env(const std::map<std::string, std::string> &env) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.env = env;
         return *this;
     }
 
     Popen &Popen::stdin_(IODev dev) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.stdin_dev = dev;
         return *this;
     }
 
     Popen &Popen::stdout_(IODev dev) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.stdout_dev = dev;
         return *this;
     }
 
     Popen &Popen::stderr_(IODev dev) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.stderr_dev = dev;
         return *this;
     }
 
     Popen &Popen::text(bool text) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.text = text;
         return *this;
     }
 
     Popen &Popen::close_fds(bool close_fds) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.close_fds = close_fds;
         return *this;
     }
 
     Popen &Popen::detached(bool detached) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.detached = detached;
         return *this;
     }
 
     Popen &Popen::pipesize(int pipesize) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.pipesize = pipesize;
         return *this;
     }
 
 #ifdef _WIN32
     Popen &Popen::startupinfo(const StartupInfo *startupinfo) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.startupinfo = startupinfo;
         return *this;
     }
 
     Popen &Popen::creationflags(int creationflags) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.creationflags = creationflags;
         return *this;
     }
 #else
     Popen &Popen::preexec_fn(const std::function<void()> &preexec_fn) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.preexec_fn = preexec_fn;
         return *this;
     }
 
     Popen &Popen::restore_signals(bool restore_signals) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.restore_signals = restore_signals;
         return *this;
     }
 
     Popen &Popen::start_new_session(bool start_new_session) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.start_new_session = start_new_session;
         return *this;
     }
 
     Popen &Popen::pass_fds(const std::vector<int> &pass_fds) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.pass_fds = pass_fds;
         return *this;
     }
 
     Popen &Popen::group(int group) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.group = group;
         return *this;
     }
 
     Popen &Popen::extra_groups(const std::vector<int> &extra_groups) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.extra_groups = extra_groups;
         return *this;
     }
@@ -533,20 +533,20 @@ namespace stdc {
     }
 
     Popen &Popen::umask(int umask) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.umask = umask;
         return *this;
     }
 
     Popen &Popen::process_group(int process_group) {
-        __stdc_impl_t;
+        stdc_impl_t;
         impl.process_group = process_group;
         return *this;
     }
 #endif
 
     bool Popen::start(std::string *err_msg) {
-        __stdc_impl_t;
+        stdc_impl_t;
 
         bool result = impl.done();
         if (result) {
@@ -578,78 +578,78 @@ namespace stdc {
     }
 
     std::error_code Popen::error_code() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.error_code;
     }
 
     bool Popen::poll() {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl._internal_poll();
     }
 
     bool Popen::wait(int timeout) {
-        __stdc_impl_t;
+        stdc_impl_t;
         // we don't wait for the next Ctrl+C like python
         return impl._wait(timeout);
     }
 
     std::tuple<std::string, std::string> Popen::communicate(const std::string &input, int timeout) {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.communicate_impl(input, timeout);
     }
 
     bool Popen::send_signal(int sig) {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.send_signal_impl(sig);
     }
 
     bool Popen::terminate() {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.terminate_impl();
     }
 
     bool Popen::kill() {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.kill_impl();
     }
 
     const std::filesystem::path &Popen::executable() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.executable;
     }
 
     array_view<std::string> Popen::args() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.args;
     }
 
     Popen::Stream &Popen::stdin_() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.stdin_stream;
     }
 
     Popen::Stream &Popen::stdout_() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.stdout_stream;
     }
 
     Popen::Stream &Popen::stderr_() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.stderr_stream;
     }
 
     int Popen::pid() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.pid;
     }
 
     bool Popen::detached() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.detached;
     }
 
     std::optional<int> Popen::returncode() const {
-        __stdc_impl_t;
+        stdc_impl_t;
         return impl.returncode;
     }
 
