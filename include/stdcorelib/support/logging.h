@@ -70,7 +70,7 @@ namespace stdc {
 
         template <class... Args>
         [[noreturn]] inline void fatal(const std::string_view &format, Args &&...args) {
-            print(Critical, stdc::formatN(format, std::forward<Args>(args)...));
+            print(Fatal, stdc::formatN(format, std::forward<Args>(args)...));
             abort();
         }
 
@@ -114,9 +114,26 @@ namespace stdc {
         using LogCategoryFilter = void (*)(LogCategory *);
 
         static LogCategoryFilter logFilter();
+
+        /// Replaces the category filter, or restores the default one when given nullptr, and
+        /// re-runs it over every registered category. A custom filter takes over entirely, so the
+        /// rules apply only if it defers to the default.
         static void setLogFilter(LogCategoryFilter filter);
 
         static std::string filterRules();
+
+        /// Installs Qt-style filter rules controlling which levels each category emits.
+        ///
+        /// Rules are separated by newlines or ';', and a '#' starts a comment line. Each rule
+        /// reads `category[.level] = true|false`, where category may carry a single leading
+        /// and/or trailing '*' wildcard and otherwise matches exactly, and level is one of
+        /// trace/debug/success/info/warning/critical/fatal. Omitting the level affects all of
+        /// them. Rules apply in order over an all-enabled baseline, so a later match wins:
+        /// \code
+        ///   *.debug = false          // silence debug everywhere
+        ///   stdc.io = false          // silence the stdc.io category
+        ///   stdc.io.warning = true   // except for its warnings
+        /// \endcode
         void setFilterRules(std::string rules);
 
         static LogCategory &defaultCategory();
@@ -185,7 +202,7 @@ static inline const stdc::LogCategory &_stdcGetLogCategory() {
 */
 
 #define stdcLog(LEVEL, ...)                                                                        \
-  _stdcGetLogCategory().log<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
+    _stdcGetLogCategory().log<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define stdcTrace(...)    stdcLog(Trace, __VA_ARGS__)
 #define stdcDebug(...)    stdcLog(Debug, __VA_ARGS__)
 #define stdcSuccess(...)  stdcLog(Success, __VA_ARGS__)
@@ -195,7 +212,7 @@ static inline const stdc::LogCategory &_stdcGetLogCategory() {
 #define stdcFatal(...)    stdcLog(Fatal, __VA_ARGS__)
 
 #define stdcLogF(LEVEL, ...)                                                                       \
-  _stdcGetLogCategory().logf<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
+    _stdcGetLogCategory().logf<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define stdcTraceF(...)    stdcLogF(Trace, __VA_ARGS__)
 #define stdcDebugF(...)    stdcLogF(Debug, __VA_ARGS__)
 #define stdcSuccessF(...)  stdcLogF(Success, __VA_ARGS__)
