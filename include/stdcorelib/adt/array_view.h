@@ -8,6 +8,14 @@
 
 namespace stdc {
 
+    /// A read-only view of a contiguous array, close to std::span<const T> from C++20.
+    ///
+    /// It converts implicitly from a std::vector, a std::array, a C array, a pointer and a
+    /// length, or a single object, which is what makes it worth taking as a parameter instead of
+    /// one overload per container.
+    ///
+    /// It borrows and never owns. The array has to outlive the view, so binding one to a
+    /// temporary leaves it dangling at the end of the statement.
     template <class T>
     class array_view {
     public:

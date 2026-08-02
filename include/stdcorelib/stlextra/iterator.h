@@ -6,6 +6,12 @@
 
 namespace stdc {
 
+    /// A reverse iterator that stores the position it denotes, not the one after it.
+    ///
+    /// std::reverse_iterator holds base() and dereferences a copy of base() - 1, so the
+    /// reference it returns points into a temporary that is gone by the end of the expression.
+    /// That works for a pointer and breaks for any iterator that keeps the element in itself,
+    /// which is what the registry key and value iterators do.
     template <class T>
     class reverse_iterator {
     public:

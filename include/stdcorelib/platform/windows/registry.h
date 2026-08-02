@@ -17,6 +17,11 @@
 
 namespace stdc::windows {
 
+    /// A registry value together with its type, holding the data rather than pointing at it.
+    ///
+    /// The toXxx() readers do not convert between types. Reading against the wrong one hands
+    /// back a default, meaning 0 or an empty string, and says nothing, so check the type first
+    /// with isInt64(), isString() and the rest. A value that failed to load has type Invalid.
     class STDCORELIB_EXPORT RegValue {
     public:
         enum Type {
@@ -198,10 +203,14 @@ namespace stdc::windows {
             RegValue value;
         };
 
-        // constructs from an existing HKEY handle
+        /// Adopts an existing HKEY. It is only closed on destruction when \a owns says so, so
+        /// wrapping a handle somebody else manages is safe.
         inline RegKey(HKEY hkey = nullptr, bool owns = false) noexcept : _hkey(hkey), _owns(owns) {
         }
+
+        /// One of the predefined roots. These are never closed, since they do not belong to us.
         RegKey(ReservedKey key) noexcept;
+
         ~RegKey();
 
         RegKey(RegKey &&RHS) noexcept;
@@ -212,6 +221,7 @@ namespace stdc::windows {
             return _hkey;
         }
 
+        /// Hands the handle over and gives up ownership, so nobody here will close it.
         inline HKEY take() {
             HKEY hkey = _hkey;
             _hkey = nullptr;
@@ -223,6 +233,11 @@ namespace stdc::windows {
             return _hkey != nullptr;
         }
 
+        /// Opens a subkey below this one. The result owns its handle and closes it when it goes
+        /// out of scope. Check isValid() to see whether it worked.
+        ///
+        /// Every operation on this class comes in two forms. The one taking an \a ec reports
+        /// through it and is noexcept, the one without throws.
         inline RegKey open(const std::wstring &path, int access = DA_Read);
         RegKey open(const std::wstring &path, std::error_code &ec, int access = DA_Read) noexcept;
 
@@ -563,6 +578,22 @@ namespace stdc::windows {
             bool _query;
         };
 
+        /// A range over the subkeys, readable with a range-for or through its random access
+        /// iterators. Each step reads the next name from the registry, so the range is only
+        /// worth walking once.
+        ///
+        /// An error stops the traversal where it stands, and the loop simply ends. Check \a ec
+        /// afterwards, or a partial listing reads exactly like a complete one.
+        ///
+        /// \code
+        ///   std::error_code ec;
+        ///   for (const auto &sub : key.enumKeys(ec)) {
+        ///       use(sub.name);
+        ///   }
+        ///   if (ec.value() != ERROR_SUCCESS) {
+        ///       return ec;
+        ///   }
+        /// \endcode
         inline key_enumerator enumKeys() const {
             return key_enumerator(this, nullptr);
         }
@@ -571,6 +602,8 @@ namespace stdc::windows {
             return key_enumerator(this, &ec);
         }
 
+        /// The same over the values. Set \a query to read each value along with its name, which
+        /// costs a second registry call per entry and is wasted if only the names are wanted.
         inline value_enumerator enumValues(bool query = false) const {
             return value_enumerator(this, nullptr, query);
         }

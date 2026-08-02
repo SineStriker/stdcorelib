@@ -13,15 +13,46 @@ namespace stdc {
 
     namespace system {
 
+        /// \name Where the running program is
+        /// @{
+
+        /// The executable's own path, taken from the OS rather than from argv[0], which the
+        /// parent process is free to have set to anything.
         STDCORELIB_EXPORT std::filesystem::path application_path();
+
+        /// The directory holding the executable, which is where to look for files shipped
+        /// alongside it.
         STDCORELIB_EXPORT std::filesystem::path application_directory();
+
+        /// The executable's file name, extension included.
         STDCORELIB_EXPORT std::filesystem::path application_filename();
+
+        /// The file name with its extension removed, as UTF-8.
         STDCORELIB_EXPORT std::string application_name();
+
+        /// @}
+
+        /// \name Command line
+        /// @{
+
+        /// The arguments as UTF-8, including argv[0]. On Windows these come from the wide
+        /// command line, so a path main() could not spell survives intact.
+        ///
+        /// The view stays valid for the life of the process.
         STDCORELIB_EXPORT array_view<std::string> command_line_arguments();
 
-        STDCORELIB_EXPORT std::vector<std::string> split_command_line(const std::string_view &command);
+        /// Splits a command line the way the host would, undoing the quoting rules that
+        /// join_command_line() applies.
+        STDCORELIB_EXPORT std::vector<std::string>
+            split_command_line(const std::string_view &command);
+
+        /// Joins arguments into one command line, quoting each so that the receiving program
+        /// takes it apart into the same pieces.
         STDCORELIB_EXPORT std::string join_command_line(const std::vector<std::string> &args);
 
+        /// @}
+
+        /// The environment of the current process, as UTF-8.
         static std::map<std::string, std::string> environment();
 
     }

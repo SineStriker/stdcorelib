@@ -179,28 +179,29 @@ namespace stdc {
 
 }
 
+/// What the macros below fall back to when no LogCategory is in scope. A category of your own
+/// provides a member of the same name, which unqualified lookup finds first.
 static inline const stdc::LogCategory &_stdcGetLogCategory() {
     return stdc::LogCategory::defaultCategory();
 }
 
-/*!
-    \macro stdcDebug
-    \brief Logs a debug message to a log category.
-    \code
-        // User category
-        stdc::LogCategory lc("test");
-        lc.setLevelEnabled(stdc::Logger::Debug, true);
-        lc.stdcDebug("This is a debug message");
-        lc.stdcDebug("This is a debug message with arg: %1", 42);
-        lc.stdcDebugF("This is a debug message with arg: %d", 42);
-
-        // Default category
-        stdcDebug("This is a debug message");
-        stdcDebug("This is a debug message with arg: %1", 42);
-        stdcDebug("This is a debug message with arg: %d", 42);
-    \endcode
-*/
-
+/// Logs one record at LEVEL, tagged with the file, line and function it came from.
+///
+/// Written on a category, it goes to that one. Written bare, it goes to the default category.
+/// The message uses formatN() placeholders (%1, %2, ...), and the F variants below take printf
+/// conversions instead.
+///
+/// This expands to an ordinary call, so the arguments are evaluated whether the level is
+/// enabled or not. Unlike Qt's qCDebug, which short circuits, anything expensive belongs behind
+/// an isLevelEnabled() check of your own.
+///
+/// \code
+///   stdc::LogCategory lc("app.io");
+///   lc.stdcWarning("cannot read %1", path);
+///   lc.stdcWarningF("cannot read %s", path.c_str());
+///
+///   stdcWarning("something to say about nothing in particular");
+/// \endcode
 #define stdcLog(LEVEL, ...)                                                                        \
     _stdcGetLogCategory().log<stdc::Logger::LEVEL>(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define stdcTrace(...)    stdcLog(Trace, __VA_ARGS__)
