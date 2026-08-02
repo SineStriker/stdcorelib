@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -5,11 +6,12 @@
 
 #include <boost/test/unit_test.hpp>
 
-using namespace stdc;
+#ifndef _WIN32
+#  include <csignal>
+#  include <dirent.h>
+#endif
 
-// The POSIX side of Popen is still unfinished (_execute_child and communicate() are stubs), so
-// there is nothing to assert there yet.
-#ifdef _WIN32
+using namespace stdc;
 
 BOOST_AUTO_TEST_SUITE(test_popen)
 
@@ -17,6 +19,38 @@ namespace {
 
     // Every wait here is bounded, so a regression hangs the one case rather than the whole run.
     constexpr int Timeout = 15000;
+
+    // The same child behavior spelled in each platform's shell.
+#ifdef _WIN32
+    const char *ShellExe = "cmd";
+    const char *ShellFlag = "/c";
+    const char *EchoHello = "echo hello";
+    const char *EchoOutErr = "echo out& echo err 1>&2";
+    const char *EchoErr = "echo err 1>&2";
+    const char *EchoThree = "echo one& echo two& echo three";
+    const char *PrintCwd = "cd";
+    const char *ExitZero = "exit 0";
+    const char *ExitThree = "exit 3";
+    const char *BigOutput = "for /L %i in (1,1,5000) do @echo 0123456789012345678901234567890123";
+    const std::vector<std::string> FilterX = {"findstr", "x"};
+#else
+    const char *ShellExe = "/bin/sh";
+    const char *ShellFlag = "-c";
+    const char *EchoHello = "echo hello";
+    const char *EchoOutErr = "echo out; echo err 1>&2";
+    const char *EchoErr = "echo err 1>&2";
+    const char *EchoThree = "echo one; echo two; echo three";
+    const char *PrintCwd = "pwd";
+    const char *ExitZero = "exit 0";
+    const char *ExitThree = "exit 3";
+    const char *BigOutput = "i=0; while [ $i -lt 5000 ]; do "
+                            "echo 0123456789012345678901234567890123; i=$((i+1)); done";
+    const std::vector<std::string> FilterX = {"grep", "x"};
+#endif
+
+    std::vector<std::string> shell_args(const char *script) {
+        return {ShellExe, ShellFlag, script};
+    }
 
     // The first line of the child's output. Trailing blanks go too: `echo err 1>&2` in cmd
     // emits the space before the redirection as part of the text.
@@ -35,7 +69,7 @@ BOOST_AUTO_TEST_CASE(test_run_and_returncode) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "exit 0"});
+        p.args(shell_args(ExitZero));
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         BOOST_CHECK(p.pid() > 0);
         BOOST_REQUIRE(p.wait(Timeout));
@@ -47,7 +81,7 @@ BOOST_AUTO_TEST_CASE(test_run_and_returncode) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "exit 3"});
+        p.args(shell_args(ExitThree));
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_REQUIRE(p.returncode());
@@ -64,12 +98,26 @@ BOOST_AUTO_TEST_CASE(test_run_and_returncode) {
     }
 }
 
+// A bare name is looked up along PATH, the same way a shell would find it.
+BOOST_AUTO_TEST_CASE(test_path_lookup) {
+    Popen p;
+    std::string err;
+#ifdef _WIN32
+    p.args({"cmd", "/c", "exit 0"});
+#else
+    p.args({"echo", "found"}).stdout_(Popen::PIPE);
+#endif
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE(p.wait(Timeout));
+    BOOST_CHECK_EQUAL(*p.returncode(), 0);
+}
+
 // wait() used to close the pipes along with the process handle, which threw away the output
 // before anyone could read it.
 BOOST_AUTO_TEST_CASE(test_output_survives_wait) {
     Popen p;
     std::string err;
-    p.args({"cmd", "/c", "echo hello"}).stdout_(Popen::PIPE);
+    p.args(shell_args(EchoHello)).stdout_(Popen::PIPE);
     BOOST_REQUIRE_MESSAGE(p.start(&err), err);
     BOOST_REQUIRE(p.wait(Timeout));
 
@@ -85,7 +133,7 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "echo hello"}).stdout_(Popen::PIPE);
+        p.args(shell_args(EchoHello)).stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "hello");
@@ -98,7 +146,7 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "echo out& echo err 1>&2"}).stdout_(Popen::PIPE).stderr_(Popen::PIPE);
+        p.args(shell_args(EchoOutErr)).stdout_(Popen::PIPE).stderr_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "out");
@@ -109,7 +157,7 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "echo err 1>&2"}).stdout_(Popen::PIPE).stderr_(Popen::STDOUT);
+        p.args(shell_args(EchoErr)).stdout_(Popen::PIPE).stderr_(Popen::STDOUT);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "err");
@@ -120,7 +168,7 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     {
         Popen p;
         std::string err;
-        p.args({"findstr", "x"}).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+        p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         auto [out, errout] = p.communicate("abc\nxyz\ndef\n", Timeout);
         BOOST_CHECK_EQUAL(first_line(out), "xyz");
@@ -132,21 +180,46 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "for /L %i in (1,1,5000) do @echo 0123456789012345678901234567890123"})
-            .stdout_(Popen::PIPE);
+        p.args(shell_args(BigOutput)).stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         auto [out, errout] = p.communicate({}, Timeout);
         BOOST_CHECK_GT(out.size(), 100000u);
         BOOST_REQUIRE(p.returncode());
         BOOST_CHECK_EQUAL(*p.returncode(), 0);
     }
+
+    // a child that outlives the timeout is killed rather than left behind
+    {
+        Popen p;
+        std::string err;
+        p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        // no input, so the filter would wait forever
+        auto [out, errout] = p.communicate("no match here\n", 500);
+        BOOST_REQUIRE(p.returncode());
+    }
+}
+
+// Writing to a pipe whose reader has already exited raises SIGPIPE on POSIX, and its default
+// action would take the whole test runner with it.
+BOOST_AUTO_TEST_CASE(test_write_to_dead_child) {
+    Popen p;
+    std::string err;
+    p.args(shell_args(ExitZero)).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE(p.wait(Timeout));
+
+    std::string big(1 << 20, 'x');
+    auto [out, errout] = p.communicate(big, Timeout);
+    BOOST_REQUIRE(p.returncode());
+    BOOST_CHECK_EQUAL(*p.returncode(), 0);
 }
 
 // Without a way to close this side of the pipe, a child reading to end of input never returns.
 BOOST_AUTO_TEST_CASE(test_close_stdin_ends_input) {
     Popen p;
     std::string err;
-    p.args({"findstr", "x"}).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+    p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
     BOOST_REQUIRE_MESSAGE(p.start(&err), err);
 
     auto &in = p.stdin_();
@@ -166,11 +239,11 @@ BOOST_AUTO_TEST_CASE(test_close_stdin_ends_input) {
 }
 
 // poll() returning false means "not finished", which is not an error, and it must not pick up
-// whatever GetLastError happened to be holding.
+// whatever the last failed system call happened to leave behind.
 BOOST_AUTO_TEST_CASE(test_poll) {
     Popen p;
     std::string err;
-    p.args({"findstr", "x"}).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+    p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
     BOOST_REQUIRE_MESSAGE(p.start(&err), err);
 
     BOOST_CHECK(!p.poll());
@@ -186,6 +259,127 @@ BOOST_AUTO_TEST_CASE(test_poll) {
     BOOST_CHECK(p.poll());
     BOOST_CHECK_EQUAL(p.error_code().value(), 0);
 }
+
+BOOST_AUTO_TEST_CASE(test_cwd) {
+    Popen p;
+    std::string err;
+#ifdef _WIN32
+    const char *dir = "C:\\Windows";
+#else
+    const char *dir = "/usr";
+#endif
+    p.args(shell_args(PrintCwd)).cwd(dir).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    auto [out, errout] = p.communicate({}, Timeout);
+    BOOST_CHECK_EQUAL(first_line(out), dir);
+}
+
+// A working directory that does not exist fails at start, and says which one.
+BOOST_AUTO_TEST_CASE(test_bad_cwd) {
+    Popen p;
+    std::string err;
+    p.args(shell_args(ExitZero)).cwd("no_such_dir_9f3a");
+    BOOST_CHECK(!p.start(&err));
+    BOOST_CHECK(!err.empty());
+}
+
+#ifndef _WIN32
+
+// The child's environment is replaced, not merged.
+BOOST_AUTO_TEST_CASE(test_env) {
+    Popen p;
+    std::string err;
+    p.args({
+               "/bin/sh", "-c", "echo $FOO"
+    })
+        .env({{"FOO", "bar"}, {"PATH", "/bin:/usr/bin"}})
+        .stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    auto [out, errout] = p.communicate({}, Timeout);
+    BOOST_CHECK_EQUAL(first_line(out), "bar");
+}
+
+BOOST_AUTO_TEST_CASE(test_shell) {
+    Popen p;
+    std::string err;
+    p.args({"echo shelled"}).shell(true).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    auto [out, errout] = p.communicate({}, Timeout);
+    BOOST_CHECK_EQUAL(first_line(out), "shelled");
+}
+
+// A signal death is reported as the negated signal number, as in Python.
+BOOST_AUTO_TEST_CASE(test_signal_returncode) {
+    {
+        Popen p;
+        std::string err;
+        p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_CHECK(p.kill());
+        BOOST_REQUIRE(p.wait(Timeout));
+        BOOST_CHECK_EQUAL(*p.returncode(), -SIGKILL);
+    }
+    {
+        Popen p;
+        std::string err;
+        p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_CHECK(p.terminate());
+        BOOST_REQUIRE(p.wait(Timeout));
+        BOOST_CHECK_EQUAL(*p.returncode(), -SIGTERM);
+    }
+}
+
+// Every descriptor a run opens has to come back, or a long-lived program runs out of them.
+BOOST_AUTO_TEST_CASE(test_no_fd_leak) {
+    const auto &open_fd_count = []() {
+        DIR *dir = opendir("/proc/self/fd");
+        if (!dir) {
+            return -1;
+        }
+        int count = 0;
+        while (readdir(dir)) {
+            count++;
+        }
+        closedir(dir);
+        return count;
+    };
+
+    // The first run warms up whatever the library allocates once.
+    for (int i = 0; i < 2; i++) {
+        Popen p;
+        std::string err;
+        p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE).stderr_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        std::ignore = p.communicate("xyz\n", Timeout);
+    }
+
+    int before = open_fd_count();
+    BOOST_REQUIRE(before > 0);
+    for (int i = 0; i < 20; i++) {
+        Popen p;
+        std::string err;
+        p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE).stderr_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        std::ignore = p.communicate("xyz\n", Timeout);
+    }
+    BOOST_CHECK_EQUAL(open_fd_count(), before);
+}
+
+// close_fds is on by default, so nothing of ours reaches the child but the standard streams.
+BOOST_AUTO_TEST_CASE(test_close_fds) {
+    Popen p;
+    std::string err;
+    p.args({"/bin/sh", "-c", "ls /proc/self/fd | wc -l"}).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    auto [out, errout] = p.communicate({}, Timeout);
+    // 0, 1, 2 and the descriptor ls itself opened on the directory
+    BOOST_CHECK_LE(std::stoi(first_line(out)), 5);
+}
+
+#endif // !_WIN32
+
+#ifdef _WIN32
 
 // An argument starting with a quote used to walk a size_t counter past zero and throw
 // std::out_of_range out of start().
@@ -204,12 +398,14 @@ BOOST_AUTO_TEST_CASE(test_argument_quoting) {
     }
 }
 
-BOOST_AUTO_TEST_CASE(test_devnull_and_fd) {
+#endif // _WIN32
+
+BOOST_AUTO_TEST_CASE(test_devnull_and_inherit) {
     // DEVNULL swallows the output
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "echo hello"}).stdout_(Popen::DEVNULL);
+        p.args(shell_args(EchoHello)).stdout_(Popen::DEVNULL);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK(!p.stdout_().is_open());
@@ -221,7 +417,7 @@ BOOST_AUTO_TEST_CASE(test_devnull_and_fd) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "exit 0"});
+        p.args(shell_args(ExitZero));
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK_EQUAL(*p.returncode(), 0);
@@ -235,7 +431,7 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "echo one& echo two& echo three"}).stdout_(Popen::PIPE).text(true);
+        p.args(shell_args(EchoThree)).stdout_(Popen::PIPE).text(true);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
 
         std::vector<std::string> lines;
@@ -278,7 +474,7 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "exit 0"}).stdout_(Popen::PIPE);
+        p.args(shell_args(ExitZero)).stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
 
         BOOST_CHECK(p.stdout_().is_open());
@@ -298,7 +494,7 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
     {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "echo hello"}).stdout_(Popen::PIPE);
+        p.args(shell_args(EchoHello)).stdout_(Popen::PIPE);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
 
         FILE *raw = p.stdout_().file();
@@ -314,7 +510,7 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
 BOOST_AUTO_TEST_CASE(test_kill) {
     Popen p;
     std::string err;
-    p.args({"findstr", "x"}).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+    p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
     BOOST_REQUIRE_MESSAGE(p.start(&err), err);
     BOOST_CHECK(!p.poll());
 
@@ -328,5 +524,3 @@ BOOST_AUTO_TEST_CASE(test_kill) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-
-#endif // _WIN32
