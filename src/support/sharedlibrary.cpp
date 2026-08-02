@@ -146,43 +146,15 @@ namespace stdc {
         return reinterpret_cast<void *>(addr);
     }
 
-    /*!
-        \class Library
-        \brief Loads shared libraries at run time.
-
-        This class provides a wrapper for dynamically loaded libraries. It provides a simple
-        interface for opening, closing, and resolving symbols from the library.
-
-        The interface is similar to the Qt QLibrary class.
-
-        \sa https://doc.qt.io/qt-6/qlibrary.html
-    */
-
-    /*!
-        Constructs a library.
-     */
     SharedLibrary::SharedLibrary() : _impl(new Impl()) {
     }
 
-    /*!
-        Destroys the library object.
-    */
     SharedLibrary::~SharedLibrary() = default;
 
-
-    /*!
-        Move constructor.
-    */
     SharedLibrary::SharedLibrary(SharedLibrary &&other) noexcept = default;
 
-    /*!
-        Move assignment operator.
-    */
     SharedLibrary &SharedLibrary::operator=(SharedLibrary &&other) noexcept = default;
 
-    /*!
-        Loads the library and returns \c true if the library was loaded successfully.
-    */
     bool SharedLibrary::open(const fs::path &path, int hints) {
         __stdc_impl_t;
         if (impl.hDll) {
@@ -197,9 +169,6 @@ namespace stdc {
         return false;
     }
 
-    /*!
-        Unloads the library and returns \c true if the library could be unloaded.
-    */
     bool SharedLibrary::close() {
         __stdc_impl_t;
         if (impl.released) {
@@ -215,48 +184,30 @@ namespace stdc {
         return false;
     }
 
-    /*!
-        Returns \c true if the library is open.
-    */
     bool SharedLibrary::isOpen() const {
         __stdc_impl_t;
         return impl.hDll != nullptr;
     }
 
-    /*!
-        Returns the opened library path.
-    */
     fs::path SharedLibrary::path() const {
         __stdc_impl_t;
         return impl.path;
     }
 
-    /*!
-        Returns the opened library handle.
-    */
     void *SharedLibrary::handle() const {
         __stdc_impl_t;
         return impl.hDll;
     }
 
-    /*!
-        Returns the address of the exported symbol \a name, the library must be opened.
-    */
     void *SharedLibrary::resolve(const char *name) const {
         __stdc_impl_t;
         return impl.resolve(name);
     }
 
-    /*!
-        Returns the error message of the last failed library operation.
-    */
     std::string SharedLibrary::lastError() const {
         return Impl::sysErrorMessage();
     }
 
-    /*!
-        Releases the library handle.
-    */
     void SharedLibrary::release() {
         __stdc_impl_t;
         impl.released = true;
@@ -283,9 +234,6 @@ namespace stdc {
     }
 #endif
 
-    /*!
-        Returns \c true if \a path has a valid suffix for a loadable library.
-    */
     bool SharedLibrary::isLibrary(const fs::path &path) {
 #if defined(_WIN32)
         auto fileName = path.wstring();
@@ -314,10 +262,6 @@ namespace stdc {
 #endif
     }
 
-    /*!
-        Sets the library path hint as \a path, which is helpful when searching a loading library's
-        dependencies.
-    */
     fs::path SharedLibrary::setLibraryPath(const fs::path &path) {
 #ifdef _WIN32
         std::wstring org = winapi::kernel32::GetDllDirectoryW();
@@ -332,9 +276,6 @@ namespace stdc {
         return org;
     }
 
-    /*!
-        Returns the path of the library that the address \a addr locates in.
-    */
     fs::path SharedLibrary::locateLibraryPath(const void *addr) {
 #ifdef _WIN32
         HMODULE hModule = nullptr;

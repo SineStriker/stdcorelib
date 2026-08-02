@@ -400,11 +400,6 @@ namespace stdc {
         BaseOutput *_output;
     };
 
-    /*！
-        \namespace console
-        \brief Namespace of console related functions.
-    */
-
     namespace console {
 
         namespace detail {
@@ -507,16 +502,10 @@ namespace stdc {
 
         static std::atomic<color_mode> g_color_mode{color_mode::automatic};
 
-        /*!
-            Returns the color mode the process is set to.
-        */
         color_mode get_color_mode() {
             return g_color_mode.load(std::memory_order_relaxed);
         }
 
-        /*!
-            Overrides how styling is emitted, process wide.
-        */
         void set_color_mode(color_mode mode) {
             g_color_mode.store(mode, std::memory_order_relaxed);
             // Also the way to make a target be probed again, which a program that has swapped one
@@ -524,9 +513,6 @@ namespace stdc {
             clear_target_cache();
         }
 
-        /*!
-            Returns the color mode that will actually be used for \a file.
-        */
         color_mode resolve_color_mode(FILE *file) {
             auto mode = g_color_mode.load(std::memory_order_relaxed);
             if (mode != color_mode::automatic) {
@@ -585,9 +571,6 @@ namespace stdc {
             return ret;
         }
 
-        /*!
-            Print formatted string in UTF-8 encoding with specified styles to file.
-        */
         int fprintf(int style, int fg, int bg, FILE *file, const char *fmt, ...) {
             va_list args;
             va_start(args, fmt);
@@ -596,18 +579,12 @@ namespace stdc {
             return ret;
         }
 
-        /*!
-            Print formatted string in UTF-8 encoding with specified styles to file.
-        */
         int vfprintf(int style, int fg, int bg, FILE *file, const char *fmt, va_list args) {
             ConsoleOutputGuard cog(file);
             cog.change(style, fg, bg);
             return std::vfprintf(file, fmt, args);
         }
 
-        /*!
-            Print formatted string in UTF-8 encoding with specified styles.
-        */
         int printf(int style, int fg, int bg, const char *fmt, ...) {
             va_list args;
             va_start(args, fmt);
@@ -616,26 +593,9 @@ namespace stdc {
             return ret;
         }
 
-        /*!
-            Print formatted string in UTF-8 encoding with specified styles.
-        */
         int vprintf(int style, int fg, int bg, const char *fmt, va_list args) {
             return console::vfprintf(style, fg, bg, stdout, fmt, args);
         }
-
-        /*!
-            \fn void print(int foreground, int background, const std::string &format, Args
-           &&...args)
-
-            Print formatted string in UTF-8 encoding with specified styles.
-        */
-
-        /*!
-            \fn void println(int foreground, int background, const std::string &format, Args
-           &&...args)
-
-            Print formatted string in UTF-8 encoding with specified styles and start a new line.
-        */
 
         int u8fprintf(FILE *file, const char *fmt, ...) {
             va_list args;
@@ -649,9 +609,6 @@ namespace stdc {
             return console::vfprintf(nostyle, nocolor, nocolor, file, fmt, args);
         }
 
-        /*!
-            Print formatted string in UTF-8 encoding with default styles.
-        */
         int u8printf(const char *fmt, ...) {
             va_list args;
             va_start(args, fmt);
@@ -660,9 +617,6 @@ namespace stdc {
             return ret;
         }
 
-        /*!
-            Print formatted string in UTF-8 encoding with default styles.
-        */
         int u8vprintf(const char *fmt, va_list args) {
             return console::vfprintf(nostyle, nocolor, nocolor, stdout, fmt, args);
         }

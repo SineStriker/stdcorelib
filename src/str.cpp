@@ -15,16 +15,8 @@
 
 namespace stdc {
 
-    /*！
-        \namespace str
-        \brief Namespace of string algorithms.
-    */
-
     namespace str {
 
-        /*!
-            \internal
-        */
         bool varexp_split(const std::string_view &s, vlarray_base<varexp_part> &result) {
             varexp_part buf{
                 varexp_part_type::literal,
@@ -87,9 +79,6 @@ namespace stdc {
             return true;
         }
 
-        /*!
-            \internal
-        */
         std::string varexp_post(const std::string_view &s) {
             std::string result;
             result.reserve(s.size());
@@ -108,15 +97,6 @@ namespace stdc {
 
     namespace str {
 
-        /*!
-            \fn std::string to_string(T &&t)
-
-            Returns UTF-8 encoded string converted from supported classes.
-        */
-
-        /*!
-            Joins all the string list's str into a single string.
-        */
         std::string join(const array_view<std::string> &v, const std::string_view &delimiter) {
             if (v.empty())
                 return {};
@@ -157,9 +137,6 @@ namespace stdc {
             return res;
         }
 
-        /*!
-            Splits the string into substring view list.
-        */
         std::vector<std::string_view> split(const std::string_view &s,
                                             const std::string_view &delimiter) {
             std::vector<std::string_view> tokens;
@@ -252,10 +229,6 @@ namespace stdc {
             return res;
         }
 
-        /*!
-            Replaces occurrences of \c %N in \a fmt string with the corresponding argument from
-            \a args.
-        */
         std::string format(const std::string_view &fmt, const array_view<std::string> &args) {
             struct Part {
                 const char *data;
@@ -330,16 +303,6 @@ namespace stdc {
             return res;
         }
 
-        /*!
-            \fn std::string formatN(const std::string_view &format, Arg1 &&arg1, Args &&...args)
-
-            Replaces occurrences of \c %N in format string with the corresponding argument from
-            \a args.
-        */
-
-        /*!
-            Replace occurrences of \c ${VAR} in \a s with the corresponding variable.
-        */
         std::string varexp(const std::string_view &s,
                            const std::function<std::string(const std::string_view &)> &find) {
             vlarray<varexp_part, 10> parts;

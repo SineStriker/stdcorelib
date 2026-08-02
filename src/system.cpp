@@ -30,11 +30,6 @@ using PathString = std::string;
 static constexpr const PathChar PathSeparator = '/';
 #endif
 
-/*!
-    \namespace stdc
-    \brief Namespace of stdcorelib.
-*/
-
 namespace stdc {
 
 #if defined(__APPLE__)
@@ -149,48 +144,28 @@ namespace stdc {
         return res;
     }
 
-    /*！
-        \namespace system
-        \brief Namespace of system related functions.
-    */
-
     namespace system {
 
-        /*!
-            Returns the application file path.
-        */
         std::filesystem::path application_path() {
             static std::filesystem::path result = sys_application_path();
             return result;
         }
 
-        /*!
-            Returns the application directory.
-        */
         std::filesystem::path application_directory() {
             static std::filesystem::path result = sys_application_directory();
             return result;
         }
 
-        /*!
-            Returns the application file name.
-        */
         std::filesystem::path application_filename() {
             static std::filesystem::path result = sys_application_filename();
             return result;
         }
 
-        /*!
-            Returns the application name in UTF-8 encoding.
-        */
         std::string application_name() {
             static std::string result = path::to_utf8(sys_application_name());
             return result;
         }
 
-        /*!
-            Returns the command line arguments in UTF-8 encoding.
-        */
         array_view<std::string> command_line_arguments() {
             static auto result = sys_command_line_arguments();
             return result;
@@ -240,9 +215,6 @@ namespace stdc {
             return args;
         }
 
-        /*!
-            Joins the list of arguments into a single command line.
-        */
         std::string join_command_line(const std::vector<std::string> &args) {
             std::string cmdLine;
             for (size_t i = 0; i < args.size(); ++i) {

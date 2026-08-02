@@ -2,11 +2,6 @@
 
 namespace stdc {
 
-    /*!
-        \namespace winapi
-        \brief C++ wrapper for Windows API functions.
-    */
-
 }
 
 namespace stdc::winapi {

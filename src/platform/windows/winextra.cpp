@@ -6,20 +6,12 @@
 
 namespace stdc {
 
-    /*!
-        \namespace windows
-        \brief Windows API related functions and classes.
-    */
-
 }
 
 namespace stdc::windows {
 
     using namespace winapi;
 
-    /*!
-        Get formatted error message using \c FormatMessageW without ending line break.
-    */
     std::wstring SystemError(DWORD error_code, DWORD language_id) {
         std::wstring ret =
             kernel32::FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, error_code, language_id);
@@ -44,9 +36,6 @@ namespace stdc::windows {
         return rovi;
     }
 
-    /*!
-        Returns system version from \c ntdll.dll runtime library.
-    */
     RTL_OSVERSIONINFOW SystemVersion() {
         static auto result = static_get_real_os_version();
         return result;

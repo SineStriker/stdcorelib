@@ -112,11 +112,6 @@ namespace stdc::windows {
         }
     };
 
-    /*!
-        \class RegValue
-        \brief A registry value holder.
-    */
-
     RegValue::RegValue(Type type) : t(type) {
         switch (type) {
             case None:
@@ -353,14 +348,6 @@ namespace stdc::windows {
         return false;
     }
 
-    /*!
-        \class RegKey
-        \brief A registry key holder.
-    */
-
-    /*!
-        Destructor. Closes the registry key if it was opened by this object.
-    */
     RegKey::~RegKey() {
         if (_hkey && _owns) {
             std::ignore = RegCloseKey(_hkey);

@@ -376,25 +376,9 @@ namespace stdc {
 
 namespace stdc {
 
-    /*!
-        \class Popen
-        \brief A class to create and control child processes.
-
-        This class provides a way to create and control child processes. It is similar to
-        Python's \c subprocess.Popen class.
-
-        \sa https://docs.python.org/3/library/subprocess.html
-    */
-
-    /*!
-        Constructs a Popen object.
-     */
     Popen::Popen() : _impl(new Impl()) {
     }
 
-    /*!
-        Destroys the Popen object.
-    */
     Popen::~Popen() = default;
 
     Popen::Popen(Popen &&RHS) noexcept {
@@ -550,10 +534,6 @@ namespace stdc {
     }
 #endif
 
-    /*!
-        Starts the process. If a failure occurs, the error code will be set and the detailed error
-        message will be stored into \a err_msg.
-    */
     bool Popen::start(std::string *err_msg) {
         __stdc_impl_t;
 
@@ -586,9 +566,6 @@ namespace stdc {
         return false;
     }
 
-    /*!
-        Returns the error code of the last operation.
-    */
     std::error_code Popen::error_code() const {
         __stdc_impl_t;
         return impl.error_code;
