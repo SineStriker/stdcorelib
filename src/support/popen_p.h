@@ -38,9 +38,11 @@ namespace stdc {
         IODev stdout_dev;
         IODev stderr_dev;
 
-        FILE *stdin_file = nullptr;
-        FILE *stdout_file = nullptr;
-        FILE *stderr_file = nullptr;
+        // mutable so that the const accessors can hand them out, the way they used to hand out a
+        // FILE *: reading a child's output does not change the Popen.
+        mutable Stream stdin_stream;
+        mutable Stream stdout_stream;
+        mutable Stream stderr_stream;
 
         bool text = false;
         bool close_fds = true;
@@ -106,7 +108,6 @@ namespace stdc {
         // Methods
         //
         bool done();
-        void close_stdin();
         void close_std_files();
 
         // Releases the OS process handle once the exit status is in hand. Kept apart from

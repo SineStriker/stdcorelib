@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <vector>
+#include <istream>
 #include <map>
 #include <memory>
 #include <optional>
@@ -68,6 +69,41 @@ namespace stdc {
         };
 #endif
 
+        // One end of a pipe to the child, as a C++ stream.
+        //
+        // The direction is fixed by which pipe it is: stdin_() is written to, stdout_() and
+        // stderr_() are read from. Using one the wrong way round fails at run time rather than
+        // at compile time.
+        //
+        // The stream owns what it is reading or writing, so close() can be called more than once
+        // and the destructor tidies up whatever is left. That is the difference from handing out
+        // a bare FILE *: a closed FILE * cannot be told apart from an open one, and the slot is
+        // recycled by the next fopen.
+        class STDCORELIB_EXPORT Stream : public std::iostream {
+        public:
+            Stream();
+            ~Stream() override;
+
+            // Flushes and closes. Doing it twice is harmless. Closing stdin_() is what tells a
+            // child reading to end of input that there is no more coming.
+            void close();
+            bool is_open() const;
+
+            // The underlying handle, for the C interfaces that only take one -- fprintf, or any
+            // library with a FILE * entry point. It is borrowed: let close() do the closing.
+            // Null once closed, or when this pipe was never opened.
+            FILE *file() const;
+
+        private:
+            friend class Popen;
+            void open(FILE *file);
+
+            class Buf;
+            std::unique_ptr<Buf> _buf;
+
+            STDCORELIB_DISABLE_COPY_MOVE(Stream)
+        };
+
         Popen();
         ~Popen();
 
@@ -123,10 +159,6 @@ namespace stdc {
         bool poll();
         bool wait(int timeout = -1);
 
-        // Closes this side of the child's stdin, which is how the child is told there is no more
-        // input. A child reading to end of input will not exit until this happens.
-        void close_stdin();
-
         std::tuple<std::string, std::string> communicate(const std::string &input = {},
                                                          int timeout = -1);
         bool send_signal(int sig);
@@ -144,9 +176,10 @@ namespace stdc {
         const std::filesystem::path &executable() const;
         array_view<std::string> args() const;
 
-        FILE *stdin_() const;
-        FILE *stdout_() const;
-        FILE *stderr_() const;
+        // The pipes, when the matching stream was set to PIPE. Otherwise is_open() is false.
+        Stream &stdin_() const;
+        Stream &stdout_() const;
+        Stream &stderr_() const;
 
         int pid() const;
         std::optional<int> returncode() const;

@@ -858,21 +858,21 @@ namespace stdc {
 
         std::string out, err;
         std::thread out_thread, err_thread;
-        if (stdout_file) {
-            out_thread = std::thread(read_all, stdout_file, std::ref(out));
+        if (stdout_stream.is_open()) {
+            out_thread = std::thread(read_all, stdout_stream.file(), std::ref(out));
         }
-        if (stderr_file) {
-            err_thread = std::thread(read_all, stderr_file, std::ref(err));
+        if (stderr_stream.is_open()) {
+            err_thread = std::thread(read_all, stderr_stream.file(), std::ref(err));
         }
 
         // Hand over the input and close the pipe, which is the only thing that tells a child
         // reading to end of input that there is no more coming.
-        if (stdin_file) {
+        if (stdin_stream.is_open()) {
             if (!input.empty()) {
-                std::ignore = std::fwrite(input.data(), 1, input.size(), stdin_file);
+                stdin_stream.write(input.data(), std::streamsize(input.size()));
             }
-            std::fflush(stdin_file);
-            close_stdin();
+            stdin_stream.flush();
+            stdin_stream.close();
         }
         _communication_started = true;
 

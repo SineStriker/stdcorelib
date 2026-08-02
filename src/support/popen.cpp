@@ -12,6 +12,111 @@
 
 namespace stdc {
 
+    // A streambuf over a FILE *, which is what MSVC's non-standard basic_filebuf(FILE *) does and
+    // what libstdc++ spells __gnu_cxx::stdio_filebuf. Neither is portable, so it lives here.
+    //
+    // Sitting on stdio rather than on the OS handle keeps the text mode translation that
+    // _fdopen(fd, "r") already set up, and leaves the buffering to the C library.
+    class Popen::Stream::Buf : public std::streambuf {
+    public:
+        ~Buf() override {
+            close();
+        }
+
+        void open(FILE *file) {
+            close();
+            _file = file;
+            setg(_buf, _buf, _buf);
+        }
+
+        bool is_open() const {
+            return _file != nullptr;
+        }
+
+        FILE *file() const {
+            return _file;
+        }
+
+        void close() {
+            if (!_file) {
+                return;
+            }
+            std::fflush(_file);
+            std::fclose(_file);
+            _file = nullptr;
+            setg(_buf, _buf, _buf);
+        }
+
+    protected:
+        int_type underflow() override {
+            if (!_file) {
+                return traits_type::eof();
+            }
+            if (gptr() < egptr()) {
+                return traits_type::to_int_type(*gptr());
+            }
+            size_t n = std::fread(_buf, 1, sizeof(_buf), _file);
+            if (n == 0) {
+                return traits_type::eof();
+            }
+            setg(_buf, _buf, _buf + n);
+            return traits_type::to_int_type(*gptr());
+        }
+
+        std::streamsize xsputn(const char *s, std::streamsize n) override {
+            if (!_file) {
+                return 0;
+            }
+            return std::streamsize(std::fwrite(s, 1, size_t(n), _file));
+        }
+
+        int_type overflow(int_type c) override {
+            if (!_file) {
+                return traits_type::eof();
+            }
+            if (c != traits_type::eof()) {
+                auto ch = traits_type::to_char_type(c);
+                if (std::fwrite(&ch, 1, 1, _file) != 1) {
+                    return traits_type::eof();
+                }
+            }
+            return c;
+        }
+
+        int sync() override {
+            return (_file && std::fflush(_file) == 0) ? 0 : -1;
+        }
+
+    private:
+        FILE *_file = nullptr;
+        char _buf[4096]{};
+    };
+
+    // The buffer has to exist before the base class can be pointed at it, and base classes are
+    // built first -- hence the null here and the rdbuf() straight after.
+    Popen::Stream::Stream() : std::iostream(nullptr), _buf(new Buf()) {
+        rdbuf(_buf.get());
+    }
+
+    Popen::Stream::~Stream() = default;
+
+    void Popen::Stream::open(FILE *file) {
+        _buf->open(file);
+        clear();
+    }
+
+    void Popen::Stream::close() {
+        _buf->close();
+    }
+
+    bool Popen::Stream::is_open() const {
+        return _buf->is_open();
+    }
+
+    FILE *Popen::Stream::file() const {
+        return _buf->file();
+    }
+
     Popen::Impl::Impl() = default;
 
     Popen::Impl::~Impl() {
@@ -115,13 +220,13 @@ namespace stdc {
 #endif
         // open C File objects
         if (p2cwrite != -1) {
-            stdin_file = Popen_fdopen(p2cwrite, text ? "w" : "wb");
+            stdin_stream.open(Popen_fdopen(p2cwrite, text ? "w" : "wb"));
         }
         if (c2pread != -1) {
-            stdout_file = Popen_fdopen(c2pread, text ? "r" : "rb");
+            stdout_stream.open(Popen_fdopen(c2pread, text ? "r" : "rb"));
         }
         if (errread != -1) {
-            stderr_file = Popen_fdopen(errread, text ? "r" : "rb");
+            stderr_stream.open(Popen_fdopen(errread, text ? "r" : "rb"));
         }
 
 #ifdef _WIN32
@@ -141,23 +246,10 @@ namespace stdc {
         return result;
     }
 
-    void Popen::Impl::close_stdin() {
-        if (stdin_file) {
-            fclose(stdin_file);
-            stdin_file = nullptr;
-        }
-    }
-
     void Popen::Impl::close_std_files() {
-        if (stdout_file) {
-            fclose(stdout_file);
-            stdout_file = nullptr;
-        }
-        if (stderr_file) {
-            fclose(stderr_file);
-            stderr_file = nullptr;
-        }
-        close_stdin();
+        stdout_stream.close();
+        stderr_stream.close();
+        stdin_stream.close();
     }
 
 }
@@ -391,14 +483,6 @@ namespace stdc {
         return impl._wait(timeout);
     }
 
-    /*!
-        Closes this side of the child's stdin pipe, so the child sees end of input.
-    */
-    void Popen::close_stdin() {
-        __stdc_impl_t;
-        impl.close_stdin();
-    }
-
     std::tuple<std::string, std::string> Popen::communicate(const std::string &input, int timeout) {
         __stdc_impl_t;
         return impl.communicate_impl(input, timeout);
@@ -429,19 +513,19 @@ namespace stdc {
         return impl.args;
     }
 
-    FILE *Popen::stdin_() const {
+    Popen::Stream &Popen::stdin_() const {
         __stdc_impl_t;
-        return impl.stdin_file;
+        return impl.stdin_stream;
     }
 
-    FILE *Popen::stdout_() const {
+    Popen::Stream &Popen::stdout_() const {
         __stdc_impl_t;
-        return impl.stdout_file;
+        return impl.stdout_stream;
     }
 
-    FILE *Popen::stderr_() const {
+    Popen::Stream &Popen::stderr_() const {
         __stdc_impl_t;
-        return impl.stderr_file;
+        return impl.stderr_stream;
     }
 
     int Popen::pid() const {

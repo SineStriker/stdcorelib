@@ -1,4 +1,4 @@
-#include <fstream>
+#include <string>
 
 #include <stdcorelib/console.h>
 #include <stdcorelib/support/popen.h>
@@ -26,11 +26,9 @@ static int example_ReadProcessOutput() {
         return -1;
     }
 
-    FILE *out = proc.stdout_(); // if PIPE, the stdout file is available
-    std::filebuf buf(out);
-    std::istream is(&buf);
+    auto &out = proc.stdout_(); // if PIPE, the stdout stream is available
     std::string line;
-    while (std::getline(is, line)) {
+    while (std::getline(out, line)) {
         u8println(line);
     }
     proc.wait(); // must wait for process to exit

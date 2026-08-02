@@ -73,12 +73,11 @@ BOOST_AUTO_TEST_CASE(test_output_survives_wait) {
     BOOST_REQUIRE_MESSAGE(p.start(&err), err);
     BOOST_REQUIRE(p.wait(Timeout));
 
-    FILE *out = p.stdout_();
-    BOOST_REQUIRE(out != nullptr);
-    char buf[128] = {};
-    size_t n = std::fread(buf, 1, sizeof(buf) - 1, out);
-    BOOST_CHECK_GT(n, 0u);
-    BOOST_CHECK_EQUAL(first_line(buf), "hello");
+    auto &out = p.stdout_();
+    BOOST_REQUIRE(out.is_open());
+    std::string line;
+    BOOST_REQUIRE(std::getline(out, line));
+    BOOST_CHECK_EQUAL(first_line(line), "hello");
 }
 
 BOOST_AUTO_TEST_CASE(test_communicate) {
@@ -150,17 +149,16 @@ BOOST_AUTO_TEST_CASE(test_close_stdin_ends_input) {
     p.args({"findstr", "x"}).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
     BOOST_REQUIRE_MESSAGE(p.start(&err), err);
 
-    FILE *in = p.stdin_();
-    BOOST_REQUIRE(in != nullptr);
-    std::fputs("xyz\n", in);
-    std::fflush(in);
+    auto &in = p.stdin_();
+    BOOST_REQUIRE(in.is_open());
+    in << "xyz\n" << std::flush;
 
     // still running: nothing has told it the input is over
     BOOST_CHECK(!p.wait(200));
     BOOST_CHECK(!p.returncode());
 
-    p.close_stdin();
-    BOOST_CHECK(p.stdin_() == nullptr);
+    p.stdin_().close();
+    BOOST_CHECK(!p.stdin_().is_open());
 
     BOOST_REQUIRE(p.wait(Timeout));
     BOOST_REQUIRE(p.returncode());
@@ -179,7 +177,7 @@ BOOST_AUTO_TEST_CASE(test_poll) {
     BOOST_CHECK(!p.returncode());
     BOOST_CHECK_EQUAL(p.error_code().value(), 0);
 
-    p.close_stdin();
+    p.stdin_().close();
     BOOST_REQUIRE(p.wait(Timeout));
 
     // once it has exited, poll() says so and keeps saying so
@@ -214,7 +212,7 @@ BOOST_AUTO_TEST_CASE(test_devnull_and_fd) {
         p.args({"cmd", "/c", "echo hello"}).stdout_(Popen::DEVNULL);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         BOOST_REQUIRE(p.wait(Timeout));
-        BOOST_CHECK(p.stdout_() == nullptr);
+        BOOST_CHECK(!p.stdout_().is_open());
         BOOST_REQUIRE(p.returncode());
         BOOST_CHECK_EQUAL(*p.returncode(), 0);
     }
@@ -227,6 +225,89 @@ BOOST_AUTO_TEST_CASE(test_devnull_and_fd) {
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
         BOOST_REQUIRE(p.wait(Timeout));
         BOOST_CHECK_EQUAL(*p.returncode(), 0);
+    }
+}
+
+// The pipes are C++ streams, so the usual stream vocabulary works on them directly and nobody
+// has to reach for a platform-specific adapter to get there.
+BOOST_AUTO_TEST_CASE(test_stream_interface) {
+    // reading with getline
+    {
+        Popen p;
+        std::string err;
+        p.args({"cmd", "/c", "echo one& echo two& echo three"}).stdout_(Popen::PIPE).text(true);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+        std::vector<std::string> lines;
+        std::string line;
+        while (std::getline(p.stdout_(), line)) {
+            lines.push_back(first_line(line));
+        }
+        BOOST_REQUIRE_EQUAL(lines.size(), 3u);
+        BOOST_CHECK_EQUAL(lines[0], "one");
+        BOOST_CHECK_EQUAL(lines[2], "three");
+        BOOST_REQUIRE(p.wait(Timeout));
+    }
+
+    // writing with operator<<, then closing to release the child
+    {
+        Popen p;
+        std::string err;
+        p.args({"sort"}).stdin_(Popen::PIPE).stdout_(Popen::PIPE).text(true);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+        p.stdin_() << "banana\ncherry\napple\n" << std::flush;
+        p.stdin_().close();
+
+        std::vector<std::string> lines;
+        std::string line;
+        while (std::getline(p.stdout_(), line)) {
+            auto trimmed = first_line(line);
+            if (!trimmed.empty()) {
+                lines.push_back(trimmed);
+            }
+        }
+        BOOST_REQUIRE_EQUAL(lines.size(), 3u);
+        BOOST_CHECK_EQUAL(lines[0], "apple");
+        BOOST_CHECK_EQUAL(lines[1], "banana");
+        BOOST_CHECK_EQUAL(lines[2], "cherry");
+        BOOST_REQUIRE(p.wait(Timeout));
+    }
+
+    // close() is idempotent, and a stream that was never opened is simply not open
+    {
+        Popen p;
+        std::string err;
+        p.args({"cmd", "/c", "exit 0"}).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+        BOOST_CHECK(p.stdout_().is_open());
+        BOOST_CHECK(!p.stdin_().is_open());
+        BOOST_CHECK(p.stdin_().file() == nullptr);
+
+        p.stdout_().close();
+        BOOST_CHECK(!p.stdout_().is_open());
+        p.stdout_().close();
+        p.stdout_().close();
+        BOOST_CHECK(p.stdout_().file() == nullptr);
+
+        BOOST_REQUIRE(p.wait(Timeout));
+    }
+
+    // file() hands the same pipe to the C interfaces that only take a FILE *
+    {
+        Popen p;
+        std::string err;
+        p.args({"cmd", "/c", "echo hello"}).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+        FILE *raw = p.stdout_().file();
+        BOOST_REQUIRE(raw != nullptr);
+        char buf[128] = {};
+        size_t n = std::fread(buf, 1, sizeof(buf) - 1, raw);
+        BOOST_CHECK_GT(n, 0u);
+        BOOST_CHECK_EQUAL(first_line(buf), "hello");
+        BOOST_REQUIRE(p.wait(Timeout));
     }
 }
 
