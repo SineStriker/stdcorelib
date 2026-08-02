@@ -4,7 +4,7 @@
 #include <memory>
 #include <type_traits>
 
-namespace stdc::pimpl::_private_ {
+namespace stdc::pimpl::detail {
 
     // Unique Data
     template <class T, class T1 = T>
@@ -53,13 +53,13 @@ namespace stdc::pimpl::_private_ {
 }
 
 #define __stdc_impl_get(T)                                                                         \
-    ::stdc::pimpl::_private_::get_impl_helper<typename T::Impl>(static_cast<T *>(this)->_impl)
+    ::stdc::pimpl::detail::get_impl_helper<typename T::Impl>(static_cast<T *>(this)->_impl)
 #define __stdc_decl_get(T) static_cast<T *>(_decl)
 
 #define __stdc_impl(T) auto &impl = *__stdc_impl_get(T)
 #define __stdc_decl(T) auto &decl = *__stdc_decl_get(T)
 
 #define __stdc_impl_t __stdc_impl(std::remove_pointer_t<decltype(this)>)
-#define __stdc_decl_t __stdc_decl(::stdc::pimpl::_private_::get_decl_trait<decltype(this)>::type)
+#define __stdc_decl_t __stdc_decl(::stdc::pimpl::detail::get_decl_trait<decltype(this)>::type)
 
 #endif // STDCORELIB_PIMPL_H
