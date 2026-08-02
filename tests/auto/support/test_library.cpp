@@ -102,14 +102,26 @@ BOOST_AUTO_TEST_CASE(test_reopen) {
         return;
     }
 
-    // An already-open object is left alone, even if the new path cannot be loaded.
+    // An already-open object is left alone and the second open fails, so the caller cannot
+    // mistake the first library for the one it asked for.
     SharedLibrary lib;
     BOOST_REQUIRE(lib.open(candidate.path));
     auto first = lib.handle();
-    BOOST_REQUIRE(lib.open("no_such_library_9f3a.dll"));
+    BOOST_CHECK(!lib.open("no_such_library_9f3a.dll"));
+    BOOST_CHECK(!lib.lastError().empty());
     BOOST_CHECK(lib.isOpen());
     BOOST_CHECK_EQUAL(lib.handle(), first);
     BOOST_CHECK(lib.resolve(candidate.symbol) != nullptr);
+
+    // close() is what makes the swap possible
+    BOOST_REQUIRE(lib.close());
+    BOOST_REQUIRE(lib.open(candidate.path));
+    BOOST_CHECK(lib.isOpen());
+
+    // resolving on a closed object says so rather than leaving the last system error to speak
+    SharedLibrary shut;
+    BOOST_CHECK(shut.resolve(candidate.symbol) == nullptr);
+    BOOST_CHECK(!shut.lastError().empty());
 
     // opening the same library from two objects is fine, and both resolve
     SharedLibrary other;

@@ -34,6 +34,11 @@ namespace stdc {
 
         bool released = false;
 
+        // Set when a call fails for a reason of ours rather than the system's, since neither
+        // GetLastError() nor dlerror() would have anything to say about those. Cleared at the
+        // start of every operation, so it never outlives the call it belongs to.
+        mutable std::string error;
+
         virtual ~Impl();
 
         static inline int nativeLoadHints(int loadHints);
@@ -159,8 +164,10 @@ namespace stdc {
 
     bool SharedLibrary::open(const fs::path &path, int hints) {
         stdc_impl_t;
+        impl.error.clear();
         if (impl.hDll) {
-            return true;
+            impl.error = "library already open";
+            return false;
         }
         impl.path = path;
         if (impl.open(hints)) {
@@ -173,6 +180,7 @@ namespace stdc {
 
     bool SharedLibrary::close() {
         stdc_impl_t;
+        impl.error.clear();
         if (impl.released) {
             impl.released = false;
             impl.hDll = nullptr;
@@ -203,10 +211,19 @@ namespace stdc {
 
     void *SharedLibrary::resolve(const char *name) const {
         stdc_impl_t;
+        impl.error.clear();
+        if (!impl.hDll) {
+            impl.error = "library not open";
+            return nullptr;
+        }
         return impl.resolve(name);
     }
 
     std::string SharedLibrary::lastError() const {
+        stdc_impl_t;
+        if (!impl.error.empty()) {
+            return impl.error;
+        }
         return Impl::sysErrorMessage();
     }
 

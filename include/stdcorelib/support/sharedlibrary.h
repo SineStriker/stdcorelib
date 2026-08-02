@@ -47,9 +47,8 @@ namespace stdc {
         /// \param path the library to load
         /// \param hints a bitwise or of \ref LoadHint values
         /// \retval false nothing was loaded, with the reason in lastError()
-        /// \note An object that is already open is left alone. \a path is not loaded and the
-        ///       existing handle stays, but the call still reports success, so close() first to
-        ///       swap one library for another.
+        /// \note An object that is already open is left alone and this fails, so close() first
+        ///       to swap one library for another.
         bool open(const std::filesystem::path &path, int hints = 0);
 
         /// Unloads the library.
@@ -74,6 +73,11 @@ namespace stdc {
         void *resolve(const char *name) const;
 
         /// The reason the last operation on this object failed.
+        ///
+        /// \warning Only meaningful straight after one that reported failure. When the library
+        ///          has nothing of its own to report this falls through to \c GetLastError() or
+        ///          \c dlerror(), neither of which is cleared on success, so asking at any other
+        ///          moment gives an answer left behind by something unrelated.
         std::string lastError() const;
 
         /// Gives up ownership, so the destructor will not unload.
