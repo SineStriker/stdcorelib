@@ -1,4 +1,4 @@
-project(tst_auto)
+project(test_auto)
 
 set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost CONFIG QUIET COMPONENTS unit_test_framework)
@@ -27,6 +27,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE stdcorelib)
 # Some tests reach into private headers (src/*_p.h) to cover internals that the public API
 # cannot get at on its own.
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../src)
+
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
