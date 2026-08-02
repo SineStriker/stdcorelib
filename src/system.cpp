@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include "system.h"
 
 #ifdef _WIN32

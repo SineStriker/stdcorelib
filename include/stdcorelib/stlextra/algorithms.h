@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_ALGORITHMS_H
 #define STDCORELIB_ALGORITHMS_H
 

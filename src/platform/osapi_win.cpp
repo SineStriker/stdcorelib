@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include "osapi_win.h"
 
 #include <tuple>

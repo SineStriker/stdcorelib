@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include "popen.h"
 #include "popen_p.h"
 

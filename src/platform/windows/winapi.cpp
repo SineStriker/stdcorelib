@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include "winapi.h"
 
 namespace stdc {

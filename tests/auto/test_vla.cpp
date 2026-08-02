@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include <stdcorelib/vla.h>
 
 #include <boost/test/unit_test.hpp>

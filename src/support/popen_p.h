@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef POPEN_P_H
 #define POPEN_P_H
 

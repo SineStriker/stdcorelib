@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include "console.h"
 
 #ifdef _WIN32

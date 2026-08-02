@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_ITERATOR_H
 #define STDCORELIB_ITERATOR_H
 

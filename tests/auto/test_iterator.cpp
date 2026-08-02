@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include <stdcorelib/stlextra/iterator.h>
 
 #include <iterator>

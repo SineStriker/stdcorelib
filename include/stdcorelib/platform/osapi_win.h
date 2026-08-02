@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_OSAPI_WIN_H
 #define STDCORELIB_OSAPI_WIN_H
 

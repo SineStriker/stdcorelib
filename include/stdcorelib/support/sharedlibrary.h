@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_SHAREDLIBRARY_H
 #define STDCORELIB_SHAREDLIBRARY_H
 

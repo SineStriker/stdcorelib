@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_ARRAY_VIEW_H
 #define STDCORELIB_ARRAY_VIEW_H
 

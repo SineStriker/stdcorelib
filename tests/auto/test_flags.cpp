@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include <stdcorelib/flags.h>
 
 #include <boost/test/unit_test.hpp>

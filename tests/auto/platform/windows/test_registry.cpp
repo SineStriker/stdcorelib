@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include <algorithm>
 
 #include <stdcorelib/platform/windows/registry.h>

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_SCOPE_GUARD_H
 #define STDCORELIB_SCOPE_GUARD_H
 

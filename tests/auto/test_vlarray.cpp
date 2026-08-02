@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include <stdcorelib/adt/vlarray.h>
 
 #include <string>

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include "versionnumber.h"
 
 #include <cstdlib>

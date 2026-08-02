@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include <stdcorelib/scope_guard.h>
 
 #include <utility>

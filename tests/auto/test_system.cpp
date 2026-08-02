@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include <stdcorelib/system.h>
 
 #include <stdcorelib/path.h>

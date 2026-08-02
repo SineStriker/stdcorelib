@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_WINEXTRA_H
 #define STDCORELIB_WINEXTRA_H
 

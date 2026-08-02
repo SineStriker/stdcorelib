@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_VLA_H
 #define STDCORELIB_VLA_H
 

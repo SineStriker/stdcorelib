@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include "str.h"
 
 #include "vlarray.h"

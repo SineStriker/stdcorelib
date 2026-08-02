@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include <set>
 #include <sstream>
 #include <unordered_map>

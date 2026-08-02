@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_FLAGS_H
 #define STDCORELIB_FLAGS_H
 

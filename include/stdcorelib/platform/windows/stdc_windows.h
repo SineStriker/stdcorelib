@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_STDC_WINDOWS_H
 #define STDCORELIB_STDC_WINDOWS_H
 

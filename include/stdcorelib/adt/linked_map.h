@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_LINKED_MAP_H
 #define STDCORELIB_LINKED_MAP_H
 

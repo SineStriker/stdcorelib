@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include "winextra.h"
 
 #include "winapi.h"

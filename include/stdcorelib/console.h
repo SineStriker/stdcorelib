@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #ifndef STDCORELIB_CONSOLE_H
 #define STDCORELIB_CONSOLE_H
 
