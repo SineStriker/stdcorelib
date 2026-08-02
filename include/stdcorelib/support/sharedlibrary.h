@@ -47,7 +47,9 @@ namespace stdc {
         /// \param path the library to load
         /// \param hints a bitwise or of \ref LoadHint values
         /// \retval false nothing was loaded, with the reason in lastError()
-        /// \note An object that is already open is left alone.
+        /// \note An object that is already open is left alone. \a path is not loaded and the
+        ///       existing handle stays, but the call still reports success, so close() first to
+        ///       swap one library for another.
         bool open(const std::filesystem::path &path, int hints = 0);
 
         /// Unloads the library.
