@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <cassert>
 #include <set>
-#include <thread>
 
 #include "winapi.h"
 #include "str.h"
@@ -831,68 +830,6 @@ namespace stdc {
         }
         error_code = std::error_code(ERROR_NOT_SUPPORTED, windows_utf8_category());
         return false;
-    }
-
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1862
-    //
-    // A pipe blocks its writer once full, so stdout and stderr cannot be drained after the child
-    // exits, nor one after the other. Python gives each pipe a reader thread on Windows. So do
-    // we.
-    std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
-                                                                       int timeout) {
-        error_code.clear();
-
-        if (!_child_created) {
-            error_code = std::make_error_code(std::errc::no_such_process);
-            return {};
-        }
-
-        const auto &read_all = [](FILE *file, std::string &dest) {
-            char buf[4096];
-            size_t n;
-            while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
-                dest.append(buf, n);
-            }
-        };
-
-        std::string out, err;
-        std::thread out_thread, err_thread;
-        if (stdout_stream.is_open()) {
-            out_thread = std::thread(read_all, stdout_stream.file(), std::ref(out));
-        }
-        if (stderr_stream.is_open()) {
-            err_thread = std::thread(read_all, stderr_stream.file(), std::ref(err));
-        }
-
-        // Write the input and close the pipe. Closing is the only thing that tells a child
-        // reading to end of input that there is no more coming.
-        if (stdin_stream.is_open()) {
-            if (!input.empty()) {
-                stdin_stream.write(input.data(), std::streamsize(input.size()));
-            }
-            stdin_stream.flush();
-            stdin_stream.close();
-        }
-        _communication_started = true;
-
-        // A timeout kills the child rather than leaving it behind. Its exit is what closes the
-        // write ends, and without that the reader threads below never finish.
-        if (!_wait(timeout)) {
-            auto wait_error = error_code;
-            std::ignore = kill_impl();
-            std::ignore = _wait();
-            error_code =
-                wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
-        }
-
-        if (out_thread.joinable()) {
-            out_thread.join();
-        }
-        if (err_thread.joinable()) {
-            err_thread.join();
-        }
-        close_std_files();
-        return {out, err};
     }
 
 }

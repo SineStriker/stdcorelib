@@ -56,21 +56,22 @@ namespace stdc {
         bool restore_signals = true;
         bool start_new_session = false;
         std::vector<int> pass_fds;
-        int group = 0;
+        int group = -1;
         std::vector<int> extra_groups;
 
         // user
         struct user_info {
             bool has_value;
+            bool is_name;
             union {
                 int num;
                 const char *str;
             };
         };
-        user_info user = {false};
+        user_info user = {false, false, {}};
 
         int umask = -1;
-        int process_group = 0;
+        int process_group = -1;
 #endif
 
     public:
@@ -135,11 +136,17 @@ namespace stdc {
         bool _execute_child(int p2cread, int p2cwrite, int c2pread, int c2pwrite, int errread,
                             int errwrite, int gid, const std::vector<int> &gids, int uid);
 
-        int _fork_exec(const std::set<int> &fds_to_keep, char **envs, int p2cread, int p2cwrite,
-                       int c2pread, int c2pwrite, int errread, int errwrite, int gid,
-                       const std::vector<int> &gids, int uid, bool allow_vfork);
+        /// Everything the child needs, packed so that the code after fork() only reads plain
+        /// memory. Defined in popen_unix.cpp.
+        struct ChildArgs;
 
-        bool _handle_exitstatus(int status);
+        /// Forks and runs _child_exec() in the child. Returns the pid, or -1.
+        int _fork_exec(const ChildArgs &ca);
+
+        /// Runs in the forked child and never returns. Only async signal safe calls belong here.
+        void _child_exec(const ChildArgs &ca);
+
+        void _handle_exitstatus(int status);
 
 #endif
         bool _internal_poll();

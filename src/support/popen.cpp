@@ -5,7 +5,13 @@
 
 #ifdef _WIN32
 #  include <io.h>
+#else
+#  include <csignal>
+#  include <pwd.h>
+#  include <unistd.h>
 #endif
+
+#include <thread>
 
 #include "pimpl.h"
 #include "str.h"
@@ -167,12 +173,26 @@ namespace stdc {
 
 #ifndef _WIN32
         // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L911
-        int gid = -1;
-        std::vector<int> gids;
+        //
+        // -1 means "leave it alone", which is also what setregid() and setreuid() take.
+        int gid = group;
+        std::vector<int> gids = extra_groups;
         int uid = -1;
-        // TODO: unix
-        // ...
-        int i = 0;
+        if (user.has_value) {
+            if (user.is_name) {
+                errno = 0;
+                struct passwd *pw = getpwnam(user.str);
+                if (!pw) {
+                    error_code = errno ? std::error_code(errno, std::system_category())
+                                       : std::make_error_code(std::errc::invalid_argument);
+                    error_msg = formatN("no such user: %1", user.str);
+                    return false;
+                }
+                uid = int(pw->pw_uid);
+            } else {
+                uid = user.num;
+            }
+        }
 #endif
 
         // Input and output objects. The general principle is like
@@ -250,6 +270,106 @@ namespace stdc {
         stdout_stream.close();
         stderr_stream.close();
         stdin_stream.close();
+    }
+
+    /// Blocks SIGPIPE for its lifetime. Writing to a pipe whose reader has gone raises it, and its
+    /// default action ends the process. Nothing to do on Windows.
+    class sigpipe_guard {
+    public:
+#ifdef _WIN32
+        sigpipe_guard() = default;
+#else
+        sigpipe_guard() {
+            sigset_t block;
+            sigemptyset(&block);
+            sigaddset(&block, SIGPIPE);
+            pthread_sigmask(SIG_BLOCK, &block, &_old);
+            _was_blocked = sigismember(&_old, SIGPIPE) == 1;
+        }
+
+        ~sigpipe_guard() {
+            if (!_was_blocked) {
+                // Take the signal we caused off the queue, or unblocking would deliver it.
+#  ifndef __APPLE__
+                sigset_t pending;
+                sigemptyset(&pending);
+                sigaddset(&pending, SIGPIPE);
+                struct timespec zero = {0, 0};
+                while (sigtimedwait(&pending, nullptr, &zero) >= 0) {
+                }
+#  endif
+            }
+            pthread_sigmask(SIG_SETMASK, &_old, nullptr);
+        }
+
+    private:
+        sigset_t _old{};
+        bool _was_blocked = false;
+#endif
+        STDCORELIB_DISABLE_COPY_MOVE(sigpipe_guard)
+    };
+
+    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1862
+    //
+    // A pipe blocks its writer once full, so stdout and stderr cannot be drained after the child
+    // exits, nor one after the other. Python gives each pipe a reader thread on Windows. So do
+    // we, on both platforms.
+    std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
+                                                                       int timeout) {
+        error_code.clear();
+
+        if (!_child_created) {
+            error_code = std::make_error_code(std::errc::no_such_process);
+            return {};
+        }
+
+        const auto &read_all = [](FILE *file, std::string &dest) {
+            char buf[4096];
+            size_t n;
+            while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
+                dest.append(buf, n);
+            }
+        };
+
+        std::string out, err;
+        std::thread out_thread, err_thread;
+        if (stdout_stream.is_open()) {
+            out_thread = std::thread(read_all, stdout_stream.file(), std::ref(out));
+        }
+        if (stderr_stream.is_open()) {
+            err_thread = std::thread(read_all, stderr_stream.file(), std::ref(err));
+        }
+
+        // Write the input and close the pipe. Closing is the only thing that tells a child
+        // reading to end of input that there is no more coming.
+        if (stdin_stream.is_open()) {
+            sigpipe_guard guard;
+            if (!input.empty()) {
+                stdin_stream.write(input.data(), std::streamsize(input.size()));
+            }
+            stdin_stream.flush();
+            stdin_stream.close();
+        }
+        _communication_started = true;
+
+        // A timeout kills the child rather than leaving it behind. Its exit is what closes the
+        // write ends, and without that the reader threads below never finish.
+        if (!_wait(timeout)) {
+            auto wait_error = error_code;
+            std::ignore = kill_impl();
+            std::ignore = _wait();
+            error_code =
+                wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
+        }
+
+        if (out_thread.joinable()) {
+            out_thread.join();
+        }
+        if (err_thread.joinable()) {
+            err_thread.join();
+        }
+        close_std_files();
+        return {out, err};
     }
 
 }
@@ -404,6 +524,7 @@ namespace stdc {
     Popen &Popen::user(int user) {
         auto &info = _impl->user;
         info.has_value = true;
+        info.is_name = false;
         info.num = user;
         return *this;
     }
@@ -411,6 +532,7 @@ namespace stdc {
     Popen &Popen::user(const char *user) {
         auto &info = _impl->user;
         info.has_value = true;
+        info.is_name = true;
         info.str = user;
         return *this;
     }
