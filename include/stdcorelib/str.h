@@ -147,16 +147,6 @@ namespace stdc {
                                            const std::string_view &delimiter);
 
         // @overload: join(initializer_list<string_view>, string_view)
-        //
-        // A braced list is ambiguous between the two overloads above whenever its elements
-        // convert to both std::string and std::string_view -- which string literals do, and so
-        // does std::string. (A braced list of string_view is fine on its own, because
-        // string_view to std::string is explicit.) The const char * trick used further down does
-        // not apply here: a braced list is list-initialized, not ranked as a standard conversion.
-        //
-        // What does settle it is [over.ics.rank]: a list-initialization sequence that converts to
-        // std::initializer_list<X> ranks above one that does not, so this overload takes every
-        // braced list outright.
         inline std::string join(std::initializer_list<std::string_view> v,
                                 const std::string_view &delimiter) {
             return join(array_view<std::string_view>(v.begin(), v.size()), delimiter);
@@ -170,13 +160,6 @@ namespace stdc {
                                                          const std::string_view &delimiter);
 
         // @overload: split(const char *, string_view)
-        //
-        // A string literal converts equally well to string_view and to std::string, which makes
-        // the two overloads above ambiguous for it -- clang and gcc reject the call outright,
-        // MSVC quietly picks the std::string one and allocates. Taking const char * exactly wins
-        // over both, and gives the answer a literal wants: a view, since its data is static and
-        // there is nothing to own. Every function below that comes in a view/owning pair carries
-        // the same third overload for the same reason.
         inline std::vector<std::string_view> split(const char *s,
                                                    const std::string_view &delimiter) {
             return split(std::string_view(s), delimiter);
@@ -234,15 +217,6 @@ namespace stdc {
     using wstring_conv = str::conv<std::wstring>;
 
     namespace str {
-
-        // NOTE on the casts below. std::toupper takes an int whose value has to be representable
-        // as unsigned char (or be EOF); handing it a negative char -- which every byte above 0x7F
-        // is on a platform where char is signed, so most of any UTF-8 text -- is undefined. Hence
-        // the cast in, and a cast back out because it returns int.
-        //
-        // The wide overloads have to use std::towupper, not std::toupper: passing a wchar_t
-        // outside the unsigned char range to the narrow one is undefined in the same way, which
-        // is most of what a wstring is likely to hold.
 
         inline std::string to_upper(std::string s) {
             std::transform(s.begin(), s.end(), s.begin(), [](char c) {
