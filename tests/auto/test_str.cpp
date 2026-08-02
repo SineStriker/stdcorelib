@@ -123,6 +123,28 @@ BOOST_AUTO_TEST_CASE(test_case_conversion) {
     BOOST_CHECK(str::to_upper(std::wstring(L"hello")) == L"HELLO");
     BOOST_CHECK(str::to_lower(std::wstring(L"HELLO")) == L"hello");
 
+    // Bytes above 0x7F are negative on a signed-char platform, which is undefined to hand to
+    // toupper. They have no case in the C locale, so UTF-8 text has to come back untouched --
+    // and must not be mangled on the way.
+    {
+        const std::string utf8 = "\xE4\xB8\xAD\xE6\x96\x87"; // "中文"
+        BOOST_CHECK_EQUAL(str::to_upper(utf8), utf8);
+        BOOST_CHECK_EQUAL(str::to_lower(utf8), utf8);
+
+        const std::string mixed = "a\xE4\xB8\xADz";
+        BOOST_CHECK_EQUAL(str::to_upper(mixed), "A\xE4\xB8\xADZ");
+    }
+
+    // The wide overloads must use towupper, not the narrow toupper: a wchar_t outside the
+    // unsigned char range is undefined to pass to the latter.
+    {
+        const std::wstring wide = L"中文"; // "中文", no case mapping
+        BOOST_CHECK(str::to_upper(wide) == wide);
+        BOOST_CHECK(str::to_lower(wide) == wide);
+
+        BOOST_CHECK(str::to_upper(std::wstring(L"a中z")) == L"A中Z");
+    }
+
     // also reachable unqualified from namespace stdc
     BOOST_CHECK_EQUAL(to_upper(std::string("abc")), "ABC");
     BOOST_CHECK_EQUAL(to_lower(std::string("ABC")), "abc");

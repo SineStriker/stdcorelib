@@ -10,6 +10,8 @@
 #include <initializer_list>
 #include <map>
 #include <algorithm>
+#include <cctype>
+#include <cwctype>
 #include <functional>
 #include <system_error>
 
@@ -233,25 +235,40 @@ namespace stdc {
 
     namespace str {
 
+        // NOTE on the casts below. std::toupper takes an int whose value has to be representable
+        // as unsigned char (or be EOF); handing it a negative char -- which every byte above 0x7F
+        // is on a platform where char is signed, so most of any UTF-8 text -- is undefined. Hence
+        // the cast in, and a cast back out because it returns int.
+        //
+        // The wide overloads have to use std::towupper, not std::toupper: passing a wchar_t
+        // outside the unsigned char range to the narrow one is undefined in the same way, which
+        // is most of what a wstring is likely to hold.
+
         inline std::string to_upper(std::string s) {
-            std::transform(s.begin(), s.end(), s.begin(), ::toupper);
+            std::transform(s.begin(), s.end(), s.begin(), [](char c) {
+                return static_cast<char>(::toupper(static_cast<unsigned char>(c)));
+            });
             return s;
         }
 
         // @overload: to_upper(wstring)
         inline std::wstring to_upper(std::wstring s) {
-            std::transform(s.begin(), s.end(), s.begin(), ::toupper);
+            std::transform(s.begin(), s.end(), s.begin(),
+                           [](wchar_t c) { return static_cast<wchar_t>(::towupper(c)); });
             return s;
         }
 
         inline std::string to_lower(std::string s) {
-            std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+            std::transform(s.begin(), s.end(), s.begin(), [](char c) {
+                return static_cast<char>(::tolower(static_cast<unsigned char>(c)));
+            });
             return s;
         }
 
         // @overload: to_lower(wstring)
         inline std::wstring to_lower(std::wstring s) {
-            std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+            std::transform(s.begin(), s.end(), s.begin(),
+                           [](wchar_t c) { return static_cast<wchar_t>(::towlower(c)); });
             return s;
         }
 
