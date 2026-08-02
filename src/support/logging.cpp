@@ -13,6 +13,13 @@
 
 #include <stdcorelib/console.h>
 
+#ifdef _WIN32
+#  include "stdc_windows.h"
+#  ifdef _MSC_VER
+#    include <intrin.h>
+#  endif
+#endif
+
 namespace stdc {
 
     static void defaultLogCallback(int level, const LogContext &context,
@@ -236,8 +243,27 @@ namespace stdc {
         LogRegistry::callback(level, _context, message);
     }
 
+    // https://github.com/qt/qtbase/blob/v6.8.0/src/corelib/global/qassert.cpp#L25
     void Logger::abort() {
-        std::abort(); // ###FIXME: robust implementation
+#ifdef _WIN32
+        // std::abort() is not dependable here. The MSVC runtime routes it through _exit(3) when
+        // the abort behavior is _WRITE_ABORT_MSG, which a debug build defaults to, and MinGW's
+        // is little more than _exit(3) to begin with. Both of those run the static destructors
+        // of objects living in DLLs, which [support.start.term] says must not happen. End the
+        // process directly instead.
+#  ifdef _MSC_VER
+        if (::IsProcessorFeaturePresent(PF_FASTFAIL_AVAILABLE)) {
+            __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+        }
+#  else
+        ::RaiseFailFastException(nullptr, nullptr, 0);
+#  endif
+        ::TerminateProcess(::GetCurrentProcess(), STATUS_FATAL_APP_EXIT);
+#else
+        std::abort();
+#endif
+        // Neither branch returns, but the compiler cannot see that through the API.
+        std::abort();
     }
 
     Logger::LogCallback Logger::logCallback() {
