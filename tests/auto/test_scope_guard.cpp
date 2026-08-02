@@ -36,7 +36,7 @@ BOOST_AUTO_TEST_CASE(test_move) {
             auto inner = std::move(outer);
             BOOST_CHECK_EQUAL(calls, 0);
         }
-        // the moved-to guard fired; the moved-from one is inactive
+        // the moved-to guard fired, and the moved-from one is inactive
         BOOST_CHECK_EQUAL(calls, 1);
     }
     BOOST_CHECK_EQUAL(calls, 1);

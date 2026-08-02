@@ -12,11 +12,11 @@
 
 namespace stdc {
 
-    // A streambuf over a FILE *, which is what MSVC's non-standard basic_filebuf(FILE *) does and
-    // what libstdc++ spells __gnu_cxx::stdio_filebuf. Neither is portable, so it lives here.
-    //
-    // Sitting on stdio rather than on the OS handle keeps the text mode translation that
-    // _fdopen(fd, "r") already set up, and leaves the buffering to the C library.
+    /// A streambuf over a FILE *. MSVC offers this as basic_filebuf(FILE *) and libstdc++ as
+    /// __gnu_cxx::stdio_filebuf. Neither is portable, so we write it once here.
+    ///
+    /// Building on stdio rather than the OS handle keeps the text mode translation that
+    /// _fdopen already set up, and leaves buffering to the C library.
     class Popen::Stream::Buf : public std::streambuf {
     public:
         ~Buf() override {
@@ -92,8 +92,8 @@ namespace stdc {
         char _buf[4096]{};
     };
 
-    // The buffer has to exist before the base class can be pointed at it, and base classes are
-    // built first -- hence the null here and the rdbuf() straight after.
+    // Base classes are built before members, so the buffer does not exist yet. Pass null and
+    // point the base at it with rdbuf() once it does.
     Popen::Stream::Stream() : std::iostream(nullptr), _buf(new Buf()) {
         rdbuf(_buf.get());
     }

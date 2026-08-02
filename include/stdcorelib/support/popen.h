@@ -69,29 +69,13 @@ namespace stdc {
         };
 #endif
 
-        // One end of a pipe to the child, as a C++ stream.
-        //
-        // The direction is fixed by which pipe it is: stdin_() is written to, stdout_() and
-        // stderr_() are read from. Using one the wrong way round fails at run time rather than
-        // at compile time.
-        //
-        // The stream owns what it is reading or writing, so close() can be called more than once
-        // and the destructor tidies up whatever is left. That is the difference from handing out
-        // a bare FILE *: a closed FILE * cannot be told apart from an open one, and the slot is
-        // recycled by the next fopen.
         class STDCORELIB_EXPORT Stream : public std::iostream {
         public:
             Stream();
             ~Stream() override;
 
-            // Flushes and closes. Doing it twice is harmless. Closing stdin_() is what tells a
-            // child reading to end of input that there is no more coming.
             void close();
             bool is_open() const;
-
-            // The underlying handle, for the C interfaces that only take one -- fprintf, or any
-            // library with a FILE * entry point. It is borrowed: let close() do the closing.
-            // Null once closed, or when this pipe was never opened.
             FILE *file() const;
 
         private:
@@ -163,9 +147,9 @@ namespace stdc {
                                                          int timeout = -1);
         bool send_signal(int sig);
 
-        // Asks the process to close, the way QProcess::terminate does: WM_CLOSE to its windows on
-        // Windows, SIGTERM elsewhere. A process may ignore it, and one without a message loop --
-        // any console program -- will not notice at all. kill() is the one that cannot be refused.
+        /// Requests the process to close, like QProcess::terminate. Posts WM_CLOSE to its windows
+        /// on Windows and sends SIGTERM elsewhere. The process may ignore it. A console program
+        /// has no message loop and never sees it. Use kill() to force it.
         bool terminate();
         bool kill();
 
@@ -176,7 +160,7 @@ namespace stdc {
         const std::filesystem::path &executable() const;
         array_view<std::string> args() const;
 
-        // The pipes, when the matching stream was set to PIPE. Otherwise is_open() is false.
+        /// Returns the pipe for the stream. Not open unless it was set to PIPE.
         Stream &stdin_() const;
         Stream &stdout_() const;
         Stream &stderr_() const;

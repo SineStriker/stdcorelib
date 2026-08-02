@@ -188,7 +188,7 @@ BOOST_AUTO_TEST_CASE(test_dollar_escaping) {
     BOOST_CHECK_EQUAL(render("100$ and 50%"), "100$ and 50%");
 
     // An unbalanced brace fails the parse, and cfputs then falls back to writing the buffer
-    // verbatim -- markup and all. Note this differs from str::varexp(), which returns an empty
+    // verbatim, markup and all. Note this differs from str::varexp(), which returns an empty
     // string in the same situation.
     BOOST_CHECK_EQUAL(render("${red"), "${red");
     BOOST_CHECK_EQUAL(render("a ${ b"), "a ${ b");
@@ -254,7 +254,7 @@ BOOST_AUTO_TEST_CASE(test_target_detection_is_cached) {
     BOOST_CHECK(resolve_color_mode(f.get()) == first);
     BOOST_CHECK(resolve_color_mode(stdout) == out);
 
-    // More live targets than the cache has slots. Every one still resolves correctly; the ones
+    // More live targets than the cache has slots. Every one still resolves correctly. The ones
     // that do not fit are simply probed each time.
     {
         std::vector<std::unique_ptr<TempFile>> files;

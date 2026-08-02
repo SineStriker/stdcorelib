@@ -12,7 +12,7 @@ BOOST_AUTO_TEST_SUITE(test_path)
 
 namespace {
 
-    // clean_path() builds the result with native separators; compare in generic form so the
+    // clean_path() builds the result with native separators. Compare in generic form so the
     // expectations read the same on every platform.
     std::string cleaned(const std::string &s) {
         return path::clean_path(fs::path(s)).generic_string();

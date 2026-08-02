@@ -28,8 +28,7 @@ namespace stdc {
             CloseHandle(_handle);
             _handle = InvalidHandle;
         }
-        // pid and tid are left alone: they stay readable after the child exits, as they do in
-        // Python.
+        // pid and tid are left alone. They stay readable after the child exits, as in Python.
     }
 
     void Popen::Impl::_cleanup() {
@@ -37,9 +36,9 @@ namespace stdc {
         _reap();
     }
 
-    // Returns whether a standard handle is one we can actually use. GetStdHandle hands back NULL
-    // when the process simply has no such handle -- which is every GUI subsystem process -- and
-    // INVALID_HANDLE_VALUE when the call itself failed.
+    /// Returns whether a standard handle can be used. GetStdHandle returns NULL when the process
+    /// has no such handle, which is the case for every GUI subsystem process, and
+    /// INVALID_HANDLE_VALUE when the call failed.
     static inline bool is_usable_std_handle(HANDLE handle) {
         return handle != nullptr && handle != INVALID_HANDLE_VALUE;
     }
@@ -420,9 +419,9 @@ namespace stdc {
 
         for (size_t i = 0; i < arguments.size(); ++i) {
             std::string tmp = arguments.at(i);
-            // Quotes are escaped and their preceding backslashes are doubled. The counters here
-            // have to stay signed: the inner loop walks down past zero to stop, which an unsigned
-            // one would do by wrapping around instead.
+            // Quotes are escaped and their preceding backslashes are doubled. The counters must
+            // be signed. The inner loop walks down past zero to stop, which an unsigned counter
+            // would do by wrapping around.
             ptrdiff_t index = ptrdiff_t(tmp.find('"'));
             while (index >= 0) {
                 // Escape quote
@@ -482,8 +481,8 @@ namespace stdc {
             DeleteProcThreadAttributeList(attribute_list->attribute_list);
             HeapFree(GetProcessHeap(), 0, attribute_list->attribute_list);
         }
-        // This runs a second time on the error path, where the struct has already been zeroed.
-        // HeapFree is not documented to accept a null pointer.
+        // This runs a second time on the error path, where the struct is already zeroed. HeapFree
+        // is not documented to accept a null pointer.
         if (attribute_list->handle_list != NULL) {
             HeapFree(GetProcessHeap(), 0, attribute_list->handle_list);
         }
@@ -724,8 +723,8 @@ namespace stdc {
             default:
                 break;
         }
-        // Still running. Not an error: the caller tells the two apart by whether returncode()
-        // came back set.
+        // Still running, which is not an error. The caller tells the two apart by whether
+        // returncode() is set.
         return false;
     }
 
@@ -808,9 +807,9 @@ namespace stdc {
             error_code = std::make_error_code(std::errc::no_such_process);
             return false;
         }
-        // Both calls are a request, not a guarantee: a process with no windows and no message
-        // loop will not notice either of them. Qt ignores the return values here for exactly that
-        // reason -- "found nothing to close" is not a failure -- and so do we.
+        // Both calls are a request, not a guarantee. A process with no windows and no message
+        // loop notices neither. Qt ignores the return values for that reason, since finding
+        // nothing to close is not a failure, and so do we.
         std::ignore = EnumWindows(qt_terminateApp, (LPARAM) pid);
         std::ignore = PostThreadMessageW(tid, WM_CLOSE, 0, 0);
         return true;
@@ -836,9 +835,9 @@ namespace stdc {
 
     // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1862
     //
-    // A pipe holds only so much before the writer blocks, so draining stdout and stderr cannot
-    // wait until the child has exited, and cannot be done one after the other either. Python
-    // gives each pipe a reader thread on Windows; this does the same.
+    // A pipe blocks its writer once full, so stdout and stderr cannot be drained after the child
+    // exits, nor one after the other. Python gives each pipe a reader thread on Windows. So do
+    // we.
     std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
                                                                        int timeout) {
         error_code.clear();
@@ -865,7 +864,7 @@ namespace stdc {
             err_thread = std::thread(read_all, stderr_stream.file(), std::ref(err));
         }
 
-        // Hand over the input and close the pipe, which is the only thing that tells a child
+        // Write the input and close the pipe. Closing is the only thing that tells a child
         // reading to end of input that there is no more coming.
         if (stdin_stream.is_open()) {
             if (!input.empty()) {
@@ -876,8 +875,8 @@ namespace stdc {
         }
         _communication_started = true;
 
-        // On a timeout the child is killed rather than left behind: its exit is what closes the
-        // write ends, and without that the reader threads below would never finish.
+        // A timeout kills the child rather than leaving it behind. Its exit is what closes the
+        // write ends, and without that the reader threads below never finish.
         if (!_wait(timeout)) {
             auto wait_error = error_code;
             std::ignore = kill_impl();

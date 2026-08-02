@@ -37,9 +37,9 @@ namespace stdc {
     static const target_id invalid_target_id = -1;
 #endif
 
-    // The descriptor behind a file, without asking the OS anything about it. No system call, so
-    // it is cheap enough to check on every write -- which is what lets a remembered answer be
-    // matched against the file it was actually probed through.
+    /// Returns the descriptor behind a file without asking the OS about it. Costs no system call,
+    /// so a remembered answer can be matched against the file it was probed through on every
+    /// write.
     static target_id target_id_of(FILE *file) {
         if (!file) {
             return invalid_target_id;
@@ -56,9 +56,9 @@ namespace stdc {
 #endif
     }
 
-    // Asks the OS what the target is, and on Windows switches virtual terminal processing on
-    // while it is there. This is the part that costs system calls and, on a console, changes
-    // state -- so it is done once per target rather than once per write.
+    /// Asks the OS what the target is, and on Windows turns on virtual terminal processing while
+    /// there. This costs system calls and changes console state, so it runs once per target
+    /// rather than once per write.
     static target_kind detect_target(FILE *file) {
         target_id id = target_id_of(file);
         if (id == invalid_target_id) {
@@ -147,9 +147,9 @@ namespace stdc {
                 _file = file;
 #ifdef _WIN32
                 // Switching the code page is a process wide side effect, so only pay it when the
-                // target really is a console; for a file or a pipe it would change nothing there
-                // and disturb whatever else is writing to the console. Both calls below are
-                // answered from the cache, so this costs no system call of its own.
+                // target really is a console. For a file or a pipe it would change nothing there
+                // and disturb whatever else writes to the console. Both calls below come from
+                // the cache, so this costs no system call of its own.
                 _console = target_kind_of(file) != target_not_a_terminal ? target_id_of(file)
                                                                          : INVALID_HANDLE_VALUE;
                 if (_console != INVALID_HANDLE_VALUE) {
@@ -213,9 +213,8 @@ namespace stdc {
 #endif
         };
 
-        // Writes no attributes at all. Used whenever the target cannot show them, which is the
-        // case for every file and pipe -- and is what makes the text path deterministic enough
-        // to unit test.
+        // Writes no attributes at all. Used whenever the target cannot show them, which covers
+        // every file and pipe, and is what makes the text path deterministic enough to test.
         class PlainOutput : public BaseOutput {
         public:
             void change(int style, int fg, int bg) override {

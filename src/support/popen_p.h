@@ -38,8 +38,8 @@ namespace stdc {
         IODev stdout_dev;
         IODev stderr_dev;
 
-        // mutable so that the const accessors can hand them out, the way they used to hand out a
-        // FILE *: reading a child's output does not change the Popen.
+        // Mutable because the accessors are const. Reading a child's output does not change the
+        // Popen.
         mutable Stream stdin_stream;
         mutable Stream stdout_stream;
         mutable Stream stderr_stream;
@@ -110,9 +110,8 @@ namespace stdc {
         bool done();
         void close_std_files();
 
-        // Releases the OS process handle once the exit status is in hand. Kept apart from
-        // _cleanup() so that waiting for a child does not also close the pipes its output is
-        // still sitting in.
+        /// Releases the OS process handle once the exit status is known. Separate from _cleanup()
+        /// so that waiting for a child leaves its pipes open for reading.
         void _reap();
 
         void _cleanup();

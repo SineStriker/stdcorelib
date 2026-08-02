@@ -109,7 +109,7 @@ BOOST_AUTO_TEST_CASE(test_reopen) {
     BOOST_CHECK(lib.resolve(candidate.symbol) != nullptr);
     (void) first;
 
-    // opening the same library from two objects is fine; both resolve
+    // opening the same library from two objects is fine, and both resolve
     SharedLibrary other;
     BOOST_REQUIRE(other.open(candidate.path));
     BOOST_CHECK(other.resolve(candidate.symbol) != nullptr);
