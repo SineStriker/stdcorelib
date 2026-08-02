@@ -8,7 +8,10 @@
 
 #ifndef _WIN32
 #  include <csignal>
+#  include <cstring>
 #  include <dirent.h>
+#  include <fcntl.h>
+#  include <unistd.h>
 #endif
 
 using namespace stdc;
@@ -375,6 +378,207 @@ BOOST_AUTO_TEST_CASE(test_close_fds) {
     auto [out, errout] = p.communicate({}, Timeout);
     // 0, 1, 2 and the descriptor ls itself opened on the directory
     BOOST_CHECK_LE(std::stoi(first_line(out)), 5);
+}
+
+// preexec_fn runs in the child, after the pipes are in place and before exec.
+BOOST_AUTO_TEST_CASE(test_preexec_fn) {
+    Popen p;
+    std::string err;
+    p.args({"pwd"}).stdout_(Popen::PIPE).preexec_fn([] { std::ignore = chdir("/usr"); });
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    auto [out, errout] = p.communicate({}, Timeout);
+    BOOST_CHECK_EQUAL(first_line(out), "/usr");
+}
+
+// A descriptor named in pass_fds survives exec. Without it, close_fds takes it away.
+BOOST_AUTO_TEST_CASE(test_pass_fds) {
+    // A pipe holding a known line, which the child reads by descriptor number.
+    const auto &filled_pipe = [](int fds[2]) {
+        BOOST_REQUIRE_EQUAL(pipe(fds), 0);
+        const char *msg = "kept\n";
+        std::ignore = write(fds[1], msg, std::strlen(msg));
+        close(fds[1]);
+    };
+
+    {
+        int fds[2];
+        filled_pipe(fds);
+        char script[64];
+        std::snprintf(script, sizeof(script), "cat <&%d", fds[0]);
+
+        Popen p;
+        std::string err;
+        p.args({"/bin/sh", "-c", script}).pass_fds({fds[0]}).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        close(fds[0]);
+        BOOST_CHECK_EQUAL(first_line(out), "kept");
+    }
+
+    {
+        int fds[2];
+        filled_pipe(fds);
+        char script[64];
+        std::snprintf(script, sizeof(script), "cat <&%d", fds[0]);
+
+        Popen p;
+        std::string err;
+        p.args({"/bin/sh", "-c", script}).stdout_(Popen::PIPE).stderr_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        close(fds[0]);
+        BOOST_CHECK(out.empty());
+        BOOST_CHECK(!errout.empty());
+    }
+
+    // close_fds(false) hands the child everything we have open, so the same read works.
+    {
+        int fds[2];
+        filled_pipe(fds);
+        char script[64];
+        std::snprintf(script, sizeof(script), "cat <&%d", fds[0]);
+
+        Popen p;
+        std::string err;
+        p.args({"/bin/sh", "-c", script}).close_fds(false).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        close(fds[0]);
+        BOOST_CHECK_EQUAL(first_line(out), "kept");
+    }
+}
+
+BOOST_AUTO_TEST_CASE(test_umask) {
+    Popen p;
+    std::string err;
+    p.args({"/bin/sh", "-c", "umask"}).umask(0077).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    auto [out, errout] = p.communicate({}, Timeout);
+    BOOST_CHECK_EQUAL(first_line(out), "0077");
+}
+
+// Both of these are visible from here, so the child does not have to report them.
+BOOST_AUTO_TEST_CASE(test_session_and_process_group) {
+    {
+        Popen p;
+        std::string err;
+        p.args({"cat"}).stdin_(Popen::PIPE).start_new_session(true);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_CHECK_EQUAL(getsid(p.pid()), p.pid());
+        p.stdin_().close();
+        BOOST_REQUIRE(p.wait(Timeout));
+    }
+    {
+        Popen p;
+        std::string err;
+        p.args({"cat"}).stdin_(Popen::PIPE).process_group(0);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_CHECK_EQUAL(getpgid(p.pid()), p.pid());
+        p.stdin_().close();
+        BOOST_REQUIRE(p.wait(Timeout));
+    }
+}
+
+#  ifdef F_GETPIPE_SZ
+BOOST_AUTO_TEST_CASE(test_pipesize) {
+    Popen p;
+    std::string err;
+    p.args({"cat"}).stdin_(Popen::PIPE).pipesize(1 << 17);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    // The kernel may round up, so this is a floor rather than the exact figure.
+    BOOST_CHECK_GE(fcntl(fileno(p.stdin_().file()), F_GETPIPE_SZ), 1 << 17);
+    p.stdin_().close();
+    BOOST_REQUIRE(p.wait(Timeout));
+}
+#  endif
+
+// restore_signals puts the dispositions the parent changed back to their defaults, so a child
+// does not inherit an ignored signal it never asked for.
+BOOST_AUTO_TEST_CASE(test_restore_signals) {
+    struct IgnoreSigpipe {
+        IgnoreSigpipe() : prev(signal(SIGPIPE, SIG_IGN)) {
+        }
+        ~IgnoreSigpipe() {
+            signal(SIGPIPE, prev);
+        }
+        void (*prev)(int);
+    } ignore;
+
+    const char *script = "kill -PIPE $$; echo survived";
+
+    {
+        Popen p;
+        std::string err;
+        p.args({"/bin/sh", "-c", script}).restore_signals(true).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK(out.empty());
+        BOOST_REQUIRE(p.returncode());
+        BOOST_CHECK_EQUAL(*p.returncode(), -SIGPIPE);
+    }
+
+    {
+        Popen p;
+        std::string err;
+        p.args({"/bin/sh", "-c", script}).restore_signals(false).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(first_line(out), "survived");
+        BOOST_REQUIRE(p.returncode());
+        BOOST_CHECK_EQUAL(*p.returncode(), 0);
+    }
+}
+
+// A name that no passwd entry matches fails before anything is forked.
+BOOST_AUTO_TEST_CASE(test_unknown_user_name) {
+    Popen p;
+    std::string err;
+    p.args(shell_args(ExitZero)).user("no_such_user_9f3a");
+    BOOST_CHECK(!p.start(&err));
+    BOOST_CHECK(!err.empty());
+    BOOST_CHECK_EQUAL(p.pid(), -1);
+}
+
+// Changing credentials needs privilege, so which half of this runs depends on who we are. Under
+// a normal user the point is that the failure is orderly: start() says no, and the child that
+// got as far as fork is reaped rather than left behind.
+BOOST_AUTO_TEST_CASE(test_user_and_groups) {
+    const bool privileged = geteuid() == 0;
+
+    const auto &check = [&](Popen &p, const char *expected) {
+        std::string err;
+        bool started = p.start(&err);
+        BOOST_REQUIRE_EQUAL(started, privileged);
+        if (!started) {
+            BOOST_CHECK(!err.empty());
+            BOOST_CHECK(p.returncode());
+            return;
+        }
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(first_line(out), expected);
+    };
+
+    {
+        Popen p;
+        p.args({"id", "-u"}).user(65534).stdout_(Popen::PIPE);
+        check(p, "65534");
+    }
+    {
+        Popen p;
+        p.args({"id", "-un"}).user("nobody").stdout_(Popen::PIPE);
+        check(p, "nobody");
+    }
+    {
+        Popen p;
+        p.args({"id", "-g"}).group(65534).stdout_(Popen::PIPE);
+        check(p, "65534");
+    }
+    {
+        // setgroups replaces the supplementary list, leaving the primary group beside it.
+        Popen p;
+        p.args({"id", "-G"}).extra_groups({65534}).stdout_(Popen::PIPE);
+        check(p, "0 65534");
+    }
 }
 
 #endif // !_WIN32
