@@ -150,6 +150,19 @@ namespace stdc {
         STDCORELIB_EXPORT std::vector<std::string> split(std::string &&s,
                                                          const std::string_view &delimiter);
 
+        // @overload: split(const char *, string_view)
+        //
+        // A string literal converts equally well to string_view and to std::string, which makes
+        // the two overloads above ambiguous for it -- clang and gcc reject the call outright,
+        // MSVC quietly picks the std::string one and allocates. Taking const char * exactly wins
+        // over both, and gives the answer a literal wants: a view, since its data is static and
+        // there is nothing to own. Every function below that comes in a view/owning pair carries
+        // the same third overload for the same reason.
+        inline std::vector<std::string_view> split(const char *s,
+                                                   const std::string_view &delimiter) {
+            return split(std::string_view(s), delimiter);
+        }
+
         STDCORELIB_EXPORT std::string format(const std::string_view &fmt,
                                              const array_view<std::string> &args);
 
@@ -288,6 +301,11 @@ namespace stdc {
             return s.substr(N);
         }
 
+        // @overload: drop_front(const char *, size_t)
+        inline std::string_view drop_front(const char *s, size_t N = 1) {
+            return drop_front(std::string_view(s), N);
+        }
+
         inline std::string_view drop_back(const std::string_view &s, size_t N = 1) {
             return s.substr(0, s.size() - N);
         }
@@ -295,6 +313,11 @@ namespace stdc {
         // @overload: drop_back(string &&, size_t)
         inline std::string drop_back(std::string &&s, size_t N = 1) {
             return s.substr(0, s.size() - N);
+        }
+
+        // @overload: drop_back(const char *, size_t)
+        inline std::string_view drop_back(const char *s, size_t N = 1) {
+            return drop_back(std::string_view(s), N);
         }
 
         inline std::string_view ltrim(const std::string_view &s, char Char) {
@@ -319,6 +342,17 @@ namespace stdc {
                 drop_front(std::string_view(s), std::min(s.size(), s.find_first_not_of(Chars))));
         }
 
+        // @overload: ltrim(const char *, char)
+        inline std::string_view ltrim(const char *s, char Char) {
+            return ltrim(std::string_view(s), Char);
+        }
+
+        // @overload: ltrim(const char *, string_view)
+        inline std::string_view ltrim(const char *s,
+                                      const std::string_view &Chars = " \t\n\v\f\r") {
+            return ltrim(std::string_view(s), Chars);
+        }
+
         inline std::string_view rtrim(const std::string_view &s, char Char) {
             return drop_back(s, s.size() - std::min(s.size(), s.find_last_not_of(Char) + 1));
         }
@@ -341,6 +375,17 @@ namespace stdc {
                 std::string_view(s), s.size() - std::min(s.size(), s.find_last_not_of(Chars) + 1)));
         }
 
+        // @overload: rtrim(const char *, char)
+        inline std::string_view rtrim(const char *s, char Char) {
+            return rtrim(std::string_view(s), Char);
+        }
+
+        // @overload: rtrim(const char *, string_view)
+        inline std::string_view rtrim(const char *s,
+                                      const std::string_view &Chars = " \t\n\v\f\r") {
+            return rtrim(std::string_view(s), Chars);
+        }
+
         inline std::string_view trim(const std::string_view &s, char Char) {
             return rtrim(ltrim(s, Char), Char);
         }
@@ -359,6 +404,16 @@ namespace stdc {
         // @overload: trim(string &&, string)
         inline std::string trim(std::string &&s, std::string_view Chars = " \t\n\v\f\r") {
             return std::string(rtrim(ltrim(std::string_view(s), Chars), Chars));
+        }
+
+        // @overload: trim(const char *, char)
+        inline std::string_view trim(const char *s, char Char) {
+            return trim(std::string_view(s), Char);
+        }
+
+        // @overload: trim(const char *, string_view)
+        inline std::string_view trim(const char *s, std::string_view Chars = " \t\n\v\f\r") {
+            return trim(std::string_view(s), Chars);
         }
 
         inline bool contains(const std::string_view &s, const std::string_view &sub) {

@@ -151,18 +151,46 @@ BOOST_AUTO_TEST_CASE(test_starts_ends_with) {
     BOOST_CHECK(str::ends_with(std::wstring_view(L"abc"), L'c'));
 }
 
+// The string_view and the std::string&& overloads used to be ambiguous for a plain string
+// literal: both need exactly one user-defined conversion. clang and gcc rejected every such
+// call, MSVC quietly resolved it to the std::string one and allocated. A third overload taking
+// const char * settles it, because array-to-pointer is an exact match and beats both.
+BOOST_AUTO_TEST_CASE(test_literal_overload_resolution) {
+    static_assert(std::is_same_v<decltype(str::trim("x")), std::string_view>);
+    static_assert(std::is_same_v<decltype(str::ltrim("x")), std::string_view>);
+    static_assert(std::is_same_v<decltype(str::rtrim("x")), std::string_view>);
+    static_assert(std::is_same_v<decltype(str::trim("x", 'x')), std::string_view>);
+    static_assert(std::is_same_v<decltype(str::trim("x", "y")), std::string_view>);
+    static_assert(std::is_same_v<decltype(str::drop_front("x")), std::string_view>);
+    static_assert(std::is_same_v<decltype(str::drop_back("x")), std::string_view>);
+    static_assert(std::is_same_v<decltype(str::split("x", ",")), std::vector<std::string_view>>);
+
+    // a real std::string rvalue still gets the owning overload, since a view into it would
+    // dangle the moment the call returns
+    static_assert(std::is_same_v<decltype(str::trim(std::string())), std::string>);
+    static_assert(std::is_same_v<decltype(str::drop_front(std::string())), std::string>);
+    static_assert(
+        std::is_same_v<decltype(str::split(std::string(), ",")), std::vector<std::string>>);
+
+    // an lvalue string is not about to die, so it gets a view, as it always did
+    std::string lvalue = "x";
+    static_assert(std::is_same_v<decltype(str::trim(lvalue)), std::string_view>);
+    static_assert(std::is_same_v<decltype(str::split(lvalue, ",")), std::vector<std::string_view>>);
+    (void) lvalue;
+
+    BOOST_CHECK(true); // the checks above are compile time
+}
+
 BOOST_AUTO_TEST_CASE(test_drop) {
-    using namespace std::string_view_literals;
+    BOOST_CHECK_EQUAL(str::drop_front("hello"), "ello");
+    BOOST_CHECK_EQUAL(str::drop_front("hello", 3), "lo");
+    BOOST_CHECK_EQUAL(str::drop_front("hello", 5), "");
+    BOOST_CHECK_EQUAL(str::drop_front("hello", 0), "hello");
 
-    BOOST_CHECK_EQUAL(str::drop_front("hello"sv), "ello");
-    BOOST_CHECK_EQUAL(str::drop_front("hello"sv, 3), "lo");
-    BOOST_CHECK_EQUAL(str::drop_front("hello"sv, 5), "");
-    BOOST_CHECK_EQUAL(str::drop_front("hello"sv, 0), "hello");
-
-    BOOST_CHECK_EQUAL(str::drop_back("hello"sv), "hell");
-    BOOST_CHECK_EQUAL(str::drop_back("hello"sv, 3), "he");
-    BOOST_CHECK_EQUAL(str::drop_back("hello"sv, 5), "");
-    BOOST_CHECK_EQUAL(str::drop_back("hello"sv, 0), "hello");
+    BOOST_CHECK_EQUAL(str::drop_back("hello"), "hell");
+    BOOST_CHECK_EQUAL(str::drop_back("hello", 3), "he");
+    BOOST_CHECK_EQUAL(str::drop_back("hello", 5), "");
+    BOOST_CHECK_EQUAL(str::drop_back("hello", 0), "hello");
 
     // rvalue string overloads return owning strings
     BOOST_CHECK_EQUAL(str::drop_front(std::string("hello"), 2), "llo");
@@ -170,33 +198,29 @@ BOOST_AUTO_TEST_CASE(test_drop) {
 }
 
 BOOST_AUTO_TEST_CASE(test_trim) {
-    // A bare string literal is ambiguous between the string_view and the string&& overloads,
-    // so every case below names which one it means.
-    using namespace std::string_view_literals;
-
     // default character set is whitespace
-    BOOST_CHECK_EQUAL(str::trim("  hello  "sv), "hello");
-    BOOST_CHECK_EQUAL(str::ltrim("  hello  "sv), "hello  ");
-    BOOST_CHECK_EQUAL(str::rtrim("  hello  "sv), "  hello");
+    BOOST_CHECK_EQUAL(str::trim("  hello  "), "hello");
+    BOOST_CHECK_EQUAL(str::ltrim("  hello  "), "hello  ");
+    BOOST_CHECK_EQUAL(str::rtrim("  hello  "), "  hello");
 
-    BOOST_CHECK_EQUAL(str::trim("\t\n hello \r\n"sv), "hello");
-    BOOST_CHECK_EQUAL(str::trim("hello"sv), "hello"); // nothing to trim
-    BOOST_CHECK_EQUAL(str::trim(""sv), "");
-    BOOST_CHECK_EQUAL(str::trim("   "sv), ""); // all whitespace
-    BOOST_CHECK_EQUAL(str::ltrim("   "sv), "");
-    BOOST_CHECK_EQUAL(str::rtrim("   "sv), "");
+    BOOST_CHECK_EQUAL(str::trim("\t\n hello \r\n"), "hello");
+    BOOST_CHECK_EQUAL(str::trim("hello"), "hello"); // nothing to trim
+    BOOST_CHECK_EQUAL(str::trim(""), "");
+    BOOST_CHECK_EQUAL(str::trim("   "), ""); // all whitespace
+    BOOST_CHECK_EQUAL(str::ltrim("   "), "");
+    BOOST_CHECK_EQUAL(str::rtrim("   "), "");
 
     // inner whitespace is untouched
-    BOOST_CHECK_EQUAL(str::trim("  a b  "sv), "a b");
+    BOOST_CHECK_EQUAL(str::trim("  a b  "), "a b");
 
     // single character
-    BOOST_CHECK_EQUAL(str::trim("xxhelloxx"sv, 'x'), "hello");
-    BOOST_CHECK_EQUAL(str::ltrim("xxhelloxx"sv, 'x'), "helloxx");
-    BOOST_CHECK_EQUAL(str::rtrim("xxhelloxx"sv, 'x'), "xxhello");
-    BOOST_CHECK_EQUAL(str::trim("xxxx"sv, 'x'), "");
+    BOOST_CHECK_EQUAL(str::trim("xxhelloxx", 'x'), "hello");
+    BOOST_CHECK_EQUAL(str::ltrim("xxhelloxx", 'x'), "helloxx");
+    BOOST_CHECK_EQUAL(str::rtrim("xxhelloxx", 'x'), "xxhello");
+    BOOST_CHECK_EQUAL(str::trim("xxxx", 'x'), "");
 
     // explicit character set
-    BOOST_CHECK_EQUAL(str::trim("[hello]"sv, "[]"), "hello");
+    BOOST_CHECK_EQUAL(str::trim("[hello]", "[]"), "hello");
 
     // rvalue string overloads
     BOOST_CHECK_EQUAL(str::trim(std::string("  hi  ")), "hi");
@@ -205,7 +229,7 @@ BOOST_AUTO_TEST_CASE(test_trim) {
     BOOST_CHECK_EQUAL(str::trim(std::string("[hi]"), "[]"), "hi");
 
     // also reachable unqualified from namespace stdc
-    BOOST_CHECK_EQUAL(trim("  hi  "sv), "hi");
+    BOOST_CHECK_EQUAL(trim("  hi  "), "hi");
 }
 
 BOOST_AUTO_TEST_CASE(test_contains) {
