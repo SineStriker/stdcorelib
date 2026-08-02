@@ -50,8 +50,6 @@ namespace stdc {
         }
 
         linked_map &operator=(const linked_map &other) {
-            // NOTE: the self check is required, not just an optimization: clear() below would
-            // otherwise wipe the very list the loop is about to read from.
             if (this == &other) {
                 return *this;
             }
@@ -77,8 +75,6 @@ namespace stdc {
 
         template <typename InputIterator>
         linked_map(InputIterator f, InputIterator l) {
-            // Dereference rather than call key()/value(), so that any iterator over pairs works
-            // here, including the plain `const std::pair<K, V> *` an initializer_list hands over.
             for (; f != l; ++f)
                 append(f->first, f->second);
         }
@@ -322,9 +318,6 @@ namespace stdc {
         }
 
     private:
-        // The position is taken as a const_iterator so that both the public insert() overloads
-        // (which carry one) and append()/prepend() (which pass a mutable begin()/end()) reach it.
-        // std::list::emplace() accepts a const_iterator and hands back a mutable one.
         std::pair<iterator, bool> insert_impl(typename _ListType::const_iterator it, const K &key,
                                               const V &val) {
             auto res = m_map.insert(std::make_pair(key, m_list.end()));
@@ -338,9 +331,6 @@ namespace stdc {
             return std::make_pair(iterator(org_it), false);
         }
 
-        // The position is taken as a const_iterator so that both the public insert() overloads
-        // (which carry one) and append()/prepend() (which pass a mutable begin()/end()) reach it.
-        // std::list::emplace() accepts a const_iterator and hands back a mutable one.
         std::pair<iterator, bool> insert_impl(typename _ListType::const_iterator it, const K &key,
                                               V &&val) {
             auto res = m_map.insert(std::make_pair(key, m_list.end()));

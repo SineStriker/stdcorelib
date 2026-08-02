@@ -16,11 +16,8 @@ namespace stdc {
     /// The size-agnostic base of \c vlarray.
     ///
     /// Owns the pointer/size/capacity and the allocator, but not the inline buffer, so a single
-    /// \c vlarray_base<T> & can refer to a \c vlarray<T, N> of any inline size N (the role LLVM's
-    /// \c SmallVectorImpl plays for \c SmallVector). Functions should take this type by reference.
-    ///
-    /// It starts out pointing at the derived object's inline buffer (registered via
-    /// \a adopt_inline_buffer) and only touches the allocator once the data outgrows that buffer.
+    /// \c vlarray_base<T> & can refer to a \c vlarray<T, N> of any inline size N. Functions
+    /// should take this type by reference.
     template <class T, class Alloc = std::allocator<T>>
     class vlarray_base {
         using AT = std::allocator_traits<Alloc>;

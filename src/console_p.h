@@ -23,18 +23,11 @@ namespace stdc::console::detail {
     };
 
     /// Returns the SGR escape sequence that takes a terminal from \a from to \a to, or an empty
-    /// string when there is nothing to write. Pure: it touches no state and writes nowhere, which
-    /// is the point -- it is the only part of the color path a unit test can reach, since
-    /// everything around it needs a real terminal.
+    /// string when there is nothing to write.
     ///
-    /// Two things to know about the output:
-    ///   - Only attributes that actually differ are emitted.
-    ///   - Only attributes being turned *on* produce a code. There is no code for clearing an
-    ///     individual attribute, so a caller that needs to drop one pairs this with
-    ///     sgr_reset_sequence() and then re-applies what should stay.
-    ///
-    /// \c black is not representable here and yields no code, matching what the markup has always
-    /// done.
+    /// Only attributes that differ are emitted, and only ones being turned *on*: there is no code
+    /// for clearing an individual attribute, so a caller that needs to drop one pairs this with
+    /// sgr_reset_sequence() and re-applies what should stay. \c black has no code at all.
     STDCORELIB_EXPORT std::string sgr_sequence(const attributes &from, const attributes &to);
 
     /// Returns the sequence that puts a terminal back to its defaults, or an empty string when

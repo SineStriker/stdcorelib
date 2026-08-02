@@ -45,11 +45,7 @@ namespace stdc {
         }
     }
 
-    /// Folds \a key into \a seed, for building one hash out of several values.
-    ///
-    /// The mixing is order dependent, which is the whole point: a plain xor would make
-    /// \c hash(a, hash(b)) and \c hash(b, hash(a)) equal, so every permutation of a composite
-    /// key would land in the same bucket.
+    // Folds `key` into `seed`, for building one hash out of several values. Order dependent.
     inline constexpr size_t hash(size_t key, size_t seed = 0) noexcept {
         if constexpr (sizeof(size_t) >= 8) {
             return seed ^ (key + size_t(0x9e3779b97f4a7c15ULL) + (seed << 12) + (seed >> 4));
