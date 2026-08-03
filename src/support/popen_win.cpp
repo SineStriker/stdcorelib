@@ -638,10 +638,10 @@ namespace stdc {
         // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1373
         // prepare environment variables
         vlarray<wchar_t, 1024> env_str;
-        if (env_set) {
+        if (env) {
             std::vector<std::pair<std::wstring, std::wstring>> wide_env;
-            wide_env.reserve(env.size());
-            for (const auto &item : env) {
+            wide_env.reserve(env->size());
+            for (const auto &item : *env) {
                 if (item.first.empty() || item.first.find('=') != std::string::npos ||
                     item.first.find('\0') != std::string::npos ||
                     item.second.find('\0') != std::string::npos) {
@@ -689,7 +689,7 @@ namespace stdc {
                             nullptr,                                                   //
                             !close_fds,                                                //
                             dwCreationFlags,                                           //
-                            env_set ? env_str.data() : NULL,                           //
+                            env ? env_str.data() : NULL,                               //
                             cwd.empty() ? NULL : cwd.c_str(),
                             (LPSTARTUPINFOW) &siex, //
                             &pi                     //

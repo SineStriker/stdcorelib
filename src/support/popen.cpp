@@ -539,10 +539,15 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::env(const std::map<std::string, std::string> &env) {
+    Popen &Popen::env(const std::optional<std::map<std::string, std::string>> &env) {
         stdc_impl_t;
         impl.env = env;
-        impl.env_set = true;
+        return *this;
+    }
+
+    Popen &Popen::env(std::initializer_list<std::pair<const std::string, std::string>> env) {
+        stdc_impl_t;
+        impl.env = std::map<std::string, std::string>(env);
         return *this;
     }
 

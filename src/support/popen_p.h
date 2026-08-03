@@ -33,8 +33,9 @@ namespace stdc {
         bool shell = false;
 
         std::filesystem::path cwd;
-        std::map<std::string, std::string> env;
-        bool env_set = false;
+        // Empty and absent mean different things: an empty map asks for an empty environment,
+        // no map at all hands down ours.
+        std::optional<std::map<std::string, std::string>> env;
 
         // std
         IODev stdin_dev;

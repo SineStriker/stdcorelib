@@ -621,14 +621,18 @@ namespace stdc {
     }
 
     /// The directories PATH names, or the standard ones when it says nothing.
-    static std::vector<std::string> exec_search_path(const std::map<std::string, std::string> &env,
-                                                     bool env_set) {
+    static std::vector<std::string>
+        exec_search_path(const std::optional<std::map<std::string, std::string>> &env) {
         std::string path;
-        auto it = env.find("PATH");
-        if (it != env.end()) {
+        if (env) {
+            auto it = env->find("PATH");
+            if (it == env->end()) {
+                // The child's environment was replaced and carries no PATH, so there is nowhere
+                // to look. Falling back to ours would search a directory list the caller took
+                // away on purpose.
+                return {};
+            }
             path = it->second;
-        } else if (env_set) {
-            return {};
         } else if (const char *parent_path = getenv("PATH")) {
             path = parent_path;
         } else {
@@ -679,7 +683,7 @@ namespace stdc {
             if (name.find('/') != std::string::npos) {
                 exec_paths.push_back(name);
             } else {
-                for (const auto &dir : exec_search_path(env, env_set)) {
+                for (const auto &dir : exec_search_path(env)) {
                     exec_paths.push_back(dir + "/" + name);
                 }
             }
@@ -705,8 +709,8 @@ namespace stdc {
         // Built here rather than in the child, where allocating is not allowed.
         std::vector<std::string> env_items;
         std::vector<char *> envp;
-        if (env_set) {
-            for (const auto &pair : env) {
+        if (env) {
+            for (const auto &pair : *env) {
                 if (pair.first.find('=') != std::string::npos) {
                     error_code = std::make_error_code(std::errc::invalid_argument);
                     error_msg = formatN("illegal environment variable name: %1", pair.first);

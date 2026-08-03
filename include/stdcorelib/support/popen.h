@@ -161,13 +161,20 @@ namespace stdc {
         /// The child's working directory. Inherited if left unset.
         Popen &cwd(const std::filesystem::path &cwd);
 
-        /// The child's environment, which replaces ours rather than adding to it. Inherited if
-        /// left unset.
-        /// Passing an empty map creates an empty environment rather than inheriting ours.
+        /// The child's environment, which replaces ours rather than adding to it.
         ///
+        /// \param env the variables to give the child, or \c std::nullopt to hand down the ones
+        ///        this process has. An empty map asks for an empty environment, which is not the
+        ///        same thing.
         /// \note Replacing it drops \c PATH along with everything else, so a bare program name
         ///       will not be found unless \a env carries one.
-        Popen &env(const std::map<std::string, std::string> &env);
+        Popen &env(const std::optional<std::map<std::string, std::string>> &env);
+
+        // @overload: env(initializer_list)
+        //
+        // A braced list cannot reach the optional on its own, since building the map and then
+        // wrapping it is two user-defined conversions.
+        Popen &env(std::initializer_list<std::pair<const std::string, std::string>> env);
 
         /// Where each standard stream goes. Inherited if left unset.
         ///
