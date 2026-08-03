@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-#ifndef VERSIONNUMBER_H
-#define VERSIONNUMBER_H
+#ifndef STDCORELIB_VERSIONNUMBER_H
+#define STDCORELIB_VERSIONNUMBER_H
 
 #include <string>
 #include <array>
@@ -65,4 +65,4 @@ namespace std {
 
 }
 
-#endif // VERSIONNUMBER_H
+#endif // STDCORELIB_VERSIONNUMBER_H

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-#ifndef STDCORELIB_EXPERIMENTAL_POPEN_H
-#define STDCORELIB_EXPERIMENTAL_POPEN_H
+#ifndef STDCORELIB_POPEN_H
+#define STDCORELIB_POPEN_H
 
 #include <filesystem>
 #include <vector>
@@ -357,4 +357,4 @@ namespace stdc {
 
 }
 
-#endif // POPEN_H
+#endif // STDCORELIB_POPEN_H

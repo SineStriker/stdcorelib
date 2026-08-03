@@ -141,7 +141,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src
     include
     include/stdcorelib
-    include/stdcorelib/experimental
     include/stdcorelib/platform
     include/stdcorelib/support
     include/stdcorelib/adt

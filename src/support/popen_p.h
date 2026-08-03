@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-#ifndef POPEN_P_H
-#define POPEN_P_H
+#ifndef STDCORELIB_POPEN_P_H
+#define STDCORELIB_POPEN_P_H
 
 #include <tuple>
 #include <cstdint>
@@ -167,4 +167,4 @@ namespace stdc {
 
 }
 
-#endif // POPEN_P_H
+#endif // STDCORELIB_POPEN_P_H
