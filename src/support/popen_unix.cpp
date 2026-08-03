@@ -70,39 +70,6 @@ namespace stdc {
         _reap();
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L272
-    //
-    // Children nobody is going to wait for. Until someone does, each one sits in the process
-    // table as a zombie, so the list is swept whenever a new child is started. That is what
-    // Python's _active list does, and it costs nothing while no process is being spawned.
-    static std::mutex &abandoned_mutex() {
-        static std::mutex mtx;
-        return mtx;
-    }
-
-    static std::vector<pid_t> &abandoned_pids() {
-        static std::vector<pid_t> pids;
-        return pids;
-    }
-
-    static void reap_abandoned() {
-        std::lock_guard<std::mutex> lock(abandoned_mutex());
-        auto &pids = abandoned_pids();
-        pids.erase(std::remove_if(pids.begin(), pids.end(),
-                                  [](pid_t child) {
-                                      int status;
-                                      pid_t ret = waitpid(child, &status, WNOHANG);
-                                      // Gone, or not ours to collect. Either way, stop looking.
-                                      return ret == child || (ret == -1 && errno != EINTR);
-                                  }),
-                   pids.end());
-    }
-
-    void Popen::Impl::_release_child() {
-        std::lock_guard<std::mutex> lock(abandoned_mutex());
-        abandoned_pids().push_back(pid_t(pid));
-    }
-
     bool Popen::Impl::_get_devnull() {
         int devnull = open("/dev/null", O_RDWR | O_CLOEXEC);
         if (devnull == -1) {
@@ -568,6 +535,83 @@ namespace stdc {
     }
 
     int Popen::Impl::_fork_exec(const ChildArgs &ca) {
+        if (detached) {
+            int pidpipe_read = -1, pidpipe_write = -1;
+            if (!make_pipe(pidpipe_read, pidpipe_write)) {
+                return -1;
+            }
+
+            pid_t launcher = fork();
+            if (launcher == 0) {
+                close(pidpipe_read);
+                if (setsid() == -1) {
+                    write_str(ca.errpipe_write, "OSError:");
+                    write_hex(ca.errpipe_write, errno);
+                    write_str(ca.errpipe_write, ":setsid");
+                    _exit(255);
+                }
+
+                pid_t child = fork();
+                if (child == 0) {
+                    close(pidpipe_write);
+                    _child_exec(ca);
+                    _exit(255);
+                }
+                if (child == -1) {
+                    write_str(ca.errpipe_write, "OSError:");
+                    write_hex(ca.errpipe_write, errno);
+                    write_str(ca.errpipe_write, ":fork");
+                    _exit(255);
+                }
+
+                const char *data = reinterpret_cast<const char *>(&child);
+                size_t left = sizeof(child);
+                while (left != 0) {
+                    ssize_t written = write(pidpipe_write, data, left);
+                    if (written < 0 && errno == EINTR)
+                        continue;
+                    if (written <= 0)
+                        _exit(255);
+                    data += written;
+                    left -= size_t(written);
+                }
+                close(pidpipe_write);
+                _exit(0);
+            }
+
+            int saved_errno = errno;
+            close(pidpipe_write);
+            if (launcher == -1) {
+                close(pidpipe_read);
+                errno = saved_errno;
+                return -1;
+            }
+
+            pid_t child = -1;
+            char *data = reinterpret_cast<char *>(&child);
+            size_t left = sizeof(child);
+            while (left != 0) {
+                ssize_t count = read(pidpipe_read, data, left);
+                if (count < 0 && errno == EINTR)
+                    continue;
+                if (count <= 0)
+                    break;
+                data += count;
+                left -= size_t(count);
+            }
+            close(pidpipe_read);
+
+            int status = 0;
+            pid_t waited;
+            do {
+                waited = waitpid(launcher, &status, 0);
+            } while (waited == -1 && errno == EINTR);
+            if (waited != launcher) {
+                return 0;
+            }
+            return left == 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0 ? int(child) : 0;
+        }
+
         pid_t child = fork();
         if (child == 0) {
             _child_exec(ca);
@@ -577,14 +621,16 @@ namespace stdc {
     }
 
     /// The directories PATH names, or the standard ones when it says nothing.
-    static std::vector<std::string>
-        exec_search_path(const std::map<std::string, std::string> &env) {
+    static std::vector<std::string> exec_search_path(const std::map<std::string, std::string> &env,
+                                                     bool env_set) {
         std::string path;
         auto it = env.find("PATH");
         if (it != env.end()) {
             path = it->second;
-        } else if (const char *p = getenv("PATH")) {
-            path = p;
+        } else if (env_set) {
+            return {};
+        } else if (const char *parent_path = getenv("PATH")) {
+            path = parent_path;
         } else {
             path = "/bin:/usr/bin";
         }
@@ -611,38 +657,36 @@ namespace stdc {
                                      int errread, int errwrite, int gid,
                                      const std::vector<int> &gids, int uid) {
         assert(!args.empty());
-
-        // Starting a child is the moment to collect the ones nobody is waiting for.
-        reap_abandoned();
+        std::filesystem::path child_executable = executable;
 
         if (shell) {
             // /bin/sh, not bash, is the one unix guarantees.
             const char *prefix_cmd[] = {"/bin/sh", "-c"};
             args.insert(args.begin(), std::begin(prefix_cmd), std::end(prefix_cmd));
-            if (!executable.empty()) {
-                args[0] = executable.string();
+            if (!child_executable.empty()) {
+                args[0] = child_executable.string();
             }
         }
-        if (executable.empty()) {
-            executable = args[0];
+        if (child_executable.empty()) {
+            child_executable = args[0];
         }
 
         // Candidate paths to try in order. A name with no slash is looked up along PATH, which is
         // what execvp would do, except that we cannot call it once the environment is replaced.
         std::vector<std::string> exec_paths;
         {
-            std::string name = executable.string();
+            std::string name = child_executable.string();
             if (name.find('/') != std::string::npos) {
                 exec_paths.push_back(name);
             } else {
-                for (const auto &dir : exec_search_path(env)) {
+                for (const auto &dir : exec_search_path(env, env_set)) {
                     exec_paths.push_back(dir + "/" + name);
                 }
             }
         }
         if (exec_paths.empty()) {
             error_code = std::make_error_code(std::errc::no_such_file_or_directory);
-            error_msg = formatN("cannot find executable: %1", executable.string());
+            error_msg = formatN("cannot find executable: %1", child_executable.string());
             return false;
         }
 
@@ -661,7 +705,7 @@ namespace stdc {
         // Built here rather than in the child, where allocating is not allowed.
         std::vector<std::string> env_items;
         std::vector<char *> envp;
-        if (!env.empty()) {
+        if (env_set) {
             for (const auto &pair : env) {
                 if (pair.first.find('=') != std::string::npos) {
                     error_code = std::make_error_code(std::errc::invalid_argument);
@@ -744,8 +788,11 @@ namespace stdc {
                 error_api = "fork";
                 return false;
             }
-            pid = tmp_pid;
-            _child_created = true;
+            pid = tmp_pid > 0 ? tmp_pid : -1;
+            if (tmp_pid > 0) {
+                _child_created = !detached;
+                _detached_started = detached;
+            }
             close(errpipe_write);
 
             _close_pipe_fds(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
@@ -770,21 +817,31 @@ namespace stdc {
         }
 
         // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1930
+        if (errpipe_data.empty() && !_child_created && !_detached_started) {
+            error_code = std::make_error_code(std::errc::io_error);
+            error_msg = "detached launcher exited without reporting a child";
+            return false;
+        }
         if (errpipe_data.empty()) {
             return true;
         }
 
-        // The child died on its own, so reap it before reporting.
-        int status;
-        pid_t ret_pid;
-        do {
-            ret_pid = waitpid(pid, &status, 0);
-        } while (ret_pid == -1 && errno == EINTR);
-        if (ret_pid == pid) {
-            _handle_exitstatus(status);
-        } else {
-            returncode = std::numeric_limits<int>::max();
+        if (_child_created) {
+            // A normal child is still ours, so collect its failed pre-exec status.
+            int status;
+            pid_t ret_pid;
+            do {
+                ret_pid = waitpid(pid, &status, 0);
+            } while (ret_pid == -1 && errno == EINTR);
+            if (ret_pid == pid) {
+                _handle_exitstatus(status);
+            } else {
+                returncode = std::numeric_limits<int>::max();
+            }
         }
+        _child_created = false;
+        _detached_started = false;
+        pid = -1;
 
         // "exception name:hex errno:description"
         auto first = errpipe_data.find(':');
@@ -806,8 +863,9 @@ namespace stdc {
 
         error_code = std::error_code(err_val, std::system_category());
         // "noexec:chdir" names the working directory, anything else names the program.
-        error_msg = formatN("%1: %2", detail == "noexec:chdir" ? cwd_str : executable.string(),
-                            error_code.message());
+        error_msg =
+            formatN("%1: %2", detail == "noexec:chdir" ? cwd_str : child_executable.string(),
+                    error_code.message());
         return false;
     }
 
@@ -823,6 +881,11 @@ namespace stdc {
 
     bool Popen::Impl::_internal_poll() {
         error_code.clear();
+
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return false;
+        }
 
         if (returncode) {
             return true;
@@ -867,6 +930,11 @@ namespace stdc {
 
     bool Popen::Impl::_wait(int timeout) {
         error_code.clear();
+
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return false;
+        }
 
         if (returncode) {
             return true;
@@ -935,6 +1003,11 @@ namespace stdc {
     // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L2218
     bool Popen::Impl::send_signal_impl(int sig) {
         error_code.clear();
+
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return false;
+        }
 
         // Polling first narrows the window in which the pid has been recycled and the signal
         // would land on somebody else's process.

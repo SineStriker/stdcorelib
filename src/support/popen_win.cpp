@@ -37,11 +37,6 @@ namespace stdc {
         _reap();
     }
 
-    void Popen::Impl::_release_child() {
-        // Windows has no zombies to collect. Closing our handle is all it takes, and _cleanup()
-        // does that next.
-    }
-
     /// Returns whether a standard handle can be used. GetStdHandle returns NULL when the process
     /// has no such handle, which is the case for every GUI subsystem process, and
     /// INVALID_HANDLE_VALUE when the call failed.
@@ -563,6 +558,7 @@ namespace stdc {
     bool Popen::Impl::_execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                                      int errread, Handle errwrite) {
         assert(!args.empty());
+        fs::path child_executable = executable;
 
         std::string args_str = qt_create_commandline({}, args);
 
@@ -624,32 +620,52 @@ namespace stdc {
         if (shell) {
             si.dwFlags |= STARTF_USESHOWWINDOW;
             si.wShowWindow = SW_HIDE;
-            if (executable.empty()) {
+            if (child_executable.empty()) {
                 std::string err_msg;
-                executable = _get_command_prompt_path(err_msg);
+                child_executable = _get_command_prompt_path(err_msg);
                 if (!err_msg.empty()) {
                     error_code = std::make_error_code(std::errc::no_such_file_or_directory);
                     error_msg = err_msg;
                     return false;
                 }
             }
-            args_str = formatN(R"(%1 /c "%2")", executable, args_str);
+            args_str = formatN(R"(%1 /c "%2")", child_executable, args_str);
         }
 
-        std::wstring application_name = executable;
+        std::wstring application_name = child_executable;
         std::wstring command_line = wstring_conv::from_utf8(args_str);
 
         // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1373
         // prepare environment variables
         vlarray<wchar_t, 1024> env_str;
-        if (!env.empty()) {
+        if (env_set) {
+            std::vector<std::pair<std::wstring, std::wstring>> wide_env;
+            wide_env.reserve(env.size());
             for (const auto &item : env) {
+                if (item.first.empty() || item.first.find('=') != std::string::npos ||
+                    item.first.find('\0') != std::string::npos ||
+                    item.second.find('\0') != std::string::npos) {
+                    error_code = std::make_error_code(std::errc::invalid_argument);
+                    error_msg = formatN("illegal environment variable: %1", item.first);
+                    return false;
+                }
+                wide_env.emplace_back(wstring_conv::from_utf8(item.first),
+                                      wstring_conv::from_utf8(item.second));
+            }
+            std::sort(wide_env.begin(), wide_env.end(), [](const auto &lhs, const auto &rhs) {
+                return _wcsicmp(lhs.first.c_str(), rhs.first.c_str()) < 0;
+            });
+            for (const auto &item : wide_env) {
                 env_str.insert(env_str.end(), item.first.begin(), item.first.end());
                 env_str.push_back(L'=');
                 env_str.insert(env_str.end(), item.second.begin(), item.second.end());
                 env_str.push_back(L'\0');
             }
+            // An environment block always ends in two nulls, including the empty block.
             env_str.push_back(L'\0');
+            if (wide_env.empty()) {
+                env_str.push_back(L'\0');
+            }
         }
 
         DWORD dwCreationFlags;
@@ -673,7 +689,7 @@ namespace stdc {
                             nullptr,                                                   //
                             !close_fds,                                                //
                             dwCreationFlags,                                           //
-                            env_str.empty() ? NULL : env_str.data(),                   //
+                            env_set ? env_str.data() : NULL,                           //
                             cwd.empty() ? NULL : cwd.c_str(),
                             (LPSTARTUPINFOW) &siex, //
                             &pi                     //
@@ -688,7 +704,12 @@ namespace stdc {
         pid = pi.dwProcessId;
         tid = pi.dwThreadId;
 
-        _child_created = true;
+        if (detached) {
+            _detached_started = true;
+            _reap();
+        } else {
+            _child_created = true;
+        }
 
     _cleanup:
         _free_attribute_list(&attribute_list);
@@ -706,6 +727,11 @@ namespace stdc {
 
     bool Popen::Impl::_internal_poll() {
         error_code.clear();
+
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return false;
+        }
 
         if (returncode) {
             return true;
@@ -736,6 +762,11 @@ namespace stdc {
 
     bool Popen::Impl::_wait(int timeout) {
         error_code.clear();
+
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return false;
+        }
 
         if (returncode) {
             return true;
@@ -769,6 +800,11 @@ namespace stdc {
 
     bool Popen::Impl::kill_impl() {
         error_code.clear();
+
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return false;
+        }
 
         if (returncode) {
             return true;
@@ -806,6 +842,11 @@ namespace stdc {
     bool Popen::Impl::terminate_impl() {
         error_code.clear();
 
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return false;
+        }
+
         if (returncode) {
             return true;
         }
@@ -823,6 +864,11 @@ namespace stdc {
 
     bool Popen::Impl::send_signal_impl(int sig) {
         error_code.clear();
+
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return false;
+        }
 
         if (returncode) {
             return true;

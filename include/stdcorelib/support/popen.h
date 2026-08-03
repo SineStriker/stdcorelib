@@ -163,6 +163,7 @@ namespace stdc {
 
         /// The child's environment, which replaces ours rather than adding to it. Inherited if
         /// left unset.
+        /// Passing an empty map creates an empty environment rather than inheriting ours.
         ///
         /// \note Replacing it drops \c PATH along with everything else, so a bare program name
         ///       will not be found unless \a env carries one.
@@ -187,15 +188,17 @@ namespace stdc {
         /// \sa pass_fds(), for the exceptions
         Popen &close_fds(bool close_fds);
 
-        /// Whether the child outlives this object. Off by default, so destroying a Popen whose
-        /// child is still running kills it.
+        /// Starts the child independently of this object. Off by default, so destroying a Popen
+        /// whose child is still running kills it.
         ///
-        /// This one may be set at any time, before or after start(), since all it decides is
-        /// what the destructor does. Python never kills the child and this is how to ask for the
-        /// same.
+        /// On Unix this uses \c setsid() and a double fork, leaving the final process to init or
+        /// the nearest child subreaper. On Windows its process handle is closed after creation.
+        /// In both cases pid() remains available, but wait(), poll(), communicate(), kill() and
+        /// terminate() and send_signal() do not: this process no longer owns the child.
         ///
-        /// \note It does not detach the child from the console or the session. That is what
-        ///       creationflags() and start_new_session() are for.
+        /// \note Set this before start(). Changing it afterwards has no effect.
+        /// \note \c PIPE is not supported for a detached child. Use inherited streams, files or
+        ///       the null device.
         Popen &detached(bool detached);
 
         /// The capacity of the pipes created for this child, in bytes. The kernel rounds up,
@@ -233,7 +236,8 @@ namespace stdc {
         Popen &group(int group);                                   // unix only
         Popen &extra_groups(const std::vector<int> &extra_groups); // unix only
         Popen &user(int user);                                     // unix only
-        Popen &user(const char *user);                             // unix only
+        /// The name is copied and need not outlive this call.
+        Popen &user(const char *user); // unix only
 
         /// The file creation mask for the child, or -1 to inherit ours.
         Popen &umask(int umask); // unix only
@@ -285,7 +289,8 @@ namespace stdc {
         ///
         /// \param input written to the child's stdin, which is then closed so that a child
         ///        reading to end of input can finish
-        /// \param timeout how long to allow, in milliseconds, or negative for no limit
+        /// \param timeout how long to allow for writing, reading and waiting together, in
+        ///        milliseconds, or negative for no limit
         /// \return what the child wrote to stdout and to stderr, each empty if that stream was
         ///         not a \c PIPE
         /// \note A child still running at \a timeout is killed rather than left behind, and

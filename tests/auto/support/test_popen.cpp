@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 #include <cstdio>
+#include <chrono>
+#include <iterator>
 #include <string>
 #include <vector>
 
 #include <stdcorelib/support/popen.h>
+#include <stdcorelib/system.h>
 
 #include <boost/test/unit_test.hpp>
 
@@ -15,6 +18,7 @@
 #  include <cstring>
 #  include <dirent.h>
 #  include <fcntl.h>
+#  include <pwd.h>
 #  include <sys/wait.h>
 #  include <unistd.h>
 #endif
@@ -43,6 +47,7 @@ namespace {
     // Long enough that the process is certainly still up when we look, short enough that a
     // leaked one goes away on its own.
     const char *SleepLong = "ping -n 20 127.0.0.1 >nul";
+    const std::vector<std::string> SleepArgs = {"ping", "-n", "20", "127.0.0.1"};
     const std::vector<std::string> FilterX = {"findstr", "x"};
 #else
     const char *ShellExe = "/bin/sh";
@@ -57,6 +62,7 @@ namespace {
     const char *BigOutput = "i=0; while [ $i -lt 5000 ]; do "
                             "echo 0123456789012345678901234567890123; i=$((i+1)); done";
     const char *SleepLong = "sleep 20";
+    const std::vector<std::string> SleepArgs = {"sleep", "20"};
     const std::vector<std::string> FilterX = {"grep", "x"};
 #endif
 
@@ -136,6 +142,41 @@ BOOST_AUTO_TEST_CASE(test_run_and_returncode) {
         p.args({"no_such_program_9f3a"});
         BOOST_CHECK(!p.start(&err));
         BOOST_CHECK(!err.empty());
+    }
+}
+
+// A failed start is retryable after correcting the setup; stale error state must not turn a
+// successfully created child into a reported failure.
+BOOST_AUTO_TEST_CASE(test_start_retry) {
+    {
+        Popen p;
+        std::string err;
+        p.args(shell_args(ExitZero)).stdin_(Popen::STDOUT);
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(p.error_code());
+
+        err.clear();
+        p.stdin_(Popen::DEVNULL);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE(p.wait(Timeout));
+        BOOST_CHECK_EQUAL(*p.returncode(), 0);
+    }
+
+    // Also cover a failure from CreateProcess/exec, after the pipes and (on POSIX) a short-lived
+    // child have already been created.
+    {
+        Popen p;
+        std::string err;
+        p.args({"no_such_executable_9f3a"}).stdout_(Popen::PIPE);
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!err.empty());
+
+        err.clear();
+        p.args(shell_args(ExitZero));
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        std::ignore = p.communicate({}, Timeout);
+        BOOST_REQUIRE(p.returncode());
+        BOOST_CHECK_EQUAL(*p.returncode(), 0);
     }
 }
 
@@ -239,6 +280,22 @@ BOOST_AUTO_TEST_CASE(test_communicate) {
         auto [out, errout] = p.communicate("no match here\n", 500);
         BOOST_REQUIRE(p.returncode());
     }
+
+    // The timeout covers writing too. This child never reads stdin, so a synchronous writer
+    // would fill the pipe and hang before reaching wait().
+    {
+        Popen p;
+        std::string err;
+        p.args(SleepArgs).stdin_(Popen::PIPE).stdout_(Popen::DEVNULL);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        std::string input(1 << 20, 'x');
+        auto started = std::chrono::steady_clock::now();
+        std::ignore = p.communicate(input, 300);
+        auto elapsed = std::chrono::steady_clock::now() - started;
+        BOOST_CHECK(elapsed < std::chrono::seconds(5));
+        BOOST_CHECK(p.error_code() == std::make_error_code(std::errc::timed_out));
+        BOOST_REQUIRE(p.returncode());
+    }
 }
 
 // Writing to a pipe whose reader has already exited raises SIGPIPE on POSIX, and its default
@@ -324,6 +381,32 @@ BOOST_AUTO_TEST_CASE(test_bad_cwd) {
     BOOST_CHECK(!err.empty());
 }
 
+#ifdef _WIN32
+
+BOOST_AUTO_TEST_CASE(test_unicode_environment) {
+    wchar_t marker[2];
+    if (GetEnvironmentVariableW(L"STDC_POPEN_UNICODE_CHILD", marker, 2) != 0) {
+        wchar_t value[32];
+        DWORD size = GetEnvironmentVariableW(L"\u53d8\u91cf", value, DWORD(std::size(value)));
+        BOOST_REQUIRE(size > 0 && size < std::size(value));
+        BOOST_CHECK(std::wstring(value, size) == L"\u503c\u6d4b\u8bd5");
+        return;
+    }
+
+    Popen p;
+    std::string err;
+    p.args({
+               system::application_path().string(),
+               "--run_test=test_popen/test_unicode_environment", "--log_level=nothing"
+    })
+        .env({{"STDC_POPEN_UNICODE_CHILD", "1"}, {"\u53d8\u91cf", "\u503c\u6d4b\u8bd5"}});
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE(p.wait(Timeout));
+    BOOST_CHECK_EQUAL(*p.returncode(), 0);
+}
+
+#endif
+
 #ifndef _WIN32
 
 // The child's environment is replaced, not merged.
@@ -338,6 +421,31 @@ BOOST_AUTO_TEST_CASE(test_env) {
     BOOST_REQUIRE_MESSAGE(p.start(&err), err);
     auto [out, errout] = p.communicate({}, Timeout);
     BOOST_CHECK_EQUAL(first_line(out), "bar");
+}
+
+BOOST_AUTO_TEST_CASE(test_replaced_env_does_not_use_parent_path) {
+    Popen p;
+    std::string err;
+    p.args({
+               "sh", "-c", "exit 0"
+    })
+        .env({{"FOO", "bar"}});
+    BOOST_CHECK(!p.start(&err));
+    BOOST_CHECK(p.error_code() == std::make_error_code(std::errc::no_such_file_or_directory));
+}
+
+BOOST_AUTO_TEST_CASE(test_user_name_is_owned) {
+    struct passwd *pw = getpwuid(getuid());
+    BOOST_REQUIRE(pw != nullptr);
+
+    Popen p;
+    std::string err;
+    std::string name = pw->pw_name;
+    p.args(shell_args(ExitZero)).user(name.c_str());
+    name.assign(name.size(), 'x');
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE(p.wait(Timeout));
+    BOOST_CHECK_EQUAL(*p.returncode(), 0);
 }
 
 BOOST_AUTO_TEST_CASE(test_shell) {
@@ -765,8 +873,8 @@ BOOST_AUTO_TEST_CASE(test_kill) {
     BOOST_CHECK(p.kill());
 }
 
-// A Popen owns its child by default and takes it down on the way out. detached() is how to ask
-// for Python's behavior instead, where the child simply carries on.
+// A Popen owns its child by default and takes it down on the way out. A process configured as
+// detached before start is independent and cannot be waited or controlled through this object.
 BOOST_AUTO_TEST_CASE(test_detached) {
     // the default: destroying the object ends the child
     {
@@ -800,7 +908,7 @@ BOOST_AUTO_TEST_CASE(test_detached) {
         hard_kill(pid);
     }
 
-    // the flag decides what the destructor does, so setting it after start() works too
+    // Detachment changes how the process is created, so it cannot be enabled after start().
     {
         int pid = -1;
         {
@@ -810,19 +918,41 @@ BOOST_AUTO_TEST_CASE(test_detached) {
             BOOST_REQUIRE_MESSAGE(p.start(&err), err);
             pid = p.pid();
             p.detached(true);
+            BOOST_CHECK(!p.detached());
         }
-        BOOST_CHECK(process_alive(pid));
-        hard_kill(pid);
+        BOOST_CHECK(!process_alive(pid));
     }
 
-    // a child that already exited leaves nothing behind either way
+    // The final detached process is deliberately no longer controllable by Popen.
     {
         Popen p;
         std::string err;
-        p.args(shell_args(ExitZero)).detached(true);
+        p.args(shell_args(SleepLong)).detached(true);
         BOOST_REQUIRE_MESSAGE(p.start(&err), err);
-        BOOST_REQUIRE(p.wait(Timeout));
-        BOOST_CHECK_EQUAL(*p.returncode(), 0);
+        int pid = p.pid();
+        BOOST_REQUIRE(pid > 0);
+        BOOST_CHECK(!p.wait(0));
+        BOOST_CHECK(p.error_code() == std::make_error_code(std::errc::operation_not_supported));
+        BOOST_CHECK(!p.kill());
+        BOOST_CHECK(p.error_code() == std::make_error_code(std::errc::operation_not_supported));
+
+#ifndef _WIN32
+        // The double-forked process belongs to init (or a configured child subreaper), not us.
+        int status = 0;
+        errno = 0;
+        BOOST_CHECK_EQUAL(waitpid(pid, &status, WNOHANG), -1);
+        BOOST_CHECK_EQUAL(errno, ECHILD);
+#endif
+        hard_kill(pid);
+    }
+
+    // Pipes need an owner to drain/close them, so detached mode rejects them.
+    {
+        Popen p;
+        std::string err;
+        p.args(shell_args(ExitZero)).stdout_(Popen::PIPE).detached(true);
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(p.error_code() == std::make_error_code(std::errc::invalid_argument));
     }
 }
 

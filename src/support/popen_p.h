@@ -34,6 +34,7 @@ namespace stdc {
 
         std::filesystem::path cwd;
         std::map<std::string, std::string> env;
+        bool env_set = false;
 
         // std
         IODev stdin_dev;
@@ -64,14 +65,12 @@ namespace stdc {
 
         // user
         struct user_info {
-            bool has_value;
-            bool is_name;
-            union {
-                int num;
-                const char *str;
-            };
+            bool has_value = false;
+            bool is_name = false;
+            int num = -1;
+            std::string str;
         };
-        user_info user = {false, false, {}};
+        user_info user;
 
         int umask = -1;
         int process_group = -1;
@@ -82,11 +81,11 @@ namespace stdc {
         // Data
         //
         bool _child_created = false;
+        bool _detached_started = false;
 
         int pid = -1;
         std::optional<int> returncode;
 
-        std::string _input;
         bool _communication_started = false;
 
         // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L894
@@ -118,10 +117,6 @@ namespace stdc {
         /// so that waiting for a child leaves its pipes open for reading.
         void _reap();
 
-        /// Lets go of a child that is to keep running, arranging for its status to be collected
-        /// so that it does not linger as a zombie.
-        void _release_child();
-
         void _cleanup();
 
         bool _get_devnull();
@@ -147,7 +142,9 @@ namespace stdc {
         /// memory. Defined in popen_unix.cpp.
         struct ChildArgs;
 
-        /// Forks and runs _child_exec() in the child. Returns the pid, or -1.
+        /// Forks and runs _child_exec() in the child. Detached mode returns the second child's
+        /// pid after waiting for its launcher. Returns -1 for an initial fork failure and 0 for
+        /// a detached launcher failure reported through the exec error pipe.
         int _fork_exec(const ChildArgs &ca);
 
         /// Runs in the forked child and never returns. Only async signal safe calls belong here.

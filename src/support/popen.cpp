@@ -7,6 +7,7 @@
 
 #ifdef _WIN32
 #  include <io.h>
+#  include "stdc_windows.h"
 #else
 #  include <csignal>
 #  include <pwd.h>
@@ -129,12 +130,8 @@ namespace stdc {
 
     Popen::Impl::~Impl() {
         if (_child_created && !returncode) {
-            if (detached) {
-                _release_child();
-            } else {
-                std::ignore = kill_impl();
-                std::ignore = _wait();
-            }
+            std::ignore = kill_impl();
+            std::ignore = _wait();
         }
         _cleanup();
     }
@@ -147,9 +144,33 @@ namespace stdc {
 #endif
     }
 
+    static int Popen_close_fd(int fd) {
+#ifdef _WIN32
+        return _close(fd);
+#else
+        return close(fd);
+#endif
+    }
+
     bool Popen::Impl::done() {
-        if (_child_created) {
+        error_code.clear();
+        error_msg.clear();
+        error_api = nullptr;
+
+        if (_child_created || _detached_started) {
             return true;
+        }
+        pid = -1;
+        returncode.reset();
+        _closed_child_pipe_fds = false;
+
+        const auto is_pipe = [](const IODev &dev) {
+            return dev.kind == IODev::Builtin && dev.data.builtin == IOType::PIPE;
+        };
+        if (detached && (is_pipe(stdin_dev) || is_pipe(stdout_dev) || is_pipe(stderr_dev))) {
+            error_code = std::make_error_code(std::errc::invalid_argument);
+            error_msg = "PIPE is not supported for a detached process";
+            return false;
         }
 
         // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L847
@@ -186,7 +207,7 @@ namespace stdc {
         if (user.has_value) {
             if (user.is_name) {
                 errno = 0;
-                struct passwd *pw = getpwnam(user.str);
+                struct passwd *pw = getpwnam(user.str.c_str());
                 if (!pw) {
                     error_code = errno ? std::error_code(errno, std::system_category())
                                        : std::make_error_code(std::errc::invalid_argument);
@@ -224,16 +245,45 @@ namespace stdc {
             return false;
         }
 
-        // convert to file descriptors
+        // Convert the parent's handles to CRT descriptors. _open_osfhandle takes ownership only
+        // on success, so keep the raw handles until each conversion has completed.
         int p2cwrite = -1, c2pread = -1, errread = -1;
+        const int binary_or_text = text ? _O_TEXT : _O_BINARY;
         if (p2cwrite_h != InvalidHandle) {
-            p2cwrite = _open_osfhandle((intptr_t) p2cwrite_h, 0);
+            p2cwrite = _open_osfhandle((intptr_t) p2cwrite_h, _O_WRONLY | binary_or_text);
+            if (p2cwrite != -1)
+                p2cwrite_h = InvalidHandle;
         }
         if (c2pread_h != InvalidHandle) {
-            c2pread = _open_osfhandle((intptr_t) c2pread_h, 0);
+            c2pread = _open_osfhandle((intptr_t) c2pread_h, _O_RDONLY | binary_or_text);
+            if (c2pread != -1)
+                c2pread_h = InvalidHandle;
         }
         if (errread_h != InvalidHandle) {
-            errread = _open_osfhandle((intptr_t) errread_h, 0);
+            errread = _open_osfhandle((intptr_t) errread_h, _O_RDONLY | binary_or_text);
+            if (errread != -1)
+                errread_h = InvalidHandle;
+        }
+        if ((p2cwrite_h != InvalidHandle && p2cwrite == -1) ||
+            (c2pread_h != InvalidHandle && c2pread == -1) ||
+            (errread_h != InvalidHandle && errread == -1)) {
+            error_code = errno ? std::error_code(errno, std::generic_category())
+                               : std::make_error_code(std::errc::bad_file_descriptor);
+            error_api = "_open_osfhandle";
+            if (p2cwrite != -1)
+                _close(p2cwrite);
+            if (c2pread != -1)
+                _close(c2pread);
+            if (errread != -1)
+                _close(errread);
+            if (p2cwrite_h != InvalidHandle)
+                ::CloseHandle(p2cwrite_h);
+            if (c2pread_h != InvalidHandle)
+                ::CloseHandle(c2pread_h);
+            if (errread_h != InvalidHandle)
+                ::CloseHandle(errread_h);
+            _close_pipe_fds_1(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
+            return false;
         }
 #else
         Handle p2cread = InvalidHandle, p2cwrite = InvalidHandle;
@@ -243,16 +293,37 @@ namespace stdc {
             return false;
         }
 #endif
-        // open C File objects
-        if (p2cwrite != -1) {
-            stdin_stream.open(Popen_fdopen(p2cwrite, text ? "w" : "wb"));
+        // Turn all descriptors into FILE objects transactionally. A failed fdopen leaves its
+        // descriptor owned by the caller, so every partial result needs explicit cleanup.
+        FILE *stdin_file = p2cwrite == -1 ? nullptr : Popen_fdopen(p2cwrite, text ? "w" : "wb");
+        FILE *stdout_file = c2pread == -1 ? nullptr : Popen_fdopen(c2pread, text ? "r" : "rb");
+        FILE *stderr_file = errread == -1 ? nullptr : Popen_fdopen(errread, text ? "r" : "rb");
+        if ((p2cwrite != -1 && !stdin_file) || (c2pread != -1 && !stdout_file) ||
+            (errread != -1 && !stderr_file)) {
+            error_code = errno ? std::error_code(errno, std::generic_category())
+                               : std::make_error_code(std::errc::io_error);
+            error_api = "fdopen";
+            if (stdin_file)
+                std::fclose(stdin_file);
+            else if (p2cwrite != -1)
+                Popen_close_fd(p2cwrite);
+            if (stdout_file)
+                std::fclose(stdout_file);
+            else if (c2pread != -1)
+                Popen_close_fd(c2pread);
+            if (stderr_file)
+                std::fclose(stderr_file);
+            else if (errread != -1)
+                Popen_close_fd(errread);
+            _close_pipe_fds_1(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
+            return false;
         }
-        if (c2pread != -1) {
-            stdout_stream.open(Popen_fdopen(c2pread, text ? "r" : "rb"));
-        }
-        if (errread != -1) {
-            stderr_stream.open(Popen_fdopen(errread, text ? "r" : "rb"));
-        }
+        if (stdin_file)
+            stdin_stream.open(stdin_file);
+        if (stdout_file)
+            stdout_stream.open(stdout_file);
+        if (stderr_file)
+            stderr_stream.open(stderr_file);
 
 #ifdef _WIN32
         bool result = _execute_child(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
@@ -266,6 +337,11 @@ namespace stdc {
             close_std_files();
             if (!_closed_child_pipe_fds) {
                 _close_pipe_fds_1(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);
+            }
+            // A POSIX exec failure briefly created and then reaped a child. Externally start()
+            // still failed, so restore the pre-start state and allow a corrected retry.
+            if (returncode) {
+                _child_created = false;
             }
         }
         return result;
@@ -328,32 +404,59 @@ namespace stdc {
             return {};
         }
 
-        const auto &read_all = [](FILE *file, std::string &dest) {
-            char buf[4096];
-            size_t n;
-            while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
-                dest.append(buf, n);
+        std::string out, err;
+        std::thread out_thread, err_thread, in_thread;
+        std::exception_ptr out_error, err_error, in_error;
+
+        const auto &read_all = [](FILE *file, std::string &dest, std::exception_ptr &error) {
+            try {
+                char buf[4096];
+                size_t n;
+                while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
+                    dest.append(buf, n);
+                }
+            } catch (...) {
+                error = std::current_exception();
             }
         };
 
-        std::string out, err;
-        std::thread out_thread, err_thread;
-        if (stdout_stream.is_open()) {
-            out_thread = std::thread(read_all, stdout_stream.file(), std::ref(out));
-        }
-        if (stderr_stream.is_open()) {
-            err_thread = std::thread(read_all, stderr_stream.file(), std::ref(err));
-        }
-
-        // Write the input and close the pipe. Closing is the only thing that tells a child
-        // reading to end of input that there is no more coming.
-        if (stdin_stream.is_open()) {
-            sigpipe_guard guard;
-            if (!input.empty()) {
-                stdin_stream.write(input.data(), std::streamsize(input.size()));
+        try {
+            if (stdout_stream.is_open()) {
+                out_thread =
+                    std::thread(read_all, stdout_stream.file(), std::ref(out), std::ref(out_error));
             }
-            stdin_stream.flush();
+            if (stderr_stream.is_open()) {
+                err_thread =
+                    std::thread(read_all, stderr_stream.file(), std::ref(err), std::ref(err_error));
+            }
+
+            // Input has its own worker too. Otherwise a child that never reads can fill the pipe
+            // and block this thread before it ever reaches the timeout below.
+            if (stdin_stream.is_open()) {
+                in_thread = std::thread([&] {
+                    try {
+                        sigpipe_guard guard;
+                        if (!input.empty()) {
+                            stdin_stream.write(input.data(), std::streamsize(input.size()));
+                        }
+                        stdin_stream.flush();
+                        stdin_stream.close();
+                    } catch (...) {
+                        in_error = std::current_exception();
+                    }
+                });
+            }
+        } catch (...) {
+            // No writer exists yet when thread construction can fail, so closing stdin is safe.
             stdin_stream.close();
+            std::ignore = kill_impl();
+            std::ignore = _wait();
+            if (out_thread.joinable())
+                out_thread.join();
+            if (err_thread.joinable())
+                err_thread.join();
+            close_std_files();
+            throw;
         }
         _communication_started = true;
 
@@ -367,6 +470,9 @@ namespace stdc {
                 wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
         }
 
+        if (in_thread.joinable()) {
+            in_thread.join();
+        }
         if (out_thread.joinable()) {
             out_thread.join();
         }
@@ -374,6 +480,13 @@ namespace stdc {
             err_thread.join();
         }
         close_std_files();
+
+        if (in_error)
+            std::rethrow_exception(in_error);
+        if (out_error)
+            std::rethrow_exception(out_error);
+        if (err_error)
+            std::rethrow_exception(err_error);
         return {out, err};
     }
 
@@ -422,6 +535,7 @@ namespace stdc {
     Popen &Popen::env(const std::map<std::string, std::string> &env) {
         stdc_impl_t;
         impl.env = env;
+        impl.env_set = true;
         return *this;
     }
 
@@ -457,7 +571,8 @@ namespace stdc {
 
     Popen &Popen::detached(bool detached) {
         stdc_impl_t;
-        impl.detached = detached;
+        if (!impl._child_created && !impl._detached_started)
+            impl.detached = detached;
         return *this;
     }
 
@@ -528,7 +643,7 @@ namespace stdc {
         auto &info = _impl->user;
         info.has_value = true;
         info.is_name = true;
-        info.str = user;
+        info.str = user ? user : "";
         return *this;
     }
 
