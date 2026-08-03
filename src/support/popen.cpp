@@ -399,6 +399,13 @@ namespace stdc {
                                                                        int timeout) {
         error_code.clear();
 
+        // Same answer as the other five, rather than the no_such_process the check below would
+        // give. A detached child exists, it is just not ours to talk to.
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return {};
+        }
+
         if (!_child_created) {
             error_code = std::make_error_code(std::errc::no_such_process);
             return {};

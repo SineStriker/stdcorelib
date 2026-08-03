@@ -136,7 +136,7 @@ while (std::getline(proc.stdout_(), line)) {
 
 `communicate()` is the one to reach for when more than one pipe is open. Draining them by hand, one at a time, deadlocks as soon as the other one fills.
 
-A `Popen` owns its child and kills it on the way out. `detached(true)` asks for Python's behavior instead, where the child carries on.
+A `Popen` owns its child and kills it on the way out. `detached(true)` gives that up: the child is launched independently and this process keeps nothing but its pid.
 
 ### Logging
 
