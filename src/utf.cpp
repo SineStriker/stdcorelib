@@ -85,11 +85,17 @@ namespace stdc::utf {
                 }
 
                 // A sequence cut off by the end of the input is not valid, but it is not garbage
-                // either, so it is consumed whole rather than one byte at a time.
+                // either, so what there is of it is consumed whole rather than one byte at a
+                // time. Only the part that was still on its way to being valid counts: E0 80 at
+                // the end of the input is not a truncated sequence, it is E0 followed by a byte
+                // that could never have come after it.
                 if (pos + size_t(length) > s.size()) {
                     size_t taken = 1;
-                    while (pos + taken < s.size() && is_continuation(uint8_t(s[pos + taken]))) {
-                        ++taken;
+                    if (pos + 1 < s.size() && second_byte_ok(lead, uint8_t(s[pos + 1]))) {
+                        taken = 2;
+                        while (pos + taken < s.size() && is_continuation(uint8_t(s[pos + taken]))) {
+                            ++taken;
+                        }
                     }
                     pos += taken;
                     return false;

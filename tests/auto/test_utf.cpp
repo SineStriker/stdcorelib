@@ -132,6 +132,14 @@ BOOST_AUTO_TEST_CASE(test_replacement_is_local) {
     BOOST_REQUIRE_EQUAL(out.size(), 2u);
     BOOST_CHECK(out[0] == U'A');
     BOOST_CHECK(out[1] == Fffd);
+
+    // but only what was still on its way to being valid counts as truncated. E0 announces three
+    // bytes and 80 is a continuation byte, yet no sequence starting E0 80 could have been
+    // completed, so this is two errors rather than one.
+    out = utf::utf8_to_utf32(bytes({0xE0, 0x80}));
+    BOOST_REQUIRE_EQUAL(out.size(), 2u);
+    BOOST_CHECK(out[0] == Fffd);
+    BOOST_CHECK(out[1] == Fffd);
 }
 
 // A conversion writes into a fixed buffer until the input outgrows it. Nothing may change at
