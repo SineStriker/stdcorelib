@@ -2,9 +2,7 @@
 
 #include "winapi.h"
 
-namespace stdc {
-
-}
+namespace stdc {}
 
 namespace stdc::winapi {
 
@@ -54,6 +52,8 @@ namespace stdc::winapi {
     }
 
     std::wstring kernel32::GetDllDirectoryW() {
+        // The size asked for counts the terminator. The size written back does not, which is why
+        // the result cannot keep the length from the first call.
         auto size = ::GetDllDirectoryW(0, nullptr);
         if (size == 0) {
             return {};
@@ -61,9 +61,11 @@ namespace stdc::winapi {
 
         std::wstring res;
         res.resize(size);
-        if (!::GetDllDirectoryW(size, res.data())) {
-            return {};
+        auto written = ::GetDllDirectoryW(size, res.data());
+        if (written == 0 || written >= size) {
+            return {}; // failed, or grew between the two calls
         }
+        res.resize(written);
         return res;
     }
 
@@ -96,39 +98,50 @@ namespace stdc::winapi {
         return {};
     }
 
-    std::wstring kernel32::GetEnvironmentVariableW(LPCWSTR name, bool *ok) {
+    std::wstring kernel32::GetEnvironmentVariableW(LPCWSTR name, bool *exists) {
+        // As above, the size asked for counts the terminator and the size written back does not.
         DWORD size = ::GetEnvironmentVariableW(name, nullptr, 0);
         if (size == 0) {
-            if (ok)
-                *ok = GetLastError() == ERROR_ENVVAR_NOT_FOUND;
+            if (exists)
+                *exists = false;
             return {};
         }
+
         std::wstring res;
         res.resize(size - 1);
-        if (::GetEnvironmentVariableW(name, res.data(), size) == 0) {
-            if (ok)
-                *ok = false;
+        // A variable set to nothing writes nothing, so zero is an answer as well as a failure and
+        // only the last error tells them apart.
+        ::SetLastError(ERROR_SUCCESS);
+        DWORD written = ::GetEnvironmentVariableW(name, res.data(), size);
+        if (written >= size || (written == 0 && ::GetLastError() != ERROR_SUCCESS)) {
+            if (exists)
+                *exists = false;
             return {};
         }
-        if (ok)
-            *ok = true;
+        res.resize(written);
+        if (exists)
+            *exists = true;
         return res;
     }
 
     std::wstring kernel32::ExpandEnvironmentStringsW(LPCWSTR src, bool *ok) {
+        // This one counts the terminator both times, unlike the two above.
         DWORD size = ::ExpandEnvironmentStringsW(src, nullptr, 0);
         if (size == 0) {
             if (ok)
                 *ok = false;
             return {};
         }
+
         std::wstring res;
         res.resize(size);
-        if (::ExpandEnvironmentStringsW(src, res.data(), size) == 0) {
+        DWORD written = ::ExpandEnvironmentStringsW(src, res.data(), size);
+        if (written == 0 || written > size) {
             if (ok)
                 *ok = false;
             return {};
         }
+        res.resize(written - 1);
         if (ok)
             *ok = true;
         return res;
