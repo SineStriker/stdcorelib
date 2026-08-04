@@ -245,22 +245,24 @@ namespace stdc {
 
 }
 
-/// Defines the storage for a StaticRegistry over \a TYPE, decorated with \a EXPORT.
+/// Defines the storage for a \c StaticRegistry over \a TYPE, decorated with \a EXPORT.
 ///
 /// Put this in exactly one translation unit of the module that owns the registry, which in a
 /// plugin arrangement is the host. \a EXPORT is what makes the list reachable from a plugin:
 /// \c __declspec(dllexport) on Windows, or nothing on the platforms where \c -rdynamic on the
 /// host is what does it.
+/// Both of these have to sit where they can name stdc, which is the global scope or inside stdc
+/// itself. Naming it rather than reopening it is what makes writing them anywhere else say so:
+/// the compiler answers "in namespace X, which does not enclose namespace stdc" instead of
+/// failing somewhere inside this header.
 #define STDCORELIB_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, EXPORT)                                \
-    namespace stdc {                                                                               \
-        template <class T>                                                                         \
-        typename StaticRegistry<T>::Node *StaticRegistry<T>::_head = nullptr;                      \
-        template <class T>                                                                         \
-        typename StaticRegistry<T>::Node *StaticRegistry<T>::_tail = nullptr;                      \
-        template class EXPORT StaticRegistry<TYPE>;                                                \
-    }
+    template <class T>                                                                             \
+    typename ::stdc::StaticRegistry<T>::Node * ::stdc::StaticRegistry<T>::_head = nullptr;         \
+    template <class T>                                                                             \
+    typename ::stdc::StaticRegistry<T>::Node * ::stdc::StaticRegistry<T>::_tail = nullptr;         \
+    template class EXPORT ::stdc::StaticRegistry<TYPE>;
 
-/// Defines the storage for a StaticRegistry over \a TYPE, undecorated.
+/// Defines the storage for a \c StaticRegistry over \a TYPE, undecorated.
 ///
 /// Enough for a registry that lives in one module. A host that means to accept registrations
 /// from a plugin wants the EXPORT form above instead.
