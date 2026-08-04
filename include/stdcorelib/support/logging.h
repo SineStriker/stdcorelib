@@ -91,6 +91,10 @@ namespace stdc {
         using LogCallback = void (*)(int, const LogContext &, const std::string_view &);
 
         static LogCallback logCallback();
+
+        /// Replaces the sink every record goes to.
+        ///
+        /// \param callback the new sink, or \c nullptr to put the built-in one back
         static void setLogCallback(LogCallback callback);
 
     protected:

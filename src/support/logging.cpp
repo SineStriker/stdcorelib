@@ -185,11 +185,14 @@ namespace stdc {
             return;
         }
 
-        FILE *out;
+        // Information sits above Success in the enum, so it arrives here rather than being
+        // dropped above, and print() takes an int that need not be a Level at all. Neither is a
+        // reason to lose the message, so anything without a color of its own goes to stdout
+        // plain.
+        FILE *out = stdout;
         auto color = console::nocolor;
         switch (level) {
             case Logger::Success:
-                out = stdout;
                 color = console::lightgreen;
                 break;
             case Logger::Warning:
@@ -202,8 +205,7 @@ namespace stdc {
                 color = console::red;
                 break;
             default:
-                assert(false);
-                return;
+                break;
         }
         console::fputs(console::nostyle, color, console::nocolor, message, out);
     }
@@ -271,7 +273,7 @@ namespace stdc {
     }
 
     void Logger::setLogCallback(LogCallback callback) {
-        LogRegistry::callback = callback;
+        LogRegistry::callback = callback ? callback : defaultLogCallback;
     }
 
     LogCategory::LogCategory(const char *name) : _name(name) {

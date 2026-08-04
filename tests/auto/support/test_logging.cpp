@@ -1,10 +1,27 @@
 // SPDX-License-Identifier: MIT
 
+#include <cstdio>
 #include <string>
 
 #include <stdcorelib/support/logging.h>
 
 #include <boost/test/unit_test.hpp>
+
+#ifdef _WIN32
+#  include <io.h>
+#  define stdc_dup    _dup
+#  define stdc_dup2   _dup2
+#  define stdc_close  _close
+#  define stdc_fileno _fileno
+#  define NullDevice  "NUL"
+#else
+#  include <unistd.h>
+#  define stdc_dup    dup
+#  define stdc_dup2   dup2
+#  define stdc_close  close
+#  define stdc_fileno fileno
+#  define NullDevice  "/dev/null"
+#endif
 
 using namespace stdc;
 
@@ -51,6 +68,36 @@ namespace {
         ++g_emitCount;
         g_lastLevel = level;
     }
+
+    // Sends stdout and stderr to the null device for as long as it lives. The default sink
+    // writes to them directly, so exercising it would otherwise scatter output through the test
+    // report.
+    class SilencedOutput {
+    public:
+        SilencedOutput() {
+            std::fflush(stdout);
+            std::fflush(stderr);
+            _out = stdc_dup(stdc_fileno(stdout));
+            _err = stdc_dup(stdc_fileno(stderr));
+            if (FILE *sink = std::fopen(NullDevice, "w")) {
+                stdc_dup2(stdc_fileno(sink), stdc_fileno(stdout));
+                stdc_dup2(stdc_fileno(sink), stdc_fileno(stderr));
+                std::fclose(sink);
+            }
+        }
+        ~SilencedOutput() {
+            std::fflush(stdout);
+            std::fflush(stderr);
+            stdc_dup2(_out, stdc_fileno(stdout));
+            stdc_dup2(_err, stdc_fileno(stderr));
+            stdc_close(_out);
+            stdc_close(_err);
+        }
+
+    private:
+        int _out = -1;
+        int _err = -1;
+    };
 
 }
 
@@ -298,6 +345,45 @@ BOOST_AUTO_TEST_CASE(test_macros) {
     BOOST_CHECK_EQUAL(afterCategory, 2);
     BOOST_CHECK_EQUAL(afterDefault, 3);
     BOOST_CHECK_EQUAL(g_lastLevel, int(Logger::Warning));
+}
+
+// Every test above replaces the sink, so the built-in one had never been run. It asserted on
+// Information, which sits above Success in the enum and so reaches the switch rather than being
+// dropped by the level gate ahead of it.
+BOOST_AUTO_TEST_CASE(test_default_sink_takes_every_level) {
+    LoggingGuard guard;
+    Logger::setLogCallback(nullptr); // put the built-in one back
+    SilencedOutput silenced;
+
+    LogContext context(__FILE__, __LINE__, __FUNCTION__, "stdc.sink");
+    for (int level = Logger::Trace; level <= Logger::Fatal; ++level) {
+        Logger(context).print(level, "message");
+    }
+
+    // print() takes an int, so a caller is free to invent a level. That must not be fatal
+    // either.
+    Logger(context).print(0, "below everything");
+    Logger(context).print(42, "past the end");
+    Logger(context).print(-1, "negative");
+
+    BOOST_CHECK(true); // reaching here is the assertion
+}
+
+// nullptr means the built-in sink, the way it does for setLogFilter(). Assigning it raw would
+// leave a null pointer for the next record to call through.
+BOOST_AUTO_TEST_CASE(test_null_callback_restores_the_default) {
+    LoggingGuard guard;
+    auto original = Logger::logCallback();
+
+    Logger::setLogCallback(captureSink);
+    BOOST_CHECK(Logger::logCallback() == captureSink);
+
+    Logger::setLogCallback(nullptr);
+    BOOST_CHECK(Logger::logCallback() != nullptr);
+    BOOST_CHECK(Logger::logCallback() == original);
+
+    SilencedOutput silenced;
+    stdcWarning("goes to the built-in sink without crashing");
 }
 
 BOOST_AUTO_TEST_SUITE_END()
