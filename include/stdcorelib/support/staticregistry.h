@@ -215,6 +215,9 @@ namespace stdc {
         /// \note The lambda has to say it returns Created. One returning
         ///       \c std::unique_ptr<Mp3Codec> is a different function type and will not convert,
         ///       even though the pointers themselves would.
+        /// \note Only values known where the lambda is written can go in it. Capturing something
+        ///       decided at run time makes a closure, which is no longer a function pointer.
+        ///       DynamicRegistry holds a \c std::function and takes those.
         class AddFactory {
         public:
             AddFactory(std::string_view name, std::string_view desc, Created (*factory)())
