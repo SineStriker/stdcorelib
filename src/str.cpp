@@ -14,6 +14,7 @@
 
 #include "path.h"
 #include "str_p.h"
+#include "utf.h"
 
 namespace stdc {
 
@@ -167,30 +168,13 @@ namespace stdc {
         }
 
         std::wstring conv<std::wstring>::from_utf8(const char *s, int size) {
-            if (size < 0) {
-                size = int(std::strlen(s));
-            }
-            if (size == 0) {
-                return {};
-            }
-#ifdef _WIN32
-            return winapi::kernel32::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-                                                         std::string_view(s, size));
-#else
-            return std::filesystem::path(std::string(s, size)).wstring();
-#endif
+            return utf::utf8_to_wide(size < 0 ? std::string_view(s) : std::string_view(s, size),
+                                     utf::fail);
         }
 
         std::string conv<std::wstring>::to_utf8(const wchar_t *s, int size) {
-            std::wstring_view sv = size < 0 ? std::wstring_view(s) : std::wstring_view(s, size);
-            if (sv.empty()) {
-                return {};
-            }
-#ifdef _WIN32
-            return winapi::kernel32::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, sv);
-#else
-            return std::filesystem::path(std::wstring(sv)).string();
-#endif
+            return utf::wide_to_utf8(size < 0 ? std::wstring_view(s) : std::wstring_view(s, size),
+                                     utf::fail);
         }
 
 #ifdef _WIN32

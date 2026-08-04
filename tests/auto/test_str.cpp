@@ -437,6 +437,18 @@ BOOST_AUTO_TEST_CASE(test_codec_convert) {
         BOOST_CHECK_EQUAL(wstring_conv::to_utf8(wide), utf8);
     }
 
+    // text that is not valid UTF-8 gives an empty string rather than throwing or returning
+    // something half converted
+    BOOST_CHECK(wstring_conv::from_utf8("\x80").empty());          // continuation with no lead
+    BOOST_CHECK(wstring_conv::from_utf8("ab\xE4\xB8", 4).empty()); // cut short at the end
+
+    // and the same going the other way, where a lone surrogate is the invalid case UTF-16
+    // wide platforms have
+    if constexpr (sizeof(wchar_t) == 2) {
+        const std::wstring lone(1, wchar_t(0xD800));
+        BOOST_CHECK(wstring_conv::to_utf8(lone).empty());
+    }
+
 #ifdef _WIN32
     {
         std::wstring actual = wstring_conv::from_ansi("HelloWorld");

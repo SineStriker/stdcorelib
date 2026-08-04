@@ -59,6 +59,15 @@ namespace stdc {
                 return to_utf8(s);
             }
 
+            /// \name UTF-8
+            ///
+            /// Text that is not valid in the encoding it claims converts to an empty string.
+            /// Pass \a size for text that is not null terminated.
+            ///
+            /// \sa utf::utf8_to_wide(), utf::wide_to_utf8(), which can put U+FFFD where the bad
+            ///     sequence was instead of giving up on the whole string
+            /// @{
+
             STDCORELIB_EXPORT static std::wstring from_utf8(const char *s, int size = -1);
 
             static inline std::wstring from_utf8(const std::string_view &s) {
@@ -71,7 +80,15 @@ namespace stdc {
                 return to_utf8(s.data(), int(s.size()));
             }
 
+            /// @}
+
 #ifdef _WIN32
+            /// \name ANSI
+            ///
+            /// The same, against the process code page rather than UTF-8. This is a Windows
+            /// notion and a Windows API call, so it exists only there.
+            /// @{
+
             STDCORELIB_EXPORT static std::wstring from_ansi(const char *s, int size = -1);
 
             static inline std::wstring from_ansi(const std::string_view &s) {
@@ -83,6 +100,8 @@ namespace stdc {
             static inline std::string to_ansi(const std::wstring_view &s) {
                 return to_ansi(s.data(), int(s.size()));
             }
+
+            /// @}
 #endif
         };
 
