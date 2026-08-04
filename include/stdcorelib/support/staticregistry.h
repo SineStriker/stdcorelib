@@ -55,14 +55,10 @@ namespace stdc {
     public:
         using type = T;
 
-        /// What a factory hands back. Spelling it out is what a lambda passed to AddFactory has
-        /// to return, so it is worth a name.
-        using Created = std::unique_ptr<T>;
-
         /// One registered implementation: what it is called, and how to make one.
         class Entry {
         public:
-            Entry(std::string_view name, std::string_view desc, Created (*ctor)())
+            Entry(std::string_view name, std::string_view desc, std::unique_ptr<T> (*ctor)())
                 : _name(name), _desc(desc), _ctor(ctor) {
             }
 
@@ -75,14 +71,14 @@ namespace stdc {
 
             /// Makes one. A fresh object every call, so the registry holds descriptions rather
             /// than instances.
-            Created instantiate() const {
+            std::unique_ptr<T> instantiate() const {
                 return _ctor();
             }
 
         private:
             std::string_view _name;
             std::string_view _desc;
-            Created (*_ctor)();
+            std::unique_ptr<T> (*_ctor)();
         };
 
         class Iterator;
@@ -190,8 +186,8 @@ namespace stdc {
             }
 
         private:
-            static Created construct() {
-                return Created(new V());
+            static std::unique_ptr<T> construct() {
+                return std::make_unique<V>();
             }
 
             Entry _entry;
@@ -207,20 +203,21 @@ namespace stdc {
         /// arguments are baked in at the call site with no allocation and nothing to spell out:
         ///
         /// \code
-        ///   static CodecRegistry::AddFactory x("mp3", "MPEG Layer III", []() -> Created {
-        ///       return std::unique_ptr<Codec>(new Mp3Codec(44100, 2));
-        ///   });
+        ///   static CodecRegistry::AddFactory x(
+        ///       "mp3", "MPEG Layer III",
+        ///       []() -> std::unique_ptr<Codec> { return std::make_unique<Mp3Codec>(44100, 2); });
         /// \endcode
         ///
-        /// \note The lambda has to say it returns Created. One returning
-        ///       \c std::unique_ptr<Mp3Codec> is a different function type and will not convert,
-        ///       even though the pointers themselves would.
+        /// \note The lambda has to name the base in its return type, \c std::unique_ptr<Codec>
+        ///       above. One returning \c std::unique_ptr<Mp3Codec> is a different function type
+        ///       and will not convert, even though the pointers themselves would.
         /// \note Only values known where the lambda is written can go in it. Capturing something
         ///       decided at run time makes a closure, which is no longer a function pointer.
         ///       DynamicRegistry holds a \c std::function and takes those.
         class AddFactory {
         public:
-            AddFactory(std::string_view name, std::string_view desc, Created (*factory)())
+            AddFactory(std::string_view name, std::string_view desc,
+                       std::unique_ptr<T> (*factory)())
                 : _entry(name, desc, factory), _node(_entry) {
                 add_node(&_node);
             }

@@ -63,8 +63,8 @@ namespace {
 
     // Constructor arguments, baked in at the call site. A capture-less lambda is a function
     // pointer, so this costs no more than the Add above.
-    CodecRegistry::AddFactory pcm_entry("pcm", "Linear PCM", []() -> CodecRegistry::Created {
-        return std::unique_ptr<Codec>(new PcmCodec(44100, 2));
+    CodecRegistry::AddFactory pcm_entry("pcm", "Linear PCM", []() -> std::unique_ptr<Codec> {
+        return std::make_unique<PcmCodec>(44100, 2);
     });
 
 }
