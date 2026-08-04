@@ -87,6 +87,10 @@
 #  define STDCORELIB_NO_UNIQUE_ADDRESS
 #endif
 
+#if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+#  define STDCORELIB_EXCEPTIONS 1
+#endif
+
 #ifndef STDC_TSTR
 #  ifdef _WIN32
 #    define STDC_TSTR(T) L##T

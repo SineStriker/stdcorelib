@@ -390,6 +390,23 @@ namespace stdc {
         STDCORELIB_DISABLE_COPY_MOVE(sigpipe_guard)
     };
 
+    /// Runs \a body on a worker thread and leaves whatever it throws in \a error for the thread
+    /// that joins it, since an exception crossing a thread boundary would call std::terminate.
+    template <class F>
+    void run_capturing(std::exception_ptr &error, F &&body) {
+#ifdef STDCORELIB_EXCEPTIONS
+        try {
+            body();
+        } catch (...) {
+            error = std::current_exception();
+        }
+#else
+        // Nothing can be thrown here, so nothing arrives to be reported and the slot stays empty.
+        (void) error;
+        body();
+#endif
+    }
+
     // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1862
     //
     // A pipe blocks its writer once full, so stdout and stderr cannot be drained after the child
@@ -416,18 +433,16 @@ namespace stdc {
         std::exception_ptr out_error, err_error, in_error;
 
         const auto &read_all = [](FILE *file, std::string &dest, std::exception_ptr &error) {
-            try {
+            run_capturing(error, [&] {
                 char buf[4096];
                 size_t n;
                 while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
                     dest.append(buf, n);
                 }
-            } catch (...) {
-                error = std::current_exception();
-            }
+            });
         };
 
-        try {
+        const auto &start_workers = [&] {
             if (stdout_stream.is_open()) {
                 out_thread =
                     std::thread(read_all, stdout_stream.file(), std::ref(out), std::ref(out_error));
@@ -441,18 +456,21 @@ namespace stdc {
             // and block this thread before it ever reaches the timeout below.
             if (stdin_stream.is_open()) {
                 in_thread = std::thread([&] {
-                    try {
+                    run_capturing(in_error, [&] {
                         sigpipe_guard guard;
                         if (!input.empty()) {
                             stdin_stream.write(input.data(), std::streamsize(input.size()));
                         }
                         stdin_stream.flush();
                         stdin_stream.close();
-                    } catch (...) {
-                        in_error = std::current_exception();
-                    }
+                    });
                 });
             }
+        };
+
+#ifdef STDCORELIB_EXCEPTIONS
+        try {
+            start_workers();
         } catch (...) {
             // No writer exists yet when thread construction can fail, so closing stdin is safe.
             stdin_stream.close();
@@ -465,6 +483,11 @@ namespace stdc {
             close_std_files();
             throw;
         }
+#else
+        // Starting a thread can still fail, but without exceptions it takes the process down
+        // where it happens rather than arriving here to be cleaned up after.
+        start_workers();
+#endif
         _communication_started = true;
 
         // A timeout kills the child rather than leaving it behind. Its exit is what closes the

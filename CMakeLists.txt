@@ -8,7 +8,7 @@ project(stdcorelib VERSION 0.0.1.2 LANGUAGES CXX)
 option(STDCORELIB_BUILD_STATIC "Build static library" OFF)
 option(STDCORELIB_BUILD_SHARED "Build shared library" OFF)
 option(STDCORELIB_BUILD_TESTS "Build test cases" OFF)
-option(STDCORELIB_ENABLE_EXCEPTIONS "Disable exceptions" ON)
+option(STDCORELIB_ENABLE_EXCEPTIONS "Build the library with exceptions" ON)
 option(STDCORELIB_INSTALL "Install library" ON)
 
 # ----------------------------------
@@ -127,7 +127,10 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE STDCORELIB_LIBRARY)
 
 if(NOT STDCORELIB_ENABLE_EXCEPTIONS)
     if(MSVC)
-        target_compile_options(${PROJECT_NAME} PRIVATE /EHsc-)
+        # Not /EHsc-, which does not disable anything: the trailing minus binds to the c, so it
+        # says extern "C" functions may throw and leaves exceptions on. _CPPUNWIND stays defined.
+        # C4530 is the standard library's own try blocks, which are unreachable here.
+        target_compile_options(${PROJECT_NAME} PRIVATE /EHs-c- /wd4530)
     else()
         target_compile_options(${PROJECT_NAME} PRIVATE -fno-exceptions)
     endif()
