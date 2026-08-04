@@ -55,10 +55,14 @@ namespace stdc {
     public:
         using type = T;
 
+        /// What a factory hands back. Spelling it out is what a lambda passed to AddFactory has
+        /// to return, so it is worth a name.
+        using Created = std::unique_ptr<T>;
+
         /// One registered implementation: what it is called, and how to make one.
         class Entry {
         public:
-            Entry(std::string_view name, std::string_view desc, std::unique_ptr<T> (*ctor)())
+            Entry(std::string_view name, std::string_view desc, Created (*ctor)())
                 : _name(name), _desc(desc), _ctor(ctor) {
             }
 
@@ -71,14 +75,14 @@ namespace stdc {
 
             /// Makes one. A fresh object every call, so the registry holds descriptions rather
             /// than instances.
-            std::unique_ptr<T> instantiate() const {
+            Created instantiate() const {
                 return _ctor();
             }
 
         private:
             std::string_view _name;
             std::string_view _desc;
-            std::unique_ptr<T> (*_ctor)();
+            Created (*_ctor)();
         };
 
         class Iterator;
@@ -169,12 +173,14 @@ namespace stdc {
             _tail = node;
         }
 
-        /// Registers \a V for as long as this object lives, which for a static object is the
-        /// whole program.
+        /// Registers \a V, default constructed, for as long as this object lives. For a static
+        /// object that is the whole program.
         ///
         /// \code
         ///   static CodecRegistry::Add<FlacCodec> x("flac", "Free Lossless Audio Codec");
         /// \endcode
+        ///
+        /// \sa AddFactory, for an implementation that is not default constructible
         template <class V>
         class Add {
         public:
@@ -184,14 +190,43 @@ namespace stdc {
             }
 
         private:
-            static std::unique_ptr<T> construct() {
-                return std::unique_ptr<T>(new V());
+            static Created construct() {
+                return Created(new V());
             }
 
             Entry _entry;
             Node _node;
 
             STDCORELIB_DISABLE_COPY_MOVE(Add)
+        };
+
+        /// Registers something built the way \a factory says, for the implementations that take
+        /// constructor arguments, come from a factory function, or are not one type at all.
+        ///
+        /// A lambda that captures nothing converts to the function pointer this takes, so the
+        /// arguments are baked in at the call site with no allocation and nothing to spell out:
+        ///
+        /// \code
+        ///   static CodecRegistry::AddFactory x("mp3", "MPEG Layer III", []() -> Created {
+        ///       return std::unique_ptr<Codec>(new Mp3Codec(44100, 2));
+        ///   });
+        /// \endcode
+        ///
+        /// \note The lambda has to say it returns Created. One returning
+        ///       \c std::unique_ptr<Mp3Codec> is a different function type and will not convert,
+        ///       even though the pointers themselves would.
+        class AddFactory {
+        public:
+            AddFactory(std::string_view name, std::string_view desc, Created (*factory)())
+                : _entry(name, desc, factory), _node(_entry) {
+                add_node(&_node);
+            }
+
+        private:
+            Entry _entry;
+            Node _node;
+
+            STDCORELIB_DISABLE_COPY_MOVE(AddFactory)
         };
 
         StaticRegistry() = delete;

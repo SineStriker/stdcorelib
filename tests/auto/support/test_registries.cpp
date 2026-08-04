@@ -34,6 +34,20 @@ namespace {
         }
     };
 
+    // No default constructor, which is what Add<V> cannot reach.
+    class PcmCodec : public Codec {
+    public:
+        PcmCodec(int rate, int channels) : _rate(rate), _channels(channels) {
+        }
+        std::string id() const override {
+            return "pcm-" + std::to_string(_rate) + "-" + std::to_string(_channels);
+        }
+
+    private:
+        int _rate;
+        int _channels;
+    };
+
 }
 
 STDCORELIB_INSTANTIATE_STATIC_REGISTRY(Codec)
@@ -47,6 +61,12 @@ namespace {
     CodecRegistry::Add<FlacCodec> flac_entry("flac", "Free Lossless Audio Codec");
     CodecRegistry::Add<OpusCodec> opus_entry("opus", "Opus Interactive Audio Codec");
 
+    // Constructor arguments, baked in at the call site. A capture-less lambda is a function
+    // pointer, so this costs no more than the Add above.
+    CodecRegistry::AddFactory pcm_entry("pcm", "Linear PCM", []() -> CodecRegistry::Created {
+        return std::unique_ptr<Codec>(new PcmCodec(44100, 2));
+    });
+
 }
 
 BOOST_AUTO_TEST_SUITE(test_registries)
@@ -57,9 +77,27 @@ BOOST_AUTO_TEST_CASE(test_static_registry_is_filled_before_main) {
         names.push_back(std::string(entry.name()));
     }
 
-    BOOST_REQUIRE_EQUAL(names.size(), 2u);
+    BOOST_REQUIRE_EQUAL(names.size(), 3u);
     BOOST_CHECK_EQUAL(names[0], "flac"); // registration order, not sorted
     BOOST_CHECK_EQUAL(names[1], "opus");
+    BOOST_CHECK_EQUAL(names[2], "pcm");
+}
+
+// Add<V> can only default construct. AddFactory is how an implementation that takes arguments
+// gets in.
+BOOST_AUTO_TEST_CASE(test_static_registry_factory_entry) {
+    const CodecRegistry::Entry *pcm = nullptr;
+    for (const auto &entry : CodecRegistry::entries()) {
+        if (entry.name() == "pcm") {
+            pcm = &entry;
+        }
+    }
+    BOOST_REQUIRE(pcm);
+    BOOST_CHECK_EQUAL(std::string(pcm->desc()), "Linear PCM");
+
+    auto codec = pcm->instantiate();
+    BOOST_REQUIRE(codec);
+    BOOST_CHECK_EQUAL(codec->id(), "pcm-44100-2"); // the arguments survived
 }
 
 BOOST_AUTO_TEST_CASE(test_static_registry_entries) {
@@ -74,6 +112,7 @@ BOOST_AUTO_TEST_CASE(test_static_registry_entries) {
     BOOST_CHECK(first.get() != second.get());
     BOOST_CHECK_EQUAL(first->id(), "flac");
 
+    BOOST_CHECK(++it != CodecRegistry::end());
     BOOST_CHECK(++it != CodecRegistry::end());
     BOOST_CHECK(++it == CodecRegistry::end());
 }
