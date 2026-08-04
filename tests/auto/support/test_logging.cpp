@@ -69,32 +69,53 @@ namespace {
         g_lastLevel = level;
     }
 
-    // Sends stdout and stderr to the null device for as long as it lives. The default sink
-    // writes to them directly, so exercising it would otherwise scatter output through the test
-    // report.
-    class SilencedOutput {
+    // Redirects stdout and stderr into a scratch file for as long as it lives, and hands back
+    // what was written. The default sink writes to them directly, so this is the only way to see
+    // what it produced.
+    class CapturedOutput {
     public:
-        SilencedOutput() {
+        CapturedOutput() {
             std::fflush(stdout);
             std::fflush(stderr);
+            _sink = std::tmpfile();
             _out = stdc_dup(stdc_fileno(stdout));
             _err = stdc_dup(stdc_fileno(stderr));
-            if (FILE *sink = std::fopen(NullDevice, "w")) {
-                stdc_dup2(stdc_fileno(sink), stdc_fileno(stdout));
-                stdc_dup2(stdc_fileno(sink), stdc_fileno(stderr));
-                std::fclose(sink);
+            if (_sink) {
+                stdc_dup2(stdc_fileno(_sink), stdc_fileno(stdout));
+                stdc_dup2(stdc_fileno(_sink), stdc_fileno(stderr));
             }
         }
-        ~SilencedOutput() {
+
+        ~CapturedOutput() {
             std::fflush(stdout);
             std::fflush(stderr);
             stdc_dup2(_out, stdc_fileno(stdout));
             stdc_dup2(_err, stdc_fileno(stderr));
             stdc_close(_out);
             stdc_close(_err);
+            if (_sink) {
+                std::fclose(_sink);
+            }
+        }
+
+        std::string contents() const {
+            std::fflush(stdout);
+            std::fflush(stderr);
+            if (!_sink) {
+                return {};
+            }
+            std::fseek(_sink, 0, SEEK_SET);
+            std::string text;
+            char buf[1024];
+            size_t n;
+            while ((n = std::fread(buf, 1, sizeof(buf), _sink)) > 0) {
+                text.append(buf, n);
+            }
+            return text;
         }
 
     private:
+        FILE *_sink = nullptr;
         int _out = -1;
         int _err = -1;
     };
@@ -347,31 +368,63 @@ BOOST_AUTO_TEST_CASE(test_macros) {
     BOOST_CHECK_EQUAL(g_lastLevel, int(Logger::Warning));
 }
 
-// Every test above replaces the sink, so the built-in one had never been run. It asserted on
-// Information, which sits above Success in the enum and so reaches the switch rather than being
-// dropped by the level gate ahead of it.
-BOOST_AUTO_TEST_CASE(test_default_sink_takes_every_level) {
+// Every case above replaces the sink, so the built-in one had never been run. It dropped
+// Information, which is 4 against Success's 3 and so clears the level gate and reaches the
+// switch, where it had no case of its own. A debug build aborted on the assert there, a release
+// build compiled the assert away and lost the message quietly, which is why surviving the call
+// is not enough to check.
+BOOST_AUTO_TEST_CASE(default_sink_emits_every_level_at_or_above_success) {
     LoggingGuard guard;
     Logger::setLogCallback(nullptr); // put the built-in one back
-    SilencedOutput silenced;
 
-    LogContext context(__FILE__, __LINE__, __FUNCTION__, "stdc.sink");
-    for (int level = Logger::Trace; level <= Logger::Fatal; ++level) {
-        Logger(context).print(level, "message");
+    std::string text;
+    {
+        CapturedOutput captured;
+        LogContext context(__FILE__, __LINE__, __FUNCTION__, "stdc.sink");
+        Logger(context).print(Logger::Trace, "trace-line");
+        Logger(context).print(Logger::Debug, "debug-line");
+        Logger(context).print(Logger::Success, "success-line");
+        Logger(context).print(Logger::Information, "information-line");
+        Logger(context).print(Logger::Warning, "warning-line");
+        Logger(context).print(Logger::Critical, "critical-line");
+        Logger(context).print(Logger::Fatal, "fatal-line");
+        text = captured.contents();
     }
 
-    // print() takes an int, so a caller is free to invent a level. That must not be fatal
-    // either.
-    Logger(context).print(0, "below everything");
-    Logger(context).print(42, "past the end");
-    Logger(context).print(-1, "negative");
+    // below the gate, so deliberately absent
+    BOOST_CHECK(text.find("trace-line") == std::string::npos);
+    BOOST_CHECK(text.find("debug-line") == std::string::npos);
 
-    BOOST_CHECK(true); // reaching here is the assertion
+    // at or above it, so every one of them has to appear
+    BOOST_CHECK_MESSAGE(text.find("success-line") != std::string::npos, text);
+    BOOST_CHECK_MESSAGE(text.find("information-line") != std::string::npos, text);
+    BOOST_CHECK_MESSAGE(text.find("warning-line") != std::string::npos, text);
+    BOOST_CHECK_MESSAGE(text.find("critical-line") != std::string::npos, text);
+    BOOST_CHECK_MESSAGE(text.find("fatal-line") != std::string::npos, text);
 }
 
-// nullptr means the built-in sink, the way it does for setLogFilter(). Assigning it raw would
-// leave a null pointer for the next record to call through.
-BOOST_AUTO_TEST_CASE(test_null_callback_restores_the_default) {
+// print() takes an int rather than a Level, so a caller can invent one. That must neither abort
+// nor swallow the message.
+BOOST_AUTO_TEST_CASE(default_sink_takes_a_level_outside_the_enum) {
+    LoggingGuard guard;
+    Logger::setLogCallback(nullptr);
+
+    std::string text;
+    {
+        CapturedOutput captured;
+        LogContext context(__FILE__, __LINE__, __FUNCTION__, "stdc.sink");
+        Logger(context).print(42, "invented-level");
+        Logger(context).print(-1, "negative-level"); // below the gate, dropped
+        text = captured.contents();
+    }
+
+    BOOST_CHECK_MESSAGE(text.find("invented-level") != std::string::npos, text);
+    BOOST_CHECK(text.find("negative-level") == std::string::npos);
+}
+
+// nullptr means the built-in sink, the way it already does for setLogFilter(). Assigning it raw
+// would leave a null pointer for the next record to call through.
+BOOST_AUTO_TEST_CASE(null_callback_restores_the_default) {
     LoggingGuard guard;
     auto original = Logger::logCallback();
 
@@ -382,8 +435,13 @@ BOOST_AUTO_TEST_CASE(test_null_callback_restores_the_default) {
     BOOST_CHECK(Logger::logCallback() != nullptr);
     BOOST_CHECK(Logger::logCallback() == original);
 
-    SilencedOutput silenced;
-    stdcWarning("goes to the built-in sink without crashing");
+    std::string text;
+    {
+        CapturedOutput captured;
+        stdcWarning("built-in-sink-reached");
+        text = captured.contents();
+    }
+    BOOST_CHECK_MESSAGE(text.find("built-in-sink-reached") != std::string::npos, text);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
