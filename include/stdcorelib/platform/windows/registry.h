@@ -397,8 +397,9 @@ namespace stdc::windows {
             }
 
         private:
-            inline key_iterator(const RegKey *key, int index, int count,
-                                std::error_code *ec) noexcept
+            // Not noexcept: fetch() reads the first entry, and the form with no \a ec reports a
+            // failure by throwing.
+            inline key_iterator(const RegKey *key, int index, int count, std::error_code *ec)
                 : _key(key), _ec(ec), _index(index), _count(count) {
                 fetch();
             }
@@ -536,8 +537,9 @@ namespace stdc::windows {
             }
 
         private:
+            // Not noexcept, for the same reason as key_iterator's.
             inline value_iterator(const RegKey *key, int index, int count, std::error_code *ec,
-                                  bool query) noexcept
+                                  bool query)
                 : _key(key), _ec(ec), _query(query), _index(index), _count(count) {
                 fetch();
             }

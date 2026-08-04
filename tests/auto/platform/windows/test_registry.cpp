@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include <stdcorelib/platform/windows/registry.h>
-#include <stdcorelib/console.h>
 #include <stdcorelib/scope_guard.h>
 
 #include <boost/test/unit_test.hpp>
@@ -20,7 +19,8 @@ BOOST_AUTO_TEST_CASE(test_reg_read_write) {
     RegKey hkcuKey(RegKey::RK_CurrentUser);
     RegKey testKey =
         hkcuKey.create(TEST_KEY, ec, RegKey::DA_Read | RegKey::DA_Write, RegKey::CO_Volatile);
-    BOOST_VERIFY(testKey.isValid());
+    BOOST_REQUIRE_EQUAL(ec.value(), ERROR_SUCCESS);
+    BOOST_REQUIRE(testKey.isValid());
 
     std::pair<std::wstring, RegValue> TEST_STRING =
         std::make_pair(L"test_string", RegValue(L"test_value"));
@@ -44,21 +44,24 @@ BOOST_AUTO_TEST_CASE(test_reg_read_write) {
     std::pair<std::wstring, RegValue> TEST_DEFAULT =
         std::make_pair(L"", RegValue(L"default_value"));
 
+    // The guard runs from a destructor, so it uses the overloads that report through ec. The
+    // throwing ones would end the process rather than the test.
     auto deleteGuard = stdc::make_scope_guard([&]() {
-        testKey.close();
-        hkcuKey.removeKey(TEST_KEY); //
+        std::error_code ignored;
+        testKey.close(ignored);
+        hkcuKey.removeKey(TEST_KEY, ignored);
     });
 
     // Set values
-    BOOST_VERIFY(testKey.setValue(TEST_STRING.first, TEST_STRING.second, ec));
-    BOOST_VERIFY(testKey.setValue(TEST_STRING_NULL.first, TEST_STRING_NULL.second, ec));
-    BOOST_VERIFY(testKey.setValue(TEST_STRING_LIST.first, TEST_STRING_LIST.second, ec));
-    BOOST_VERIFY(testKey.setValue(TEST_STRING_LIST_NULL.first, TEST_STRING_LIST_NULL.second, ec));
-    BOOST_VERIFY(testKey.setValue(TEST_DWORD.first, TEST_DWORD.second, ec));
-    BOOST_VERIFY(testKey.setValue(TEST_QWORD.first, TEST_QWORD.second, ec));
-    BOOST_VERIFY(testKey.setValue(TEST_BINARY.first, TEST_BINARY.second, ec));
-    BOOST_VERIFY(testKey.setValue(TEST_BINARY_NULL.first, TEST_BINARY_NULL.second, ec));
-    BOOST_VERIFY(testKey.setValue(TEST_DEFAULT.first, TEST_DEFAULT.second, ec));
+    BOOST_CHECK(testKey.setValue(TEST_STRING.first, TEST_STRING.second, ec));
+    BOOST_CHECK(testKey.setValue(TEST_STRING_NULL.first, TEST_STRING_NULL.second, ec));
+    BOOST_CHECK(testKey.setValue(TEST_STRING_LIST.first, TEST_STRING_LIST.second, ec));
+    BOOST_CHECK(testKey.setValue(TEST_STRING_LIST_NULL.first, TEST_STRING_LIST_NULL.second, ec));
+    BOOST_CHECK(testKey.setValue(TEST_DWORD.first, TEST_DWORD.second, ec));
+    BOOST_CHECK(testKey.setValue(TEST_QWORD.first, TEST_QWORD.second, ec));
+    BOOST_CHECK(testKey.setValue(TEST_BINARY.first, TEST_BINARY.second, ec));
+    BOOST_CHECK(testKey.setValue(TEST_BINARY_NULL.first, TEST_BINARY_NULL.second, ec));
+    BOOST_CHECK(testKey.setValue(TEST_DEFAULT.first, TEST_DEFAULT.second, ec));
 
     // String values stored through the wrapper include the terminators required by the
     // registry formats. Also install a deliberately unterminated external value to verify that
@@ -125,7 +128,57 @@ BOOST_AUTO_TEST_CASE(test_reg_read_write) {
     {
         RegValue val = testKey.value(TEST_NOT_EXIST.first, ec);
         BOOST_CHECK(ec.value() == ERROR_FILE_NOT_FOUND);
+        BOOST_CHECK(!val.isValid());
+
+        // valueOr turns that one error into the caller's own answer and clears it
+        auto fallback = testKey.valueOr(TEST_NOT_EXIST.first, ec, RegValue(L"fallback"));
+        BOOST_CHECK(ec.value() == ERROR_SUCCESS);
+        BOOST_CHECK(fallback.toString() == L"fallback");
+
+        // and leaves a value that is there alone
+        auto present = testKey.valueOr(TEST_STRING.first, ec, RegValue(L"fallback"));
+        BOOST_CHECK(ec.value() == ERROR_SUCCESS);
+        BOOST_CHECK(present == TEST_STRING.second);
     }
+
+    // hasValue answers without reading the data, and hasKey the same for subkeys
+    {
+        BOOST_CHECK(testKey.hasValue(TEST_STRING.first, ec));
+        BOOST_CHECK(ec.value() == ERROR_SUCCESS);
+        BOOST_CHECK(!testKey.hasValue(TEST_NOT_EXIST.first, ec));
+        BOOST_CHECK(ec.value() == ERROR_SUCCESS); // absent is an answer, not a failure
+
+        BOOST_CHECK(!testKey.hasKey(L"no_such_subkey", ec));
+        BOOST_CHECK(ec.value() == ERROR_SUCCESS);
+
+        RegKey sub =
+            testKey.create(L"subkey", ec, RegKey::DA_Read | RegKey::DA_Write, RegKey::CO_Volatile);
+        BOOST_REQUIRE(sub.isValid());
+        BOOST_CHECK(testKey.hasKey(L"subkey", ec));
+        BOOST_CHECK_EQUAL(testKey.keyCount(ec), 1);
+        BOOST_CHECK(sub.close(ec));
+        BOOST_CHECK(testKey.removeKey(L"subkey", ec));
+        BOOST_CHECK(!testKey.hasKey(L"subkey", ec));
+    }
+
+    // create says whether the key was already there
+    {
+        bool existed = true;
+        RegKey fresh = testKey.create(L"created_once", ec, RegKey::DA_Read | RegKey::DA_Write,
+                                      RegKey::CO_Volatile, nullptr, &existed);
+        BOOST_REQUIRE(fresh.isValid());
+        BOOST_CHECK(!existed);
+
+        RegKey again = testKey.create(L"created_once", ec, RegKey::DA_Read | RegKey::DA_Write,
+                                      RegKey::CO_Volatile, nullptr, &existed);
+        BOOST_CHECK(existed);
+        BOOST_CHECK(again.close(ec));
+        BOOST_CHECK(fresh.close(ec));
+        BOOST_CHECK(testKey.removeKey(L"created_once", ec));
+    }
+
+    // valueCount counts what was written, and the unnamed default value is one of them
+    BOOST_CHECK_EQUAL(testKey.valueCount(ec), 10);
     {
         RegValue val = testKey.value(TEST_DEFAULT.first, ec);
         BOOST_CHECK(ec.value() == ERROR_SUCCESS);
@@ -133,15 +186,124 @@ BOOST_AUTO_TEST_CASE(test_reg_read_write) {
     }
 
     // Remove values
-    BOOST_VERIFY(testKey.removeValue(TEST_STRING.first, ec));
-    BOOST_VERIFY(testKey.removeValue(TEST_STRING_NULL.first, ec));
-    BOOST_VERIFY(testKey.removeValue(TEST_STRING_LIST.first, ec));
-    BOOST_VERIFY(testKey.removeValue(TEST_STRING_LIST_NULL.first, ec));
-    BOOST_VERIFY(testKey.removeValue(TEST_DWORD.first, ec));
-    BOOST_VERIFY(testKey.removeValue(TEST_QWORD.first, ec));
-    BOOST_VERIFY(testKey.removeValue(TEST_BINARY.first, ec));
-    BOOST_VERIFY(testKey.removeValue(TEST_BINARY_NULL.first, ec));
-    BOOST_VERIFY(testKey.removeValue(TEST_DEFAULT.first, ec));
+    BOOST_CHECK(testKey.removeValue(TEST_STRING.first, ec));
+    BOOST_CHECK(testKey.removeValue(TEST_STRING_NULL.first, ec));
+    BOOST_CHECK(testKey.removeValue(TEST_STRING_LIST.first, ec));
+    BOOST_CHECK(testKey.removeValue(TEST_STRING_LIST_NULL.first, ec));
+    BOOST_CHECK(testKey.removeValue(TEST_DWORD.first, ec));
+    BOOST_CHECK(testKey.removeValue(TEST_QWORD.first, ec));
+    BOOST_CHECK(testKey.removeValue(TEST_BINARY.first, ec));
+    BOOST_CHECK(testKey.removeValue(TEST_BINARY_NULL.first, ec));
+    BOOST_CHECK(testKey.removeValue(TEST_DEFAULT.first, ec));
+    BOOST_CHECK_EQUAL(ec.value(), ERROR_SUCCESS);
+
+    // removing one that is not there says so rather than reporting success
+    BOOST_CHECK(!testKey.removeValue(TEST_NOT_EXIST.first, ec));
+    BOOST_CHECK_EQUAL(ec.value(), ERROR_FILE_NOT_FOUND);
+}
+
+// RegValue models the registry types worth carrying, not all of them. A value of any other type
+// has to report that it could not be read, because a caller that only checks ec would otherwise
+// be told the read worked and handed nothing.
+BOOST_AUTO_TEST_CASE(test_value_of_an_unsupported_type) {
+    std::error_code ec;
+    const std::wstring path = L"SOFTWARE\\test_registry_exotic";
+
+    RegKey hkcuKey(RegKey::RK_CurrentUser);
+    RegKey key = hkcuKey.create(path, ec, RegKey::DA_Read | RegKey::DA_Write, RegKey::CO_Volatile);
+    BOOST_REQUIRE(key.isValid());
+    auto guard = stdc::make_scope_guard([&] {
+        std::error_code ignored;
+        key.close(ignored);
+        hkcuKey.removeKey(path, ignored);
+    });
+
+    BOOST_REQUIRE(key.setValue(L"ordinary", RegValue(L"text"), ec));
+
+    // REG_RESOURCE_LIST, which the reader has no case for. The keys under Enum are full of them,
+    // so this is not a contrived value.
+    const BYTE blob[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    BOOST_REQUIRE_EQUAL(
+        RegSetValueExW(key.handle(), L"exotic", 0, REG_RESOURCE_LIST, blob, sizeof(blob)),
+        ERROR_SUCCESS);
+
+    auto val = key.value(L"exotic", ec);
+    BOOST_CHECK(!val.isValid());
+    BOOST_CHECK_EQUAL(ec.value(), ERROR_UNSUPPORTED_TYPE);
+
+    // and the enumeration stops on it rather than walking into a value that was never read
+    int seen = 0;
+    for (const auto &entry : key.enumValues(ec, true)) {
+        BOOST_CHECK(entry.value.isValid());
+        ++seen;
+    }
+    BOOST_CHECK_EQUAL(ec.value(), ERROR_UNSUPPORTED_TYPE);
+    BOOST_CHECK(seen < 2);
+
+    // reading only the names never touches the data, so it walks the whole key
+    seen = 0;
+    for (const auto &entry : key.enumValues(ec)) {
+        BOOST_CHECK(!entry.name.empty());
+        ++seen;
+    }
+    BOOST_CHECK_EQUAL(ec.value(), ERROR_SUCCESS);
+    BOOST_CHECK_EQUAL(seen, 2);
+}
+
+// Every operation comes in a throwing form and a form that reports through an error_code. They
+// have to agree about what went wrong.
+BOOST_AUTO_TEST_CASE(test_throwing_overloads) {
+    RegKey hkcuKey(RegKey::RK_CurrentUser);
+
+    std::error_code ec;
+    RegKey missing = hkcuKey.open(L"SOFTWARE\\stdcorelib_no_such_key", ec);
+    BOOST_CHECK(!missing.isValid());
+    BOOST_CHECK_EQUAL(ec.value(), ERROR_FILE_NOT_FOUND);
+
+    BOOST_CHECK_THROW(hkcuKey.open(L"SOFTWARE\\stdcorelib_no_such_key"), std::system_error);
+
+    try {
+        hkcuKey.open(L"SOFTWARE\\stdcorelib_no_such_key");
+        BOOST_ERROR("open should have thrown");
+    } catch (const std::system_error &e) {
+        BOOST_CHECK_EQUAL(e.code().value(), ERROR_FILE_NOT_FOUND);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(test_regkey_ownership) {
+    std::error_code ec;
+    RegKey hkcuKey(RegKey::RK_CurrentUser);
+
+    // A predefined root is not ours to close, and closing it must not take the handle out from
+    // under everything else in the process.
+    BOOST_CHECK(hkcuKey.isValid());
+
+    RegKey key = hkcuKey.create(L"SOFTWARE\\test_registry_ownership", ec,
+                                RegKey::DA_Read | RegKey::DA_Write, RegKey::CO_Volatile);
+    BOOST_REQUIRE(key.isValid());
+    auto guard = stdc::make_scope_guard([&] {
+        std::error_code ignored;
+        hkcuKey.removeKey(L"SOFTWARE\\test_registry_ownership", ignored);
+    });
+
+    // moving leaves the source with nothing to close
+    HKEY raw = key.handle();
+    RegKey moved = std::move(key);
+    BOOST_CHECK(moved.handle() == raw);
+    BOOST_CHECK(!key.isValid());
+
+    // take() hands the handle over, so the wrapper stops owning it
+    HKEY taken = moved.take();
+    BOOST_CHECK(taken == raw);
+    BOOST_CHECK(!moved.isValid());
+
+    // wrapping without owning leaves it open for the caller to close
+    {
+        RegKey borrowed(taken, false);
+        BOOST_CHECK(borrowed.isValid());
+        BOOST_CHECK_EQUAL(borrowed.valueCount(ec), 0);
+    }
+    BOOST_CHECK_EQUAL(RegCloseKey(taken), ERROR_SUCCESS);
 }
 
 BOOST_AUTO_TEST_CASE(test_regvalue) {
@@ -183,12 +345,21 @@ BOOST_AUTO_TEST_CASE(test_regvalue) {
     const wchar_t TEST_STRING_LIST_LITERAL_3[] =
         L"test_string_list_value1\0test_string_list_value2\0test_string_list_value3\0\0";
 
+    // A REG_MULTI_SZ arrives with none, one or two trailing terminators depending on who wrote
+    // it, and all three mean the same list.
     {
-        RegValue val1(TEST_STRING_LIST_LITERAL_1, sizeof(TEST_STRING_LIST_LITERAL_1) / 2 - 1,
+        const auto units = [](const wchar_t *, size_t bytes) {
+            return int(bytes / sizeof(wchar_t)) - 1; // less the terminator the compiler added
+        };
+
+        RegValue val1(TEST_STRING_LIST_LITERAL_1,
+                      units(TEST_STRING_LIST_LITERAL_1, sizeof(TEST_STRING_LIST_LITERAL_1)),
                       RegValue::StringList);
-        RegValue val2(TEST_STRING_LIST_LITERAL_2, sizeof(TEST_STRING_LIST_LITERAL_2) / 2 - 1,
+        RegValue val2(TEST_STRING_LIST_LITERAL_2,
+                      units(TEST_STRING_LIST_LITERAL_2, sizeof(TEST_STRING_LIST_LITERAL_2)),
                       RegValue::StringList);
-        RegValue val3(TEST_STRING_LIST_LITERAL_3, sizeof(TEST_STRING_LIST_LITERAL_3) / 2 - 1,
+        RegValue val3(TEST_STRING_LIST_LITERAL_3,
+                      units(TEST_STRING_LIST_LITERAL_3, sizeof(TEST_STRING_LIST_LITERAL_3)),
                       RegValue::StringList);
 
         BOOST_CHECK(val1.type() == RegValue::StringList);
@@ -198,6 +369,50 @@ BOOST_AUTO_TEST_CASE(test_regvalue) {
         BOOST_CHECK(val1.toStringList().vec() == TEST_STRING_LIST_VALUE);
         BOOST_CHECK(val2.toStringList().vec() == TEST_STRING_LIST_VALUE);
         BOOST_CHECK(val3.toStringList().vec() == TEST_STRING_LIST_VALUE);
+
+        // and they compare equal to each other, not just to the same vector
+        BOOST_CHECK(val1 == val2);
+        BOOST_CHECK(val2 == val3);
+    }
+
+    // The readers do not convert. Asking a value for a type it does not hold gives a default and
+    // says nothing went wrong, which is why the isXxx() checks exist.
+    {
+        RegValue str(TEST_STRING_VALUE);
+        BOOST_CHECK(str.isString());
+        BOOST_CHECK(!str.isInt32());
+        BOOST_CHECK_EQUAL(str.toInt32(), 0);
+        BOOST_CHECK_EQUAL(str.toInt64(), 0);
+        BOOST_CHECK(str.toBinary().empty());
+
+        RegValue num(TEST_DWORD_VALUE);
+        BOOST_CHECK(num.isInt32());
+        BOOST_CHECK(num.toString().empty());
+        BOOST_CHECK(num.toStringList().empty());
+
+        // and a value of a different type is never equal to one of this type
+        BOOST_CHECK(str != num);
+    }
+
+    // A default constructed value is a valid None, while the Invalid one is what a failed read
+    // reports.
+    {
+        BOOST_CHECK(RegValue().isNone());
+        BOOST_CHECK(RegValue().isValid());
+        BOOST_CHECK(!RegValue(RegValue::Invalid).isValid());
+    }
+
+    // Copies and moves carry the data, which for the string and list types sits behind a shared
+    // pointer rather than in the object.
+    {
+        RegValue original(TEST_STRING_LIST_VALUE);
+        RegValue copy = original;
+        BOOST_CHECK(copy == original);
+        BOOST_CHECK(copy.toStringList().vec() == TEST_STRING_LIST_VALUE);
+
+        RegValue moved = std::move(copy);
+        BOOST_CHECK(moved.toStringList().vec() == TEST_STRING_LIST_VALUE);
+        BOOST_CHECK(moved == original);
     }
 }
 
@@ -206,7 +421,8 @@ BOOST_AUTO_TEST_CASE(test_regkey) {
 
     RegKey hklmKey(RegKey::RK_LocalMachine);
     RegKey systemKey = hklmKey.open(L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", ec);
-    BOOST_VERIFY(systemKey.isValid());
+    BOOST_REQUIRE_EQUAL(ec.value(), ERROR_SUCCESS);
+    BOOST_REQUIRE(systemKey.isValid());
 
     {
         // test collect
@@ -214,7 +430,11 @@ BOOST_AUTO_TEST_CASE(test_regkey) {
         for (const auto &subkey : systemKey.enumKeys(ec)) {
             subkeys.push_back(subkey.name);
         }
-        BOOST_VERIFY(ec.value() == ERROR_SUCCESS);
+        BOOST_CHECK_EQUAL(ec.value(), ERROR_SUCCESS);
+
+        // the range walked as far as the count said it would, which a stopped traversal would
+        // not have done and which the loop alone cannot tell you
+        BOOST_CHECK_EQUAL(int(subkeys.size()), systemKey.keyCount(ec));
 
         // "Windows" should be one of the subkeys
         BOOST_CHECK(std::find(subkeys.begin(), subkeys.end(), L"Windows") != subkeys.end());
@@ -226,7 +446,7 @@ BOOST_AUTO_TEST_CASE(test_regkey) {
             for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
                 reversedSubkeys.push_back(it->name);
             }
-            BOOST_VERIFY(ec.value() == ERROR_SUCCESS);
+            BOOST_CHECK_EQUAL(ec.value(), ERROR_SUCCESS);
             std::reverse(reversedSubkeys.begin(), reversedSubkeys.end());
             BOOST_CHECK(reversedSubkeys == subkeys);
         }
@@ -237,8 +457,10 @@ BOOST_AUTO_TEST_CASE(test_regkey) {
         std::vector<std::wstring> values;
         for (const auto &val : systemKey.enumValues(ec)) {
             values.push_back(val.name);
+            BOOST_CHECK(val.value.isNone()); // not read unless asked for
         }
-        BOOST_VERIFY(ec.value() == ERROR_SUCCESS);
+        BOOST_CHECK_EQUAL(ec.value(), ERROR_SUCCESS);
+        BOOST_CHECK_EQUAL(int(values.size()), systemKey.valueCount(ec));
 
         // "ProductName" should be one of the values
         BOOST_CHECK(std::find(values.begin(), values.end(), L"ProductName") != values.end());
@@ -250,10 +472,19 @@ BOOST_AUTO_TEST_CASE(test_regkey) {
             for (auto it = vals.rbegin(); it != vals.rend(); ++it) {
                 reversedValues.push_back(it->name);
             }
-            BOOST_VERIFY(ec.value() == ERROR_SUCCESS);
+            BOOST_CHECK_EQUAL(ec.value(), ERROR_SUCCESS);
             std::reverse(reversedValues.begin(), reversedValues.end());
             BOOST_CHECK(reversedValues == values);
         }
+
+        // asking for the data as well is the other half of that parameter
+        for (const auto &val : systemKey.enumValues(ec, true)) {
+            if (val.name == L"ProductName") {
+                BOOST_CHECK(val.value.isString());
+                BOOST_CHECK(!val.value.toString().empty());
+            }
+        }
+        BOOST_CHECK_EQUAL(ec.value(), ERROR_SUCCESS);
     }
 }
 

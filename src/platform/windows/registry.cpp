@@ -408,12 +408,16 @@ namespace stdc::windows {
         ec.clear();
 
         HKEY hkey = nullptr;
+        DWORD disposition = 0;
         LSTATUS status =
             RegCreateKeyExW(_hkey, path.c_str(), 0, nullptr, static_cast<DWORD>(options),
-                            static_cast<REGSAM>(access), sa, &hkey, nullptr);
+                            static_cast<REGSAM>(access), sa, &hkey, &disposition);
         if (status != ERROR_SUCCESS) {
             ec = make_status_error_code(status);
             return {};
+        }
+        if (exists) {
+            *exists = disposition == REG_OPENED_EXISTING_KEY;
         }
         return RegKey(hkey, true);
     }
@@ -446,7 +450,7 @@ namespace stdc::windows {
     std::optional<RegKey::KeyData> RegKey::keyAt(int index, std::error_code &ec) const noexcept {
         ec.clear();
 
-        auto &maxsize = _max_value_name_size;
+        auto &maxsize = _max_key_name_size; // subkey names, so not the value name cache
         KeyData data;
 
         LSTATUS status;
@@ -527,11 +531,13 @@ namespace stdc::windows {
 
         // assign value
         if (query) {
-            RegValue val = value(data.name);
+            // The overload taking ec, not the one that throws. This function is noexcept, so an
+            // unreadable value would end the process rather than be reported.
+            RegValue val = value(data.name, ec);
             if (!val.isValid()) {
                 return {};
             }
-            data.value = val;
+            data.value = std::move(val);
         }
         return data;
     }
@@ -674,22 +680,27 @@ namespace stdc::windows {
 
             case REG_DWORD: // Same as REG_DWORD_LITTLE_ENDIAN
                 if (dataSize < sizeof(uint32_t))
-                    return RegValue(RegValue::Invalid);
+                    break;
                 return qFromLittleEndian<uint32_t>(data.data());
 
             case REG_DWORD_BIG_ENDIAN:
                 if (dataSize < sizeof(uint32_t))
-                    return RegValue(RegValue::Invalid);
+                    break;
                 return qFromBigEndian<uint32_t>(data.data());
 
             case REG_QWORD: // Same as REG_QWORD_LITTLE_ENDIAN
                 if (dataSize < sizeof(uint64_t))
-                    return RegValue(RegValue::Invalid);
+                    break;
                 return qFromLittleEndian<uint64_t>(data.data());
 
             default:
                 break;
         }
+
+        // The read itself worked, so leaving ec clear here would say the value came back when it
+        // did not. Registry types this does not model are common: the keys under Enum are full
+        // of REG_RESOURCE_LIST.
+        ec = make_status_error_code(ERROR_UNSUPPORTED_TYPE);
         return RegValue(RegValue::Invalid);
     }
 
