@@ -3,10 +3,20 @@
 #include "utf.h"
 
 #include <cstdint>
+#include <memory>
+#include <type_traits>
 
 namespace stdc::utf {
 
     namespace {
+
+        /// Widens a code unit through the unsigned type of its own width. \c wchar_t is signed on
+        /// most platforms that are not Windows, and sign extending it would hand the decoder a
+        /// value no encoding could have produced.
+        template <class Char>
+        char32_t code_unit(Char c) {
+            return char32_t(std::make_unsigned_t<Char>(c));
+        }
 
         // How many bytes a lead byte announces, or 0 if it cannot start a sequence. C0 and C1
         // are missing on purpose: the only things they could encode are already spelled in one
@@ -50,200 +60,257 @@ namespace stdc::utf {
             }
         }
 
-        /// Reads one code point starting at \a pos.
-        ///
-        /// On success \a pos moves past it and the code point comes back. On invalid input \a pos
-        /// moves past the maximal part that could still have been the start of something valid,
-        /// which is at least one byte, and the result is nothing. Consuming exactly that much is
-        /// what stops one bad byte turning the rest of the text into replacement characters.
-        bool decode_one(std::string_view s, size_t &pos, char32_t &out) {
-            const uint8_t lead = uint8_t(s[pos]);
-            const int length = sequence_length(lead);
-            if (length == 0) {
-                pos += 1;
-                return false;
-            }
-            if (length == 1) {
-                out = lead;
-                pos += 1;
-                return true;
-            }
+        // One type per encoding, rather than a pair of function pointers, so that the walk in
+        // convert() calls them directly and they inline into it.
 
-            // A sequence cut off by the end of the input is not valid, but it is not garbage
-            // either, so it is consumed whole rather than one byte at a time.
-            if (pos + size_t(length) > s.size()) {
-                size_t taken = 1;
-                while (pos + taken < s.size() && is_continuation(uint8_t(s[pos + taken]))) {
-                    ++taken;
-                }
-                pos += taken;
-                return false;
-            }
-
-            if (!second_byte_ok(lead, uint8_t(s[pos + 1]))) {
-                pos += 1;
-                return false;
-            }
-            for (int i = 2; i < length; ++i) {
-                if (!is_continuation(uint8_t(s[pos + i]))) {
-                    pos += size_t(i);
+        struct utf8_codec {
+            /// Reads one code point starting at \a pos.
+            ///
+            /// On success \a pos moves past it and the code point comes back. On invalid input
+            /// \a pos moves past the maximal part that could still have been the start of
+            /// something valid, which is at least one unit, and the result is nothing. Consuming
+            /// exactly that much is what stops one bad byte turning the rest of the text into
+            /// replacement characters.
+            static bool decode(std::string_view s, size_t &pos, char32_t &out) {
+                const uint8_t lead = uint8_t(s[pos]);
+                const int length = sequence_length(lead);
+                if (length == 0) {
+                    pos += 1;
                     return false;
                 }
-            }
+                if (length == 1) {
+                    out = lead;
+                    pos += 1;
+                    return true;
+                }
 
-            char32_t c = lead & (0xFF >> (length + 1));
-            for (int i = 1; i < length; ++i) {
-                c = (c << 6) | (uint8_t(s[pos + i]) & 0x3F);
-            }
-            pos += size_t(length);
-            out = c;
-            return true;
-        }
+                // A sequence cut off by the end of the input is not valid, but it is not garbage
+                // either, so it is consumed whole rather than one byte at a time.
+                if (pos + size_t(length) > s.size()) {
+                    size_t taken = 1;
+                    while (pos + taken < s.size() && is_continuation(uint8_t(s[pos + taken]))) {
+                        ++taken;
+                    }
+                    pos += taken;
+                    return false;
+                }
 
-        void encode_utf8(char32_t c, std::string &out) {
-            if (c < 0x80) {
-                out.push_back(char(c));
-            } else if (c < 0x800) {
-                out.push_back(char(0xC0 | (c >> 6)));
-                out.push_back(char(0x80 | (c & 0x3F)));
-            } else if (c < 0x10000) {
-                out.push_back(char(0xE0 | (c >> 12)));
-                out.push_back(char(0x80 | ((c >> 6) & 0x3F)));
-                out.push_back(char(0x80 | (c & 0x3F)));
-            } else {
-                out.push_back(char(0xF0 | (c >> 18)));
-                out.push_back(char(0x80 | ((c >> 12) & 0x3F)));
-                out.push_back(char(0x80 | ((c >> 6) & 0x3F)));
-                out.push_back(char(0x80 | (c & 0x3F)));
-            }
-        }
+                if (!second_byte_ok(lead, uint8_t(s[pos + 1]))) {
+                    pos += 1;
+                    return false;
+                }
+                for (int i = 2; i < length; ++i) {
+                    if (!is_continuation(uint8_t(s[pos + i]))) {
+                        pos += size_t(i);
+                        return false;
+                    }
+                }
 
-        void encode_utf16(char32_t c, std::u16string &out) {
-            if (c < 0x10000) {
-                out.push_back(char16_t(c));
-            } else {
-                c -= 0x10000;
-                out.push_back(char16_t(0xD800 + (c >> 10)));
-                out.push_back(char16_t(0xDC00 + (c & 0x3FF)));
-            }
-        }
-
-        /// Reads one code point of UTF-16, following the same contract as decode_one().
-        bool decode_one_utf16(std::u16string_view s, size_t &pos, char32_t &out) {
-            const char16_t unit = s[pos];
-            if (unit < 0xD800 || unit > 0xDFFF) {
-                out = unit;
-                pos += 1;
+                char32_t c = lead & (0xFF >> (length + 1));
+                for (int i = 1; i < length; ++i) {
+                    c = (c << 6) | (uint8_t(s[pos + i]) & 0x3F);
+                }
+                pos += size_t(length);
+                out = c;
                 return true;
             }
-            if (unit >= 0xDC00) { // a low surrogate with no high one ahead of it
-                pos += 1;
-                return false;
+
+            /// Writes \a c at \a p and returns how many units that took. There is always room for
+            /// the longest form, so the encoders never have to ask whether the write will fit.
+            static int encode(char32_t c, char *p) {
+                if (c < 0x80) {
+                    p[0] = char(c);
+                    return 1;
+                }
+                if (c < 0x800) {
+                    p[0] = char(0xC0 | (c >> 6));
+                    p[1] = char(0x80 | (c & 0x3F));
+                    return 2;
+                }
+                if (c < 0x10000) {
+                    p[0] = char(0xE0 | (c >> 12));
+                    p[1] = char(0x80 | ((c >> 6) & 0x3F));
+                    p[2] = char(0x80 | (c & 0x3F));
+                    return 3;
+                }
+                p[0] = char(0xF0 | (c >> 18));
+                p[1] = char(0x80 | ((c >> 12) & 0x3F));
+                p[2] = char(0x80 | ((c >> 6) & 0x3F));
+                p[3] = char(0x80 | (c & 0x3F));
+                return 4;
             }
-            if (pos + 1 >= s.size() || s[pos + 1] < 0xDC00 || s[pos + 1] > 0xDFFF) {
-                pos += 1;
-                return false;
+        };
+
+        struct utf16_codec {
+            /// Follows the same contract as utf8_codec::decode().
+            template <class View>
+            static bool decode(View s, size_t &pos, char32_t &out) {
+                const char32_t unit = code_unit(s[pos]);
+                if (unit < 0xD800 || unit > 0xDFFF) {
+                    out = unit;
+                    pos += 1;
+                    return true;
+                }
+                if (unit >= 0xDC00) { // a low surrogate with no high one ahead of it
+                    pos += 1;
+                    return false;
+                }
+                if (pos + 1 >= s.size()) {
+                    pos += 1;
+                    return false;
+                }
+                const char32_t low = code_unit(s[pos + 1]);
+                if (low < 0xDC00 || low > 0xDFFF) {
+                    pos += 1;
+                    return false;
+                }
+                out = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);
+                pos += 2;
+                return true;
             }
-            out = 0x10000 + ((char32_t(unit) - 0xD800) << 10) + (char32_t(s[pos + 1]) - 0xDC00);
-            pos += 2;
-            return true;
+
+            template <class Char>
+            static int encode(char32_t c, Char *p) {
+                if (c < 0x10000) {
+                    p[0] = Char(c);
+                    return 1;
+                }
+                c -= 0x10000;
+                p[0] = Char(0xD800 + (c >> 10));
+                p[1] = Char(0xDC00 + (c & 0x3FF));
+                return 2;
+            }
+        };
+
+        // UTF-32 has no encoding to get wrong, only values that are not code points.
+        struct utf32_codec {
+            template <class View>
+            static bool decode(View s, size_t &pos, char32_t &out) {
+                const char32_t c = code_unit(s[pos]);
+                pos += 1;
+                if (!is_valid_code_point(c)) {
+                    return false;
+                }
+                out = c;
+                return true;
+            }
+
+            template <class Char>
+            static int encode(char32_t c, Char *p) {
+                p[0] = Char(c);
+                return 1;
+            }
+        };
+
+        /// The most units of output that one unit of input can turn into.
+        ///
+        /// A byte of UTF-8 never yields more than one unit of anything wider, because however
+        /// many bytes a sequence spans it still decodes to a single code point. In the other
+        /// direction a unit of UTF-16 reaches three bytes, a code point reaches four, and an
+        /// invalid unit costs the three bytes of U+FFFD.
+        template <class SourceChar, class Char>
+        constexpr size_t max_units() {
+            if (sizeof(SourceChar) == 1) {
+                return 1;
+            }
+            if (sizeof(Char) == 1) {
+                return sizeof(SourceChar) == 2 ? 3 : 4;
+            }
+            return sizeof(SourceChar) == 4 && sizeof(Char) == 2 ? 2 : 1;
         }
 
-        // Every conversion is the same walk, so they share one. Decode is told how to read a
-        // code point out of the source, Encode how to put one into the result.
-        template <class Source, class Result, class Decode, class Encode>
-        Result convert(Source s, error_policy policy, bool *ok, Decode decode, Encode encode) {
-            Result out;
-            out.reserve(s.size());
+        /// How many units a conversion writes without reaching for the heap. Enough for the
+        /// names, keys and log lines that most conversions are.
+        constexpr size_t inline_units = 256;
+
+        // Every conversion is the same walk, so they share one. Decode is told how to read a code
+        // point out of the source, Encode how to write one into the result.
+        //
+        // The result is built in a scratch buffer of the largest size it could need and copied
+        // out at the end, rather than grown a code point at a time. The buffer is deliberately
+        // left uninitialized: filling the bound first is the single largest cost in a conversion,
+        // since a whole page has to be faulted in whether or not the result reaches it. That is
+        // also why this is not make_unique, which would value initialize.
+        template <class Result, class Decode, class Encode, class Source>
+        Result convert(Source s, error_policy policy, bool *ok) {
+            using Char = typename Result::value_type;
+
+            const size_t bound = s.size() * max_units<typename Source::value_type, Char>();
+            Char inline_buffer[inline_units];
+            std::unique_ptr<Char[]> heap;
+            if (bound > inline_units) {
+                heap.reset(new Char[bound]);
+            }
+            Char *const begin = heap ? heap.get() : inline_buffer;
+            Char *p = begin;
 
             bool valid = true;
             size_t pos = 0;
             while (pos < s.size()) {
                 char32_t c = 0;
-                if (decode(s, pos, c)) {
-                    encode(c, out);
-                    continue;
-                }
-                valid = false;
-                if (policy == fail) {
-                    if (ok) {
-                        *ok = false;
+                if (!Decode::decode(s, pos, c)) {
+                    valid = false;
+                    if (policy == fail) {
+                        if (ok) {
+                            *ok = false;
+                        }
+                        return Result();
                     }
-                    return Result();
+                    c = replacement_character;
                 }
-                encode(replacement_character, out);
+                p += Encode::encode(c, p);
             }
 
             if (ok) {
                 *ok = valid;
             }
-            return out;
-        }
-
-        // UTF-32 has no encoding to get wrong, only values that are not code points.
-        bool decode_one_utf32(std::u32string_view s, size_t &pos, char32_t &out) {
-            const char32_t c = s[pos];
-            pos += 1;
-            if (!is_valid_code_point(c)) {
-                return false;
-            }
-            out = c;
-            return true;
-        }
-
-        void encode_utf32(char32_t c, std::u32string &out) {
-            out.push_back(c);
+            return Result(begin, size_t(p - begin));
         }
 
     }
 
     std::u16string utf8_to_utf16(std::string_view s, error_policy policy, bool *ok) {
-        return convert<std::string_view, std::u16string>(s, policy, ok, decode_one, encode_utf16);
+        return convert<std::u16string, utf8_codec, utf16_codec>(s, policy, ok);
     }
 
     std::u32string utf8_to_utf32(std::string_view s, error_policy policy, bool *ok) {
-        return convert<std::string_view, std::u32string>(s, policy, ok, decode_one, encode_utf32);
+        return convert<std::u32string, utf8_codec, utf32_codec>(s, policy, ok);
     }
 
     std::string utf16_to_utf8(std::u16string_view s, error_policy policy, bool *ok) {
-        return convert<std::u16string_view, std::string>(s, policy, ok, decode_one_utf16,
-                                                         encode_utf8);
+        return convert<std::string, utf16_codec, utf8_codec>(s, policy, ok);
     }
 
     std::u32string utf16_to_utf32(std::u16string_view s, error_policy policy, bool *ok) {
-        return convert<std::u16string_view, std::u32string>(s, policy, ok, decode_one_utf16,
-                                                            encode_utf32);
+        return convert<std::u32string, utf16_codec, utf32_codec>(s, policy, ok);
     }
 
     std::string utf32_to_utf8(std::u32string_view s, error_policy policy, bool *ok) {
-        return convert<std::u32string_view, std::string>(s, policy, ok, decode_one_utf32,
-                                                         encode_utf8);
+        return convert<std::string, utf32_codec, utf8_codec>(s, policy, ok);
     }
 
     std::u16string utf32_to_utf16(std::u32string_view s, error_policy policy, bool *ok) {
-        return convert<std::u32string_view, std::u16string>(s, policy, ok, decode_one_utf32,
-                                                            encode_utf16);
+        return convert<std::u16string, utf32_codec, utf16_codec>(s, policy, ok);
     }
+
+    // The wide functions convert straight into a wstring rather than through a u16string or a
+    // u32string, which would be an entire second pass to copy units that already agree.
 
     std::wstring utf8_to_wide(std::string_view s, error_policy policy, bool *ok) {
         static_assert(sizeof(wchar_t) == 2 || sizeof(wchar_t) == 4,
                       "wchar_t is neither UTF-16 nor UTF-32 wide");
         if constexpr (sizeof(wchar_t) == 2) {
-            auto u16 = utf8_to_utf16(s, policy, ok);
-            return std::wstring(u16.begin(), u16.end());
+            return convert<std::wstring, utf8_codec, utf16_codec>(s, policy, ok);
         } else {
-            auto u32 = utf8_to_utf32(s, policy, ok);
-            return std::wstring(u32.begin(), u32.end());
+            return convert<std::wstring, utf8_codec, utf32_codec>(s, policy, ok);
         }
     }
 
     std::string wide_to_utf8(std::wstring_view s, error_policy policy, bool *ok) {
         if constexpr (sizeof(wchar_t) == 2) {
-            std::u16string u16(s.begin(), s.end());
-            return utf16_to_utf8(u16, policy, ok);
+            return convert<std::string, utf16_codec, utf8_codec>(s, policy, ok);
         } else {
-            std::u32string u32(s.begin(), s.end());
-            return utf32_to_utf8(u32, policy, ok);
+            return convert<std::string, utf32_codec, utf8_codec>(s, policy, ok);
         }
     }
 
@@ -251,7 +318,7 @@ namespace stdc::utf {
         size_t pos = 0;
         while (pos < s.size()) {
             char32_t c = 0;
-            if (!decode_one(s, pos, c)) {
+            if (!utf8_codec::decode(s, pos, c)) {
                 return false;
             }
         }
@@ -262,7 +329,7 @@ namespace stdc::utf {
         size_t pos = 0;
         while (pos < s.size()) {
             char32_t c = 0;
-            if (!decode_one_utf16(s, pos, c)) {
+            if (!utf16_codec::decode(s, pos, c)) {
                 return false;
             }
         }

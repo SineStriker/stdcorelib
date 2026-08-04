@@ -134,6 +134,28 @@ BOOST_AUTO_TEST_CASE(test_replacement_is_local) {
     BOOST_CHECK(out[1] == Fffd);
 }
 
+// A conversion writes into a fixed buffer until the input outgrows it. Nothing may change at
+// that threshold, and the widest code points are the ones that reach it first.
+BOOST_AUTO_TEST_CASE(test_input_outgrowing_the_inline_buffer) {
+    const char32_t cycle[] = {U'A', 0x00E9, 0x4F60, 0x1F600};
+
+    for (size_t n : {size_t(1), size_t(85), size_t(86), size_t(256), size_t(257), size_t(4096)}) {
+        std::u32string source;
+        for (size_t i = 0; i < n; ++i) {
+            source.push_back(cycle[i % 4]);
+        }
+
+        const auto u8 = utf::utf32_to_utf8(source);
+        const auto u16 = utf::utf32_to_utf16(source);
+
+        BOOST_CHECK(utf::utf8_to_utf32(u8) == source);
+        BOOST_CHECK(utf::utf16_to_utf32(u16) == source);
+        BOOST_CHECK(utf::utf8_to_utf16(u8) == u16);
+        BOOST_CHECK(utf::utf16_to_utf8(u16) == u8);
+        BOOST_CHECK(utf::wide_to_utf8(utf::utf8_to_wide(u8)) == u8);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(test_policies) {
     const auto bad = bytes({'A', 0x80, 'B'});
 
