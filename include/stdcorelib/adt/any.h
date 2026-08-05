@@ -3,7 +3,6 @@
 #ifndef STDCORELIB_ANY_H
 #define STDCORELIB_ANY_H
 
-#include <atomic>
 #include <cstddef>
 #include <exception>
 #include <new>
@@ -12,76 +11,11 @@
 #include <utility>
 
 #include <stdcorelib/stdc_global.h>
+#include <stdcorelib/adt/type_id.h>
 
 namespace stdc {
 
     namespace detail {
-
-        /// The compiler's own spelling of \a T, cut out of the signature of this function.
-        ///
-        /// Identity rests on this text. Every module that mentions \a T gets its own copy of
-        /// everything else here, and the spelling is the only part they are guaranteed to agree
-        /// about.
-        ///
-        /// \note The spelling is whatever the compiler writes, not a normalized form: MSVC says
-        ///       \c "struct Foo" where GCC says \c "Foo". That costs nothing inside a process,
-        ///       which never holds two compilers at once, but it does mean the name is not a
-        ///       portable key to write into a file.
-        template <class T>
-        constexpr std::string_view type_name() {
-#if defined(_MSC_VER)
-            constexpr std::string_view signature = __FUNCSIG__;
-            constexpr std::string_view opening = "type_name<";
-            constexpr auto first = signature.find(opening) + opening.size();
-            constexpr auto last = signature.rfind(">(void)");
-#else
-            constexpr std::string_view signature = __PRETTY_FUNCTION__;
-            constexpr std::string_view opening = "T = ";
-            constexpr auto first = signature.find(opening) + opening.size();
-            // GCC lists the other template parameters after a semicolon, clang does not.
-            constexpr auto semicolon = signature.find(';', first);
-            constexpr auto last =
-                semicolon == std::string_view::npos ? signature.rfind(']') : semicolon;
-#endif
-            static_assert(first < last, "cannot read the type name out of this compiler");
-            return signature.substr(first, last - first);
-        }
-
-        /// One of these exists per type per module.
-        ///
-        /// The address answers the question in the common case, the name answers it when two
-        /// modules are involved, and \a id caches that second answer.
-        struct type_entry {
-            std::string_view name;
-            std::atomic<const void *> id;
-        };
-
-        /// Gives \a entry the one address this process uses to stand for that name.
-        ///
-        /// An address rather than a number, because a number would have to come from a counter,
-        /// and a build where two modules each hold a table would have two counters both starting
-        /// at one. An entry keeps the first answer it is given, so entries numbered by different
-        /// counters could collide and two unrelated types would compare equal. Addresses taken
-        /// from different tables never do.
-        ///
-        /// \note The table lives in exactly one place, so this unifies modules that share one
-        ///       copy of the library. Statically linking stdcorelib into two of them gives each
-        ///       its own table, and then a type simply does not carry across, which is a refusal
-        ///       rather than a wrong answer.
-        STDCORELIB_EXPORT const void *resolve_type_id(type_entry &entry);
-
-        template <class T>
-        type_entry &entry_of() {
-            static type_entry entry{type_name<T>(), nullptr};
-            return entry;
-        }
-
-        inline bool same_type(type_entry &lhs, type_entry &rhs) {
-            if (&lhs == &rhs) {
-                return true; // one module, which is every comparison that never leaves home
-            }
-            return resolve_type_id(lhs) == resolve_type_id(rhs);
-        }
 
         /// How much of a value an any carries without reaching for the heap.
         ///
@@ -158,7 +92,7 @@ namespace stdc {
         /// One of these per type per module, reached through a pointer that is null exactly when
         /// the any is empty.
         struct any_vtable {
-            type_entry &(*type)();
+            type_id (*type)();
             void *(*value)(any_storage &) noexcept;
             void (*destroy)(any_storage &) noexcept;
             void (*copy)(const any_storage &, any_storage &);
@@ -168,7 +102,7 @@ namespace stdc {
         template <class T>
         const any_vtable &vtable_of() noexcept {
             static const any_vtable table{
-                &entry_of<T>,
+                [] { return type_id::of<T>(); },
                 [](any_storage &s) noexcept -> void * { return any_handler<T>::value(s); },
                 &any_handler<T>::destroy,
                 &any_handler<T>::copy,
@@ -277,15 +211,14 @@ namespace stdc {
         /// Whether the value in here is a \a T.
         template <class T>
         bool holds() const {
-            return _vtable &&
-                   detail::same_type(_vtable->type(), detail::entry_of<std::decay_t<T>>());
+            return _vtable && _vtable->type() == type_id::of<T>();
         }
 
-        /// The compiler's name for the type held, or an empty view when there is no value.
+        /// Which type is in here, or a default \c type_id when there is no value.
         ///
-        /// Meant for diagnostics. The spelling differs between compilers.
-        inline std::string_view type_name() const {
-            return _vtable ? _vtable->type().name : std::string_view();
+        /// \sa type_id::name(), for the compiler's spelling of it
+        inline type_id type() const {
+            return _vtable ? _vtable->type() : type_id();
         }
 
     private:

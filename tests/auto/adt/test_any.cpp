@@ -102,7 +102,7 @@ namespace {
 BOOST_AUTO_TEST_CASE(test_empty) {
     any value;
     BOOST_CHECK(!value.has_value());
-    BOOST_CHECK(value.type_name().empty());
+    BOOST_CHECK(value.type().name().empty());
     BOOST_CHECK(any_cast<int>(&value) == nullptr);
     BOOST_CHECK(!value.holds<int>());
 }
@@ -207,10 +207,10 @@ BOOST_AUTO_TEST_CASE(test_swap) {
 BOOST_AUTO_TEST_CASE(test_type_name_is_readable) {
     any value = 42;
     // the exact spelling is the compiler's, so only look for the part every one of them agrees on
-    BOOST_CHECK(value.type_name().find("int") != std::string_view::npos);
+    BOOST_CHECK(value.type().name().find("int") != std::string_view::npos);
 
     any text = std::string();
-    BOOST_CHECK(text.type_name().find("string") != std::string_view::npos);
+    BOOST_CHECK(text.type().name().find("string") != std::string_view::npos);
 }
 
 // The identity of a type is a name looked up in a table, so two entries that were never compared
@@ -219,7 +219,7 @@ BOOST_AUTO_TEST_CASE(test_identity_is_stable) {
     any first = 42;
     any second = 43;
     BOOST_CHECK(first.holds<int>() && second.holds<int>());
-    BOOST_CHECK_EQUAL(first.type_name(), second.type_name());
+    BOOST_CHECK_EQUAL(first.type().name(), second.type().name());
 
     struct NeverSeenBefore {
         int x;
@@ -330,7 +330,7 @@ BOOST_AUTO_TEST_CASE(test_identity_across_a_module_boundary) {
     any fromPlugin;
     fill(&fromPlugin, 7);
     BOOST_CHECK(any_cast<int>(&fromPlugin) == nullptr);
-    BOOST_CHECK(!fromPlugin.type_name().empty());
+    BOOST_CHECK(!fromPlugin.type().name().empty());
 
 #  ifdef STDCORELIB_STATIC
     // Each module linked its own copy of the table, so a type is not expected to carry across.
