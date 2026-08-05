@@ -9,7 +9,11 @@ if(NOT Boost_FOUND)
 endif()
 
 file(GLOB _common_src *.cpp)
-file(GLOB_RECURSE _subdir_src support/*.cpp)
+file(GLOB_RECURSE _subdir_src
+    support/*.cpp
+    adt/*.cpp
+    stlextra/*.cpp
+)
 
 if(WIN32)
     file(GLOB _platform_src platform/windows/*.cpp)
