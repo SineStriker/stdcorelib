@@ -4,8 +4,9 @@
 #define STDCORELIB_ANY_H
 
 #include <atomic>
+#include <cstddef>
 #include <exception>
-#include <memory>
+#include <new>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -75,29 +76,99 @@ namespace stdc {
             return resolve_type_id(lhs) == resolve_type_id(rhs);
         }
 
-        struct any_storage {
-            virtual ~any_storage() = default;
-            virtual std::unique_ptr<any_storage> clone() const = 0;
-            virtual type_entry &type() const = 0;
+        /// How much of a value an any carries without reaching for the heap.
+        ///
+        /// Two pointers holds the things a value of unknown type usually turns out to be: a
+        /// number, a flag, a pointer, a small struct of those. Anything wider is a pointer to the
+        /// heap, which is what the whole object was before there was a buffer at all.
+        constexpr size_t any_buffer_size = 2 * sizeof(void *);
+
+        union any_storage {
+            void *heap;
+            // Not over aligned on purpose. Aligning the union to max_align_t would round the
+            // whole any up to that, and a type needing more than a pointer's alignment can go on
+            // the heap instead.
+            alignas(void *) unsigned char buffer[any_buffer_size];
+        };
+
+        /// Whether a \a T lives in the buffer rather than on the heap.
+        ///
+        /// Moving an any moves whatever sits in its buffer, so a type that can throw while being
+        /// moved would make that operation throw. Those go to the heap, where a move is a pointer
+        /// handover and cannot fail.
+        template <class T>
+        constexpr bool any_fits_inline =
+            sizeof(T) <= any_buffer_size && alignof(T) <= alignof(void *) &&
+            std::is_nothrow_move_constructible_v<T>;
+
+        template <class T, bool Inline = any_fits_inline<T>>
+        struct any_handler;
+
+        template <class T>
+        struct any_handler<T, true> {
+            template <class Arg>
+            static void construct(any_storage &s, Arg &&arg) {
+                ::new (static_cast<void *>(s.buffer)) T(std::forward<Arg>(arg));
+            }
+            static T *value(any_storage &s) noexcept {
+                return std::launder(reinterpret_cast<T *>(s.buffer));
+            }
+            static void destroy(any_storage &s) noexcept {
+                value(s)->~T();
+            }
+            static void copy(const any_storage &from, any_storage &to) {
+                construct(to, *value(const_cast<any_storage &>(from)));
+            }
+            static void move(any_storage &from, any_storage &to) noexcept {
+                construct(to, std::move(*value(from)));
+                destroy(from);
+            }
         };
 
         template <class T>
-        struct any_storage_impl : any_storage {
-            explicit any_storage_impl(const T &v) : value(v) {
+        struct any_handler<T, false> {
+            template <class Arg>
+            static void construct(any_storage &s, Arg &&arg) {
+                s.heap = new T(std::forward<Arg>(arg));
             }
-            explicit any_storage_impl(T &&v) : value(std::move(v)) {
+            static T *value(any_storage &s) noexcept {
+                return static_cast<T *>(s.heap);
             }
-
-            std::unique_ptr<any_storage> clone() const override {
-                return std::unique_ptr<any_storage>(new any_storage_impl(value));
+            static void destroy(any_storage &s) noexcept {
+                delete static_cast<T *>(s.heap);
             }
-
-            type_entry &type() const override {
-                return entry_of<T>();
+            static void copy(const any_storage &from, any_storage &to) {
+                to.heap = new T(*static_cast<const T *>(from.heap));
             }
-
-            T value;
+            static void move(any_storage &from, any_storage &to) noexcept {
+                to.heap = from.heap; // nothing to move, the value never left the heap
+                from.heap = nullptr;
+            }
         };
+
+        /// What an any needs to know about the type it is holding.
+        ///
+        /// One of these per type per module, reached through a pointer that is null exactly when
+        /// the any is empty.
+        struct any_vtable {
+            type_entry &(*type)();
+            void *(*value)(any_storage &) noexcept;
+            void (*destroy)(any_storage &) noexcept;
+            void (*copy)(const any_storage &, any_storage &);
+            void (*move)(any_storage &, any_storage &) noexcept;
+        };
+
+        template <class T>
+        const any_vtable &vtable_of() noexcept {
+            static const any_vtable table{
+                &entry_of<T>,
+                [](any_storage &s) noexcept -> void * { return any_handler<T>::value(s); },
+                &any_handler<T>::destroy,
+                &any_handler<T>::copy,
+                &any_handler<T>::move,
+            };
+            return table;
+        }
 
     }
 
@@ -127,19 +198,29 @@ namespace stdc {
     ///          as \c Base, and const and reference qualifiers are stripped on the way in, so an
     ///          \c int and a \c const \c int& are the same type here.
     ///
-    /// \note Every non-empty any owns a heap allocation. The object itself is one pointer, which
-    ///       is what keeps a container of them small.
+    /// \note A value of up to two pointers that cannot throw while being moved is kept inside the
+    ///       any. Anything else is on the heap. Either way the object is one buffer plus one
+    ///       pointer, so a container of them stays small.
     ///
     /// \sa any_cast()
     class any {
     public:
         any() noexcept = default;
-        ~any() = default;
 
-        any(const any &other) : _storage(other._storage ? other._storage->clone() : nullptr) {
+        ~any() {
+            reset();
         }
 
-        any(any &&other) noexcept = default;
+        any(const any &other) {
+            if (other._vtable) {
+                other._vtable->copy(other._storage, _storage);
+                _vtable = other._vtable;
+            }
+        }
+
+        any(any &&other) noexcept {
+            adopt(other);
+        }
 
         /// Takes a value of any type other than \c any itself.
         ///
@@ -150,43 +231,70 @@ namespace stdc {
                                                 !std::is_convertible_v<any, std::decay_t<T>> &&
                                                 std::is_copy_constructible_v<std::decay_t<T>>,
                                             int> = 0>
-        any(T &&value)
-            : _storage(new detail::any_storage_impl<std::decay_t<T>>(std::forward<T>(value))) {
+        any(T &&value) {
+            detail::any_handler<std::decay_t<T>>::construct(_storage, std::forward<T>(value));
+            _vtable = &detail::vtable_of<std::decay_t<T>>();
         }
 
         any &operator=(any other) noexcept {
-            _storage = std::move(other._storage);
+            swap(other);
             return *this;
         }
 
         inline bool has_value() const noexcept {
-            return _storage != nullptr;
+            return _vtable != nullptr;
         }
 
         inline void reset() noexcept {
-            _storage.reset();
+            if (_vtable) {
+                _vtable->destroy(_storage);
+                _vtable = nullptr;
+            }
         }
 
-        inline void swap(any &other) noexcept {
-            _storage.swap(other._storage);
+        /// \note Not a pointer swap. A value living in the buffer has to be moved, so this is
+        ///       three moves rather than nothing.
+        ///
+        /// \note Written out rather than through the assignment operator, which swaps and would
+        ///       call straight back into here.
+        void swap(any &other) noexcept {
+            if (this == &other) {
+                return;
+            }
+            any temp;
+            temp.adopt(*this);
+            adopt(other);
+            other.adopt(temp);
         }
 
         /// Whether the value in here is a \a T.
         template <class T>
         bool holds() const {
-            return _storage &&
-                   detail::same_type(_storage->type(), detail::entry_of<std::decay_t<T>>());
+            return _vtable &&
+                   detail::same_type(_vtable->type(), detail::entry_of<std::decay_t<T>>());
         }
 
         /// The compiler's name for the type held, or an empty view when there is no value.
         ///
         /// Meant for diagnostics. The spelling differs between compilers.
         inline std::string_view type_name() const {
-            return _storage ? _storage->type().name : std::string_view();
+            return _vtable ? _vtable->type().name : std::string_view();
         }
 
     private:
-        std::unique_ptr<detail::any_storage> _storage;
+        /// Takes the value out of \a from, leaving it empty.
+        ///
+        /// \pre this holds nothing
+        void adopt(any &from) noexcept {
+            if (from._vtable) {
+                from._vtable->move(from._storage, _storage);
+                _vtable = from._vtable;
+                from._vtable = nullptr;
+            }
+        }
+
+        detail::any_storage _storage{};
+        const detail::any_vtable *_vtable = nullptr;
 
         template <class T>
         friend const T *any_cast(const any *value) noexcept;
@@ -206,7 +314,7 @@ namespace stdc {
         if (!value || !value->holds<U>()) {
             return nullptr;
         }
-        return &static_cast<detail::any_storage_impl<U> &>(*value->_storage).value;
+        return detail::any_handler<U>::value(const_cast<detail::any_storage &>(value->_storage));
     }
 
     template <class T>
@@ -215,7 +323,7 @@ namespace stdc {
         if (!value || !value->holds<U>()) {
             return nullptr;
         }
-        return &static_cast<detail::any_storage_impl<U> &>(*value->_storage).value;
+        return detail::any_handler<U>::value(value->_storage);
     }
 
 #ifdef STDCORELIB_EXCEPTIONS

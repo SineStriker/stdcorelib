@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <stdcorelib/adt/any.h>
@@ -38,6 +39,60 @@ namespace {
     struct Derived : Base {
         int d = 2;
     };
+
+    // Small and cheap to move, so it belongs in the buffer, and it counts its own lifetimes so
+    // that the buffer's destructor can be checked.
+    struct SmallTracked {
+        static int alive;
+        int value;
+
+        explicit SmallTracked(int v = 0) noexcept : value(v) {
+            ++alive;
+        }
+        SmallTracked(const SmallTracked &other) noexcept : value(other.value) {
+            ++alive;
+        }
+        SmallTracked(SmallTracked &&other) noexcept : value(other.value) {
+            ++alive;
+        }
+        ~SmallTracked() {
+            --alive;
+        }
+    };
+
+    int SmallTracked::alive = 0;
+
+    // Exactly the width of the buffer, and spelled as a name so the comma in it does not reach
+    // the check macros.
+    using PointerPair = std::pair<void *, void *>;
+
+    // Too wide for the buffer whatever else is true of it.
+    struct Wide {
+        void *a;
+        void *b;
+        void *c;
+        void *d;
+    };
+
+    // Small enough, but throwing while being moved would make moving an any throw, so this one
+    // has to go to the heap anyway.
+    struct ThrowingMove {
+        int value;
+        explicit ThrowingMove(int v = 0) : value(v) {
+        }
+        ThrowingMove(const ThrowingMove &other) : value(other.value) {
+        }
+        ThrowingMove(ThrowingMove &&other) : value(other.value) {
+        }
+    };
+
+    // Whether the value sits inside the any rather than at the far end of a pointer.
+    template <class T>
+    bool stored_inline(const any &value) {
+        const auto *held = reinterpret_cast<const char *>(any_cast<T>(&value));
+        const auto *self = reinterpret_cast<const char *>(&value);
+        return held >= self && held < self + sizeof(any);
+    }
 
 }
 
@@ -169,6 +224,81 @@ BOOST_AUTO_TEST_CASE(test_identity_is_stable) {
     any fresh = NeverSeenBefore{1};
     BOOST_CHECK(fresh.holds<NeverSeenBefore>());
     BOOST_CHECK(!fresh.holds<int>());
+}
+
+// A value small enough and cheap enough to move is kept in the any itself. This is the whole
+// reason the storage is not simply a pointer, so it is worth asserting rather than assuming.
+BOOST_AUTO_TEST_CASE(test_small_values_avoid_the_heap) {
+    any number = 42;
+    BOOST_CHECK(stored_inline<int>(number));
+
+    any pointer = static_cast<void *>(nullptr);
+    BOOST_CHECK(stored_inline<void *>(pointer));
+
+    any two_pointers = PointerPair{};
+    BOOST_CHECK(stored_inline<PointerPair>(two_pointers));
+
+    // and the ones that cannot be
+    any wide = Wide{};
+    BOOST_CHECK(!stored_inline<Wide>(wide));
+
+    any throwing = ThrowingMove{1};
+    BOOST_CHECK(!stored_inline<ThrowingMove>(throwing));
+
+    // a string owns its own allocation and is wider than the buffer either way
+    any text = std::string("text");
+    BOOST_CHECK(!stored_inline<std::string>(text));
+}
+
+// The buffer holds a real object, so it has to be destroyed, copied and moved like one.
+BOOST_AUTO_TEST_CASE(test_inline_values_have_their_lifetime_run) {
+    BOOST_REQUIRE_EQUAL(SmallTracked::alive, 0);
+    {
+        any value = SmallTracked{5};
+        BOOST_REQUIRE(stored_inline<SmallTracked>(value));
+        BOOST_CHECK_EQUAL(SmallTracked::alive, 1);
+
+        any copy = value;
+        BOOST_CHECK_EQUAL(SmallTracked::alive, 2);
+        any_cast<SmallTracked>(&copy)->value = 6;
+        BOOST_CHECK_EQUAL(any_cast<SmallTracked>(&value)->value, 5); // independent copies
+
+        any moved = std::move(copy);
+        BOOST_CHECK(!copy.has_value());
+        BOOST_CHECK_EQUAL(any_cast<SmallTracked>(&moved)->value, 6);
+        BOOST_CHECK_EQUAL(SmallTracked::alive, 2); // the moved from one is gone, not leaked
+
+        moved.reset();
+        BOOST_CHECK_EQUAL(SmallTracked::alive, 1);
+    }
+    BOOST_CHECK_EQUAL(SmallTracked::alive, 0);
+}
+
+// Swapping cannot be a pointer exchange once a value can live in the buffer.
+BOOST_AUTO_TEST_CASE(test_swap_across_both_kinds_of_storage) {
+    BOOST_REQUIRE_EQUAL(SmallTracked::alive, 0);
+    {
+        any small = SmallTracked{1};
+        any wide = Wide{};
+
+        swap(small, wide);
+        BOOST_CHECK(small.holds<Wide>());
+        BOOST_CHECK(wide.holds<SmallTracked>());
+        BOOST_CHECK_EQUAL(any_cast<SmallTracked>(&wide)->value, 1);
+        BOOST_CHECK_EQUAL(SmallTracked::alive, 1);
+
+        // and with an empty one on one side
+        any empty;
+        swap(empty, wide);
+        BOOST_CHECK(empty.holds<SmallTracked>());
+        BOOST_CHECK(!wide.has_value());
+        BOOST_CHECK_EQUAL(SmallTracked::alive, 1);
+    }
+    BOOST_CHECK_EQUAL(SmallTracked::alive, 0);
+}
+
+BOOST_AUTO_TEST_CASE(test_size_is_a_buffer_plus_a_pointer) {
+    BOOST_CHECK_EQUAL(sizeof(any), 2 * sizeof(void *) + sizeof(void *));
 }
 
 #ifdef STDCORELIB_EXCEPTIONS
