@@ -50,7 +50,8 @@ namespace stdc {
             return *this;
         }
 
-        // --- Capacity -------------------------------------------------------------------------
+        /// \name Capacity
+        /// @{
 
         [[nodiscard]] bool empty() const {
             return m_size == 0;
@@ -71,7 +72,10 @@ namespace stdc {
                 grow(n);
         }
 
-        // --- Element access -------------------------------------------------------------------
+        /// @}
+
+        /// \name Element access
+        /// @{
 
         reference operator[](size_type i) {
             return m_begin[i];
@@ -113,7 +117,10 @@ namespace stdc {
         const_reverse_iterator crend() const { return const_reverse_iterator(begin()); }
         // clang-format on
 
-        // --- Adding elements ------------------------------------------------------------------
+        /// @}
+
+        /// \name Adding elements
+        /// @{
 
         void push_back(const T &value) {
             emplace_back(value);
@@ -143,11 +150,14 @@ namespace stdc {
                 push_back(*first);
         }
 
-        // --- Inserting at a position ----------------------------------------------------------
-        //
-        // Each insert appends the new element(s) at the end and then rotates them into place. The
-        // value is copied before any shifting happens, so inserting an element that lives inside
-        // the array (e.g. `v.insert(v.begin(), v[3])`) is well defined.
+        /// @}
+
+        /// \name Inserting at a position
+        ///
+        /// Each insert appends the new element(s) at the end and then rotates them into place. The
+        /// value is copied before any shifting happens, so inserting an element that lives inside
+        /// the array (e.g. \c v.insert(v.begin(),v[3])) is well defined.
+        /// @{
 
         iterator insert(const_iterator pos, const T &value) {
             size_type index = static_cast<size_type>(pos - m_begin);
@@ -187,7 +197,10 @@ namespace stdc {
             return insert(pos, init.begin(), init.end());
         }
 
-        // --- Removing elements ----------------------------------------------------------------
+        /// @}
+
+        /// \name Removing elements
+        /// @{
 
         void pop_back() {
             --m_size;
@@ -240,7 +253,10 @@ namespace stdc {
             m_size = n;
         }
 
-        // --- Swap -----------------------------------------------------------------------------
+        /// @}
+
+        /// \name Swap
+        /// @{
 
         /// Swaps contents with \a other. Two heap-backed arrays just trade buffers. Otherwise the
         /// shared elements are swapped and the longer one's tail is moved over, since neither can
@@ -273,6 +289,8 @@ namespace stdc {
             longer.m_size = shared;
             shorter.m_size = longer_size;
         }
+
+        /// @}
 
     protected:
         explicit vlarray_base(const Alloc &alloc) : m_alloc(alloc) {
