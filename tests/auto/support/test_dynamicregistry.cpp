@@ -6,6 +6,9 @@
 #include <vector>
 
 #include <stdcorelib/support/dynamicregistry.h>
+#include <stdcorelib/support/sharedlibrary.h>
+
+#include "../plugins/test_plugin.h"
 
 #include <boost/test/unit_test.hpp>
 
@@ -145,5 +148,52 @@ BOOST_AUTO_TEST_CASE(test_is_thread_safe) {
 
     BOOST_CHECK_EQUAL(reg.size(), size_t(Threads * PerThread));
 }
+
+#ifdef TEST_PLUGIN_PATH
+
+// A registry declared in a header is only one registry if the singleton is. The instance used to
+// be a function-local static, which gives one copy per module, so a plugin registered somewhere
+// the host never looked and said nothing about it.
+BOOST_AUTO_TEST_CASE(test_a_plugin_registers_where_the_host_looks) {
+    SharedLibrary plugin;
+    BOOST_REQUIRE_MESSAGE(plugin.open(TEST_PLUGIN_PATH), plugin.lastError());
+
+    auto add = reinterpret_cast<bool (*)(const char *, int)>(plugin.resolve("registry_plugin_add"));
+    auto count = reinterpret_cast<size_t (*)()>(plugin.resolve("registry_plugin_size"));
+    auto address = reinterpret_cast<const void *(*) ()>(plugin.resolve("registry_plugin_address"));
+    BOOST_REQUIRE(add && count && address);
+
+    auto &here = DynamicRegistry<PluginWidget>::instance();
+    here.clear();
+
+    BOOST_REQUIRE(add("from-the-plugin", 7));
+
+#  ifdef STDCORELIB_STATIC
+    // Each module linked its own table, so each has a registry of its own. Nothing to check
+    // beyond the plugin not having disturbed this one.
+    BOOST_TEST_MESSAGE("stdcorelib is linked statically here, so the modules have a registry each");
+    BOOST_CHECK(address() != static_cast<const void *>(&here));
+#  else
+    BOOST_CHECK(address() == static_cast<const void *>(&here));
+    BOOST_CHECK_EQUAL(count(), here.size());
+
+    // and the entry is usable from this side, factory and all
+    auto entry = here.find("from-the-plugin");
+    BOOST_REQUIRE(entry);
+    BOOST_CHECK_EQUAL(entry->desc(), "registered by the plugin");
+
+    auto widget = entry->instantiate();
+    BOOST_REQUIRE(widget);
+    BOOST_CHECK_EQUAL(widget->tag(), 7);
+
+    // the host registering is equally visible from the plugin
+    here.add("from-the-host", {}, [] { return std::unique_ptr<PluginWidget>(); });
+    BOOST_CHECK_EQUAL(count(), size_t(2));
+#  endif
+
+    here.clear();
+}
+
+#endif // TEST_PLUGIN_PATH
 
 BOOST_AUTO_TEST_SUITE_END()

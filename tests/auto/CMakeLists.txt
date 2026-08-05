@@ -42,9 +42,9 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # module boundary cannot be answered from inside one binary, so this has to be a second one.
 # Its visibility is hidden on purpose: that is the configuration in which identity schemes built
 # on comparing addresses come apart.
-add_library(test_any_plugin MODULE plugins/any_plugin.cpp)
-target_link_libraries(test_any_plugin PRIVATE stdcorelib)
-set_target_properties(test_any_plugin PROPERTIES
+add_library(test_plugin MODULE plugins/test_plugin.cpp)
+target_link_libraries(test_plugin PRIVATE stdcorelib)
+set_target_properties(test_plugin PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
@@ -54,7 +54,7 @@ set_target_properties(test_any_plugin PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
 
-add_dependencies(${PROJECT_NAME} test_any_plugin)
+add_dependencies(${PROJECT_NAME} test_plugin)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    TEST_ANY_PLUGIN_PATH="$<TARGET_FILE:test_any_plugin>"
+    TEST_PLUGIN_PATH="$<TARGET_FILE:test_plugin>"
 )

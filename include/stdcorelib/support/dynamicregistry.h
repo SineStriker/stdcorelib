@@ -14,8 +14,30 @@
 #include <vector>
 
 #include <stdcorelib/stdc_global.h>
+#include <stdcorelib/adt/type_id.h>
 
 namespace stdc {
+
+    namespace detail {
+
+        /// The one object this process keeps under \a name, built by \a create the first time
+        /// anybody asks for it.
+        ///
+        /// A registry declared in a header cannot hold its own singleton: a function-local static
+        /// in a template has one copy per module, so a plugin would register into a table the
+        /// host never reads. What is exported here is a function, and a function belongs to the
+        /// library, so every module that shares one copy of it resolves to the same object no
+        /// matter what its own symbols are doing.
+        ///
+        /// \note What is built here is never destroyed, on purpose. Whichever module asks first
+        ///       is the one that builds it, so a destructor would have to be called through a
+        ///       pointer into that module, and a plugin that asked first and then unloaded would
+        ///       take the process down at exit. Nothing is gained by running it either: the
+        ///       memory goes back at exit regardless, and the entries a destructor would release
+        ///       may belong to code that has already been unloaded.
+        STDCORELIB_EXPORT void *shared_instance(std::string_view name, void *(*create)());
+
+    }
 
     /// A registry that is filled at run time, looked up by name, and can be watched.
     ///
@@ -34,9 +56,9 @@ namespace stdc {
     ///   }
     /// \endcode
     ///
-    /// The registry lives in a function-local static, so it is built on first use rather than
-    /// during static initialization, and nothing depends on the order the translation units
-    /// happen to be initialized in.
+    /// The registry is built on first use rather than during static initialization, so nothing
+    /// depends on the order the translation units happen to be initialized in, and there is one
+    /// of it per process rather than per module. See instance().
     ///
     /// \note Thread safe. add(), remove() and the lookups may be called from any thread.
     ///       Entries are handed out as shared_ptr, so one stays alive in the caller's hands even
@@ -97,9 +119,20 @@ namespace stdc {
         };
 
         /// The registry for \a T. Built on first use.
+        ///
+        /// One per process, not one per module: the static here caches a pointer, and the object
+        /// it points at is owned by the table inside stdcorelib. A plugin that registers is
+        /// therefore registering where the host will look.
+        ///
+        /// \note That holds as far as one copy of stdcorelib reaches. Two modules that each link
+        ///       it statically have a table each, and then they have a registry each too.
+        /// \note Never destroyed, which is what lets a plugin ask for it without becoming
+        ///       responsible for taking it apart. See remove() for what a plugin does owe.
         static DynamicRegistry &instance() {
-            static DynamicRegistry registry;
-            return registry;
+            static auto *self = static_cast<DynamicRegistry *>(
+                detail::shared_instance(detail::type_name<DynamicRegistry>(),
+                                        [] { return static_cast<void *>(new DynamicRegistry()); }));
+            return *self;
         }
 
         /// Registers \a name.
@@ -128,6 +161,20 @@ namespace stdc {
         /// \retval false there was no such entry
         /// \note An instance already handed out by instantiate() is not affected. This only
         ///       stops new ones being made.
+        ///
+        /// \warning **A plugin has to do this before it is unloaded.** The factory it registered
+        ///          is code inside the plugin, and the registry outlives the plugin, so an entry
+        ///          left behind is a call into memory that is no longer mapped. Nothing detects
+        ///          this: the entry looks exactly like any other until somebody instantiates it.
+        ///
+        /// \code
+        ///   // in the plugin, on the way out
+        ///   DynamicRegistry<Codec>::instance().remove("flac");
+        /// \endcode
+        ///
+        /// The registry itself is not the plugin's to release. It is shared with the host and
+        /// with every other plugin, and it is never destroyed, so the entries are the whole of
+        /// what a plugin owns here.
         bool remove(std::string_view name) {
             EntryPointer entry;
             std::vector<Listener *> listeners;
