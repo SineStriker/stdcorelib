@@ -143,12 +143,38 @@ namespace stdc {
         /// All of these take effect at start() and mean nothing after it.
         /// @{
 
-        /// The program to run. Defaults to the first entry of args(), so this is only needed to
-        /// run a program under an \c argv[0] of its own choosing.
+        /// The file to load, for when that is not the same as what the program should call
+        /// itself.
+        ///
+        /// Starting a program involves two separate things, and this is the first. \a executable
+        /// is the file the system loads. \c args()[0] is the string handed to the program as its
+        /// own name, and has no bearing on which file runs. Leaving this unset makes it
+        /// \c args()[0], which is why most callers never touch it.
+        ///
+        /// What it exists for is a program that reads its own name and behaves accordingly, the
+        /// way a multi-call binary does:
+        ///
+        /// \code
+        ///   // loads /bin/busybox, which finds "ls" as its name and behaves as ls
+        ///   popen.executable("/bin/busybox").args({"ls", "-l"});
+        /// \endcode
+        ///
+        /// \note Not needed for a path with a space in it, nor for one that should be taken as
+        ///       written rather than looked up along \c PATH. \c args()[0] covers both already.
+        /// \note Under shell() this names the shell rather than the program, standing in for
+        ///       \c /bin/sh on unix and \c cmd.exe on Windows.
+        /// \sa args()
         Popen &executable(const std::filesystem::path &executable);
 
-        /// The argument vector, \c argv[0] included. A name with no separator in it is looked
-        /// up along \c PATH.
+        /// The argument vector, \c argv[0] included.
+        ///
+        /// \c args[0] is both the file to run and the name the program is given, unless
+        /// executable() separates them. A name with no separator in it is looked up along
+        /// \c PATH, and one with a separator is taken as written.
+        ///
+        /// \note Quoting is handled here. An argument with a space in it, \c args[0] included,
+        ///       arrives at the program as one argument on either platform.
+        /// \sa executable()
         Popen &args(const std::vector<std::string> &args);
 
         /// Hands the command to the system shell rather than executing it directly, so its
