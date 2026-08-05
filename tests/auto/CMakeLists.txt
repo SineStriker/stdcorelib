@@ -37,3 +37,24 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
 )
+
+# A module loaded at run time by the any tests. Whether a value keeps its identity across a
+# module boundary cannot be answered from inside one binary, so this has to be a second one.
+# Its visibility is hidden on purpose: that is the configuration in which identity schemes built
+# on comparing addresses come apart.
+add_library(test_any_plugin MODULE plugins/any_plugin.cpp)
+target_link_libraries(test_any_plugin PRIVATE stdcorelib)
+set_target_properties(test_any_plugin PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+)
+
+add_dependencies(${PROJECT_NAME} test_any_plugin)
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    TEST_ANY_PLUGIN_PATH="$<TARGET_FILE:test_any_plugin>"
+)

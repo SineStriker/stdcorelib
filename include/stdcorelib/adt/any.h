@@ -53,19 +53,26 @@ namespace stdc {
         /// modules are involved, and \a id caches that second answer.
         struct type_entry {
             std::string_view name;
-            std::atomic<int> id;
+            std::atomic<const void *> id;
         };
 
-        /// Gives \a entry the number every module in this process uses for that name.
+        /// Gives \a entry the one address this process uses to stand for that name.
         ///
-        /// \note The table this reads lives in exactly one place, so it only unifies modules that
-        ///       share one copy of the library. Statically linking stdcorelib into two of them
-        ///       gives each its own table.
-        STDCORELIB_EXPORT int resolve_type_id(type_entry &entry);
+        /// An address rather than a number, because a number would have to come from a counter,
+        /// and a build where two modules each hold a table would have two counters both starting
+        /// at one. An entry keeps the first answer it is given, so entries numbered by different
+        /// counters could collide and two unrelated types would compare equal. Addresses taken
+        /// from different tables never do.
+        ///
+        /// \note The table lives in exactly one place, so this unifies modules that share one
+        ///       copy of the library. Statically linking stdcorelib into two of them gives each
+        ///       its own table, and then a type simply does not carry across, which is a refusal
+        ///       rather than a wrong answer.
+        STDCORELIB_EXPORT const void *resolve_type_id(type_entry &entry);
 
         template <class T>
         type_entry &entry_of() {
-            static type_entry entry{type_name<T>(), 0};
+            static type_entry entry{type_name<T>(), nullptr};
             return entry;
         }
 
