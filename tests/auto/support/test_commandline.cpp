@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -8,6 +9,21 @@
 #include <stdcorelib/support/commandline.h>
 
 #include <boost/test/unit_test.hpp>
+
+// For the one case that reads back what showError() put on stderr.
+#ifdef _WIN32
+#  include <io.h>
+#  define STDC_TEST_DUP    _dup
+#  define STDC_TEST_DUP2   _dup2
+#  define STDC_TEST_CLOSE  _close
+#  define STDC_TEST_FILENO _fileno
+#else
+#  include <unistd.h>
+#  define STDC_TEST_DUP    dup
+#  define STDC_TEST_DUP2   dup2
+#  define STDC_TEST_CLOSE  close
+#  define STDC_TEST_FILENO fileno
+#endif
 
 using namespace stdc::cli;
 
@@ -1458,6 +1474,121 @@ BOOST_AUTO_TEST_CASE(test_a_command_with_no_name) {
     auto result = ok(parser, {"x"});
     BOOST_CHECK_EQUAL(result.value(0), "x");
     BOOST_CHECK(has(result.helpText(), "Usage:"));
+}
+
+namespace {
+
+    // showError() writes to stderr, so reading it back means pointing that descriptor at a file
+    // for as long as it runs. A file is never a terminal, so the console code resolves color to
+    // never and what lands is plain text.
+    template <class F>
+    std::string capturedStderr(F &&body) {
+        auto path = std::filesystem::temp_directory_path() / "stdc_cli_stderr.txt";
+
+        std::fflush(stderr);
+        int saved = STDC_TEST_DUP(STDC_TEST_FILENO(stderr));
+        BOOST_REQUIRE(saved >= 0);
+
+        FILE *file = nullptr;
+#ifdef _WIN32
+        fopen_s(&file, path.string().c_str(), "wb");
+#else
+        file = std::fopen(path.string().c_str(), "wb");
+#endif
+        BOOST_REQUIRE(file != nullptr);
+
+        STDC_TEST_DUP2(STDC_TEST_FILENO(file), STDC_TEST_FILENO(stderr));
+        body();
+        std::fflush(stderr);
+        STDC_TEST_DUP2(saved, STDC_TEST_FILENO(stderr));
+        STDC_TEST_CLOSE(saved);
+        std::fclose(file);
+
+        std::ifstream in(path, std::ios::binary);
+        std::string res((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        return res;
+    }
+
+}
+
+// A name spelled wrong is worth answering with the declared names it is close to. Without it a
+// mistyped subcommand only ever says that it is unknown, which is the least useful true thing.
+BOOST_AUTO_TEST_CASE(test_a_mistyped_name_is_answered_with_the_ones_it_is_near) {
+    // a subcommand
+    {
+        Parser parser(Command("prog")
+                          .addCommand(Command("copy"))
+                          .addCommand(Command("move"))
+                          .addCommand(Command("remove")));
+        auto text = bad(parser, {"copyy"}, ParseResult::UnknownCommand).correctionText();
+        BOOST_CHECK(has(text, "\"copyy\" is not matched"));
+        BOOST_CHECK(has(text, "\n  copy"));
+        BOOST_CHECK(!has(text, "\n  move"));
+        BOOST_CHECK(!has(text, "\n  remove"));
+    }
+
+    // an option, matched against every spelling in scope rather than the first
+    {
+        Parser parser(Command("prog").addOptions({
+            Option({"-v", "--verbose"}, "Say more"),
+            Option({"--version"}, "Say which"),
+        }));
+        auto text = bad(parser, {"--verbse"}, ParseResult::UnknownOption).correctionText();
+        BOOST_CHECK(has(text, "\n  --verbose"));
+        BOOST_CHECK(has(text, "\n  --version"));
+    }
+
+    // one of the few words an argument accepts
+    {
+        Parser parser(Command("prog").addArgument(
+            Argument("mode").expect({"fast", "slow", "careful"})));
+        auto text = bad(parser, {"fest"}, ParseResult::InvalidArgumentValue).correctionText();
+        BOOST_CHECK(has(text, "\n  fast"));
+        BOOST_CHECK(!has(text, "\n  careful"));
+    }
+
+    // Nothing near it is answered with nothing, rather than with the whole list.
+    {
+        Parser parser(Command("prog").addCommand(Command("copy")));
+        auto text = bad(parser, {"zzzzzzzz"}, ParseResult::UnknownCommand).correctionText();
+        BOOST_CHECK(text.empty());
+    }
+
+    // A failure that is not a name spelled wrong has nothing to offer.
+    {
+        Parser parser(Command("prog").addArgument(Argument("needed")));
+        auto text = bad(parser, {}, ParseResult::MissingCommandArgument).correctionText();
+        BOOST_CHECK(text.empty());
+    }
+
+    // A clean parse likewise.
+    {
+        Parser parser(Command("prog").addCommand(Command("copy")));
+        BOOST_CHECK(ok(parser, {"copy"}).correctionText().empty());
+    }
+}
+
+// What showError() puts on stderr, since that is the whole point of measuring the distance.
+BOOST_AUTO_TEST_CASE(test_show_error_offers_the_correction) {
+    Parser parser(Command("prog").addCommand(Command("copy")).addCommand(Command("move")));
+
+    auto result = bad(parser, {"copyy"}, ParseResult::UnknownCommand);
+    auto printed = capturedStderr([&] { result.showError(); });
+    BOOST_CHECK(has(printed, "is not a command"));
+    BOOST_CHECK(has(printed, "Do you mean"));
+    BOOST_CHECK(has(printed, "copy"));
+    BOOST_CHECK(has(printed, "--help"));
+
+    // Turned off, the error is still said and only the offer goes away.
+    parser.setDisplayOptions(Parser::SkipCorrection);
+    auto quiet = bad(parser, {"copyy"}, ParseResult::UnknownCommand);
+    auto printed_quiet = capturedStderr([&] { quiet.showError(); });
+    BOOST_CHECK(has(printed_quiet, "is not a command"));
+    BOOST_CHECK(!has(printed_quiet, "Do you mean"));
+    BOOST_CHECK(has(printed_quiet, "--help"));
 }
 
 BOOST_AUTO_TEST_CASE(test_reading_a_result_that_failed) {

@@ -753,6 +753,9 @@ namespace stdc::cli {
         Error error() const;
         /// What went wrong, ready to be printed.
         const std::string &errorText() const;
+        /// The declared names close enough to what was typed to be worth offering, ready to be
+        /// printed. Empty when nothing is close, and when the failure was not a mistyped name.
+        std::string correctionText() const;
 
         /// The command that was reached, which is the root when no subcommand was named.
         const Command *command() const;
@@ -857,6 +860,8 @@ namespace stdc::cli {
             /// Line the descriptions of every group up with each other, so that a catalogue
             /// reads as one table.
             AlignAllCatalogues = 0x8,
+            /// Keep showError() from offering the names close to what was typed.
+            SkipCorrection = 0x10,
         };
 
         Parser();

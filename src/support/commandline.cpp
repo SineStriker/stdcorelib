@@ -181,6 +181,12 @@ namespace stdc::cli {
         ParseResult::Error error = ParseResult::NoError;
         std::string error_text;
 
+        /// What was typed where a declared name belongs, and the names it might have meant.
+        /// Kept rather than measured here, so a program that never prints a correction does not
+        /// pay for one.
+        std::string error_token;
+        std::vector<std::string> error_candidates;
+
         const OptionData *find(std::string_view token) const {
             auto it = by_token.find(std::string(token));
             return it == by_token.end() ? nullptr : &options[it->second];
@@ -267,6 +273,53 @@ namespace stdc::cli {
         return _impl->error_text;
     }
 
+    namespace {
+
+        /// How many single character insertions, deletions and substitutions it takes to turn
+        /// one into the other. Two rows rather than the whole table, since only the previous one
+        /// is ever read.
+        size_t edit_distance(const std::string &a, const std::string &b) {
+            std::vector<size_t> row(b.size() + 1);
+            for (size_t j = 0; j <= b.size(); ++j) {
+                row[j] = j;
+            }
+            for (size_t i = 1; i <= a.size(); ++i) {
+                size_t diagonal = row[0];
+                row[0] = i;
+                for (size_t j = 1; j <= b.size(); ++j) {
+                    size_t above = row[j];
+                    row[j] = (std::min)({row[j] + 1, row[j - 1] + 1,
+                                         diagonal + (a[i - 1] == b[j - 1] ? 0 : 1)});
+                    diagonal = above;
+                }
+            }
+            return row[b.size()];
+        }
+
+    }
+
+    std::string ParseResult::correctionText() const {
+        const auto &input = _impl->error_token;
+        if (input.empty() || _impl->error_candidates.empty()) {
+            return {};
+        }
+
+        // Half of what was typed. Looser than that and every short name is a candidate for every
+        // short typo, which is worse than saying nothing.
+        const size_t threshold = input.size() / 2;
+
+        std::string suggestions;
+        for (const auto &item : _impl->error_candidates) {
+            if (edit_distance(input, item) <= threshold) {
+                suggestions += "\n  " + item;
+            }
+        }
+        if (suggestions.empty()) {
+            return {};
+        }
+        return "\"" + input + "\" is not matched. Do you mean one of the following?" + suggestions;
+    }
+
     const Command *ParseResult::command() const {
         return _impl->target;
     }
@@ -345,6 +398,13 @@ namespace stdc::cli {
         // for itself whether stderr is somewhere escapes belong.
         console::fputs(console::bold, console::red, console::nocolor, _impl->error_text + "\n",
                        stderr);
+        if (!(_impl->display_options & Parser::SkipCorrection)) {
+            auto correction = correctionText();
+            if (!correction.empty()) {
+                console::fputs(console::nostyle, console::nocolor, console::nocolor,
+                               correction + "\n", stderr);
+            }
+        }
         if (_impl->target) {
             std::string name;
             for (size_t i = 0; i < _impl->path.size(); ++i) {
@@ -629,6 +689,17 @@ namespace stdc::cli {
                     r->error_text = std::move(text);
                 }
             }
+            /// The same, for a failure that is a name spelled wrong, where the names that were
+            /// declared are worth offering back.
+            void failFor(Error error, std::string text, std::string token,
+                         std::vector<std::string> candidates) {
+                if (failed()) {
+                    return;
+                }
+                fail(error, std::move(text));
+                r->error_token = std::move(token);
+                r->error_candidates = std::move(candidates);
+            }
 
             void expandResponseFiles();
             const Command *subcommandFor(const std::string &token) const;
@@ -766,8 +837,9 @@ namespace stdc::cli {
             const auto &expected = argument.expectedValues();
             if (!expected.empty() &&
                 std::find(expected.begin(), expected.end(), token) == expected.end()) {
-                fail(ParseResult::InvalidArgumentValue,
-                     "\"" + token + "\" is not one of the values " + where + " accepts");
+                failFor(ParseResult::InvalidArgumentValue,
+                        "\"" + token + "\" is not one of the values " + where + " accepts", token,
+                        expected);
                 return false;
             }
             if (argument.typeInfo().check && !argument.typeInfo().check(token)) {
@@ -934,7 +1006,14 @@ namespace stdc::cli {
                 }
             }
 
-            fail(ParseResult::UnknownOption, "unknown option \"" + token + "\"");
+            std::vector<std::string> declared;
+            for (const auto &item : r->options) {
+                for (const auto &spelling : item.option->tokens()) {
+                    declared.push_back(spelling);
+                }
+            }
+            failFor(ParseResult::UnknownOption, "unknown option \"" + token + "\"", token,
+                    std::move(declared));
             return false;
         }
 
@@ -1004,9 +1083,14 @@ namespace stdc::cli {
                 // where a subcommand goes. Saying so beats counting arguments at somebody who
                 // mistyped a name.
                 if (taken == 0 && !r->target->commands().empty()) {
-                    fail(ParseResult::UnknownCommand, "\"" + positional[0] +
-                                                          "\" is not a command of \"" +
-                                                          r->target->name() + "\"");
+                    std::vector<std::string> declared;
+                    for (const auto &command : r->target->commands()) {
+                        declared.push_back(command.name());
+                    }
+                    failFor(ParseResult::UnknownCommand,
+                            "\"" + positional[0] + "\" is not a command of \"" +
+                                r->target->name() + "\"",
+                            positional[0], std::move(declared));
                     return;
                 }
                 fail(ParseResult::TooManyArguments, "\"" + positional[taken] +
