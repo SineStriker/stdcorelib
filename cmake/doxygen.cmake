@@ -51,6 +51,11 @@ WARN_IF_UNDOCUMENTED   = NO
 # documentation anybody reads.
 WARN_AS_ERROR          = FAIL_ON_WARNINGS
 
+# Said out loud rather than left to the default, which is not the same one everywhere: Doxygen
+# 1.9.8 on a runner went looking for Graphviz and failed the build over exit code 127, while 1.10
+# here had never asked for it. Turning it on means adding graphviz wherever this runs.
+HAVE_DOT               = NO
+
 GENERATE_TREEVIEW      = YES
 DISABLE_INDEX          = NO
 FULL_SIDEBAR           = NO
