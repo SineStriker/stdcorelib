@@ -93,7 +93,14 @@ jobs:
 
       - name: Install Boost.Test (Windows)
         if: runner.os == 'Windows' && steps.cfg.outputs.tests == 'yes'
-        run: vcpkg install boost-test:x64-windows
+        shell: bash
+        run: |
+          vcpkg install boost-test:x64-windows
+          # Where it landed, so that a find_package that comes up empty is one question rather
+          # than two.
+          echo "--- $VCPKG_ROOT/installed ---"
+          ls "$VCPKG_ROOT/installed" || true
+          ls "$VCPKG_ROOT/installed/x64-windows/share" | head -20 || true
 
       # Ninja everywhere, which needs the MSVC environment on Windows since there is no generator
       # to set it up.
@@ -112,7 +119,11 @@ jobs:
           # split at the space.
           extra=()
           if [ "${{ runner.os }}" = "Windows" ]; then
-            extra=(-DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
+            # The prefix path as well as the toolchain file. The toolchain works out the triplet
+            # for itself, and naming the directory outright is one fewer thing to be wrong.
+            extra=(-DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                   -DVCPKG_TARGET_TRIPLET=x64-windows
+                   -DCMAKE_PREFIX_PATH="$VCPKG_ROOT/installed/x64-windows")
           fi
           cmake -G Ninja -S . -B build \
             -DCMAKE_BUILD_TYPE=${{ steps.cfg.outputs.type }} \

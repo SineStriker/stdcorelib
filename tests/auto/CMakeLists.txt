@@ -1,11 +1,14 @@
 project(test_auto)
 
-set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost CONFIG QUIET COMPONENTS unit_test_framework)
+find_package(Boost CONFIG COMPONENTS unit_test_framework)
 
+# Fatal rather than a warning and a return. Somebody who set STDC_BUILD_TESTS=ON and got a green
+# build with no tests in it has been told nothing, which is how six CI jobs came back passing
+# while running not one case.
 if(NOT Boost_FOUND)
-    message(WARNING "Boost not found, auto tests will not be built")
-    return()
+    message(FATAL_ERROR
+        "STDC_BUILD_TESTS is on but Boost.Test was not found. Install it, or point CMake at it "
+        "with -DCMAKE_PREFIX_PATH, or turn the tests off with -DSTDC_BUILD_TESTS=OFF.")
 endif()
 
 file(GLOB _common_src *.cpp)
