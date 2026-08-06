@@ -5,14 +5,8 @@
 /// Declaring what a program takes on its command line, and reading back what it was given.
 ///
 /// The shape of the API comes from SysCmdLine, https://github.com/SineStriker/syscmdline, which
-/// this replaces. A program moving across is renaming rather than rewriting.
-///
-/// What is not carried over is the machinery underneath. Values are text until something reads
-/// them, so there is no variant type. The declarations are plain values built once at startup,
-/// so there is no implicit sharing and no pimpl. The help text has one layout rather than one
-/// assembled item by item.
-///
-/// Where the two part on what a command line means, this says so beside Parser.
+/// this replaces. A program moving across is renaming rather than rewriting. Where the two part
+/// on what a command line means, this says so beside Parser.
 
 #ifndef STDCORELIB_COMMANDLINE_H
 #define STDCORELIB_COMMANDLINE_H
@@ -171,11 +165,6 @@ namespace stdc::cli {
 
     class ParseResult;
 
-    // Argument, Option, Command and CommandCatalogue are plain values, defined here rather than
-    // exported. They are built once at startup out of literals, so there is nothing for a pimpl
-    // to hide and nothing for reference counting to save, and an exported class holding a
-    // std::vector is what C4251 is about.
-
     /// One positional value a command or an option takes.
     class Argument {
     public:
@@ -221,9 +210,7 @@ namespace stdc::cli {
         /// The complete set of tokens this will accept, for the arguments that are really a
         /// choice between a few words.
         ///
-        /// \pre Every one of them is a \c T, where type<T>() said what \c T is. An argument that
-        ///      expects words its own type cannot read accepts nothing at all, which is a
-        ///      declaration contradicting itself rather than a command line to complain about.
+        /// \pre Every one of them is readable as whatever type<T>() declared.
         inline Argument &expect(std::vector<std::string> values) {
             _expected = std::move(values);
             assertExpectedMatchType();
@@ -244,7 +231,7 @@ namespace stdc::cli {
         /// Declares what the tokens mean, which is both a check made while parsing and a word for
         /// the help text. Without it anything is acceptable and the type shows up as a string.
         ///
-        /// \pre Whatever expect() was given, if anything, is readable as a \c T. See there.
+        /// \pre Whatever expect() was given, if anything, is readable as a \c T.
         template <class T>
         inline Argument &type() {
             _type = detail::type_info_for<T>();
@@ -285,10 +272,7 @@ namespace stdc::cli {
         }
 
     private:
-        /// Both halves of the declaration have to agree, and either may be written first, so it
-        /// is checked from both. Nothing can catch this while parsing: an argument expecting
-        /// words its own type refuses accepts every command line, and reads as one that is
-        /// merely never satisfied.
+        /// Either half may be written first, so both call this.
         inline void assertExpectedMatchType() const {
             if (!_type.check) {
                 return;
@@ -338,9 +322,8 @@ namespace stdc::cli {
             ShortMatchAll,
         };
 
-        /// A ladder, compared rather than switched on: the highest level among the options given
-        /// is the one that decides. This is what lets \c --help be answered on a command line
-        /// that is otherwise missing everything it requires.
+        /// The highest level among the options given is the one that decides, which is what
+        /// lets \c --help be answered on a command line missing everything it requires.
         enum Prior {
             NoPrior,
             /// Its own missing arguments are not an error.
@@ -441,8 +424,7 @@ namespace stdc::cli {
             return _max_occurrence;
         }
 
-        /// What a role says about itself in the help text when nothing else was given. Without
-        /// these the three options every program has are the three with no description.
+        /// What a role says about itself in the help text when nothing else was given.
         static inline std::string defaultDescription(Role role) {
             switch (role) {
                 case Help:
@@ -595,8 +577,8 @@ namespace stdc::cli {
 
         /// The help option, likewise.
         ///
-        /// \param show_if_no_arguments Answer a command line with nothing on it at all, which is
-        ///        what makes a bare program name print its help instead of complaining.
+        /// \param show_if_no_arguments Answer a command line with nothing on it at all, so
+        ///        that a bare program name prints its help.
         /// \param global Keep it in scope for the subcommands as well.
         inline Command &addHelpOption(bool show_if_no_arguments = false, bool global = false,
                                       std::vector<std::string> tokens = {}, std::string desc = {}) {
@@ -688,8 +670,8 @@ namespace stdc::cli {
         /// repeatable option is for.
         std::vector<std::string_view> rawValues(int index = 0) const;
 
-        /// The same, converted, saying whether it could be. False for a token that is not a
-        /// \c T and for one that is not there, leaving \a out alone.
+        /// Converted, saying whether it could be. False for a token that is not a \c T and
+        /// for one that is not there, leaving \a out alone.
         template <class T>
         bool tryValue(T *out, int index = 0, int occurrence = 0) const {
             auto raw = rawValue(index, occurrence);
@@ -777,13 +759,8 @@ namespace stdc::cli {
         /// Every token the \a index'th positional argument took.
         std::vector<std::string_view> rawValues(int index) const;
 
-        /// Converted, saying whether it could be. False for a token that is not a \c T and for
-        /// one that is not there, leaving \a out alone.
-        ///
-        /// The conversion is the check: what an Argument declared through type<T>() was already
-        /// enforced while parsing, so what this catches is a caller reading with a different
-        /// \c T than was declared, which nothing can catch at compile time while the declared
-        /// type lives in the Argument rather than in the caller's template argument.
+        /// Converted, saying whether it could be. False for a token that is not a \c T and
+        /// for one that is not there, leaving \a out alone.
         template <class T>
         bool tryValue(T *out, int index) const {
             auto raw = rawValue(index);
@@ -829,20 +806,12 @@ namespace stdc::cli {
 
     /// Turns arguments into a ParseResult against a command tree.
     ///
-    /// \note Three rules that a reader coming from the library named in \ref commandline.h will
-    ///       find are not the ones there. Each is a line that one accepts and this refuses, and
-    ///       each was measured rather than assumed.
-    ///
-    ///       \li A subcommand is still looked for after an option the root declared, so
-    ///           \c prog \c -V \c copy \c x reaches \c copy. Stopping at the first option would
-    ///           leave a global option unusable in the place every program with one puts it. An
-    ///           option belonging to the subcommand rather than to the root is still unknown in
-    ///           front of it, which is the case that ought to be refused.
-    ///       \li Positional tokens a command cannot take are an error rather than dropped. Where
-    ///           they are dropped, a mistyped subcommand is a silent success.
-    ///       \li An option that needs a value will not take a token that is a declared option of
-    ///           the same command, and says so instead. Anything else starting with a dash, a
-    ///           negative number or a name nobody declared, is a value as it is there.
+    /// \li A subcommand is looked for after the options the root declared, so
+    ///     \c prog \c -V \c copy \c x reaches \c copy. An option belonging to the subcommand
+    ///     rather than to the root is unknown in front of it.
+    /// \li Positional tokens a command cannot take are an error.
+    /// \li An option that needs a value will not take a token that is a declared option of the
+    ///     same command. Anything else beginning with a dash is a value as it is there.
     class STDC_EXPORT Parser {
     public:
         /// What the tokenizer will accept beyond the usual.
@@ -862,9 +831,8 @@ namespace stdc::cli {
             EnableResponseFile = 0x20,
         };
 
-        /// What the help text says beyond the necessary. The layout itself is fixed, being
-        /// prologue, description, usage, arguments, options, commands and epilogue in that order.
-        /// Building the order up item by item is what the prologue and epilogue are for.
+        /// What the help text says beyond the necessary. The layout is fixed: prologue,
+        /// description, usage, arguments, options, commands, epilogue.
         enum DisplayOption {
             Normal = 0,
             /// Say what an argument falls back to when it is not given.
@@ -885,19 +853,15 @@ namespace stdc::cli {
         Parser(const Parser &other) = delete;
         Parser &operator=(const Parser &other) = delete;
 
-        // Movable, so that a parser can be built and returned by a function of its own, which is
-        // how a program with more than three commands keeps main readable. Declaring the copy
-        // deleted is what suppressed these.
+        /// Movable, so that a parser can be built and returned by a function of its own.
         Parser(Parser &&other) noexcept;
         Parser &operator=(Parser &&other) noexcept;
 
         /// Replaces the tree, which a program normally does once by handing it to the
         /// constructor instead.
         ///
-        /// \note A ParseResult reads the tree it was parsed against, so this puts a new tree
-        ///       beside the old one rather than over it: results already handed out keep theirs
-        ///       alive and stay readable. What it does not do is change them. A result is an
-        ///       answer about the tree that was there when it was made.
+        /// \note A result already handed out keeps the tree it was parsed against, and goes
+        ///       on answering about that one.
         void setRootCommand(Command root);
         const Command &rootCommand() const;
 
