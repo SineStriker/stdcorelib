@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: MIT
 
+#include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <stdcorelib/support/popen.h>
@@ -98,6 +103,41 @@ namespace {
     std::vector<std::string> shell_args(const char *script) {
         return {ShellExe, ShellFlag, script};
     }
+
+    // The helper program, with its mode and whatever the mode takes.
+    std::vector<std::string> child_args(std::vector<std::string> rest) {
+        std::vector<std::string> args = {TEST_CHILD_PATH};
+        args.insert(args.end(), rest.begin(), rest.end());
+        return args;
+    }
+
+    // A path of our own under the temporary directory, removed by the guard that owns it.
+    class TempFile {
+    public:
+        explicit TempFile(const char *tag) {
+            _path = std::filesystem::temp_directory_path() /
+                    ("stdc_popen_" + std::string(tag) + "_" +
+                     std::to_string(
+                         std::chrono::steady_clock::now().time_since_epoch().count() % 1000000));
+        }
+        ~TempFile() {
+            std::error_code ec;
+            std::filesystem::remove(_path, ec);
+        }
+        const std::filesystem::path &path() const {
+            return _path;
+        }
+        std::string read() const {
+            std::ifstream in(_path, std::ios::binary);
+            return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+
+    private:
+        std::filesystem::path _path;
+
+        TempFile(const TempFile &) = delete;
+        TempFile &operator=(const TempFile &) = delete;
+    };
 
     // The first line of the child's output. Trailing blanks go too: `echo err 1>&2` in cmd
     // emits the space before the redirection as part of the text.
@@ -743,26 +783,51 @@ BOOST_AUTO_TEST_CASE(test_user_and_groups) {
 
 #endif // !_WIN32
 
-#ifdef _WIN32
-
-// An argument starting with a quote used to walk a size_t counter past zero and throw
-// std::out_of_range out of start().
+// Each argument has to arrive at the program as the one string it was given as.
+//
+// This matters on Windows, where there is no argument vector to hand over: the arguments are
+// joined into one command line and taken apart again by the child's runtime, so the quoting in
+// between is ours to get right. An argument starting with a quote used to walk a size_t counter
+// past zero and throw std::out_of_range out of start().
+//
+// A start that succeeds proves nothing here, which is what the first version of this test
+// checked. The child has to say what it received.
 BOOST_AUTO_TEST_CASE(test_argument_quoting) {
     const std::vector<std::string> tricky = {
-        "plain", "a b", "a\"b", "\"lead", "trail\"", "back\\slash", "end\\", "",
+        "plain",     "a b",   "  ",         "a\"b",   "\"lead",   "trail\"",
+        "back\\sla", "end\\", "end\\\\",    "a\\\"b", "\\\"quo\"", "tab\there",
+        "semi;colon", "amp&and", "pipe|bar", "caret^up", "per%cent", "dollar$sign",
     };
+
     for (const auto &arg : tricky) {
         Popen p;
         std::string err;
-        p.args({"cmd", "/c", "exit 0", arg});
-        BOOST_CHECK_MESSAGE(p.start(&err), "start failed for [" + arg + "]: " + err);
-        if (p.returncode() || p.pid() > 0) {
-            p.wait(Timeout);
-        }
+        p.args(child_args({"argv", arg, "after"})).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), "start failed for [" + arg + "]: " + err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_REQUIRE(p.returncode());
+
+        // The helper writes one line per argument, so the round trip is the first line back.
+        auto end = out.find('\n');
+        std::string got = end == std::string::npos ? out : out.substr(0, end);
+        BOOST_CHECK_MESSAGE(got == arg, "argument [" + arg + "] arrived as [" + got + "]");
+
+        // And the one after it, so an argument that swallowed its successor is caught too.
+        std::string rest = end == std::string::npos ? std::string() : out.substr(end + 1);
+        auto end2 = rest.find('\n');
+        BOOST_CHECK_EQUAL(end2 == std::string::npos ? rest : rest.substr(0, end2), "after");
+    }
+
+    // An empty argument still occupies a place in the vector.
+    {
+        Popen p;
+        std::string err;
+        p.args(child_args({"argv", "", "after"})).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(out, "\nafter\n");
     }
 }
-
-#endif // _WIN32
 
 BOOST_AUTO_TEST_CASE(test_devnull_and_inherit) {
     // DEVNULL swallows the output
@@ -968,6 +1033,433 @@ BOOST_AUTO_TEST_CASE(test_detached) {
         BOOST_CHECK(!p.start(&err));
         BOOST_CHECK(p.error_code() == std::make_error_code(std::errc::invalid_argument));
     }
+}
+
+// Starting and driving children from worker threads.
+//
+// This is where the defect that killed five macOS CI jobs lived. Writing to a child that had
+// already exited raised SIGPIPE on the writing thread, and the guard around that write blocked
+// the signal instead of ignoring it, which macOS does not treat the same way. Every case above
+// runs on the main thread and every one of them passed while it was in.
+BOOST_AUTO_TEST_CASE(test_threads) {
+    // One child per thread, more threads than the machine has cores, each with its own data to
+    // send and its own answer to check.
+    {
+        unsigned count = std::thread::hardware_concurrency();
+        count = (count < 2 ? 2u : count) + 2;
+
+        std::vector<std::thread> threads;
+        std::atomic<int> succeeded{0};
+        std::atomic<int> started{0};
+        for (unsigned i = 0; i < count; i++) {
+            threads.emplace_back([&succeeded, &started, i] {
+                Popen p;
+                std::string err;
+                p.args(child_args({"cat"})).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+                if (!p.start(&err)) {
+                    return;
+                }
+                started++;
+                std::string mine = "thread " + std::to_string(i) + "\n";
+                auto [out, errout] = p.communicate(mine, Timeout);
+                if (out == mine && p.returncode() && *p.returncode() == 0) {
+                    succeeded++;
+                }
+            });
+        }
+        for (auto &t : threads) {
+            t.join();
+        }
+        BOOST_CHECK_EQUAL(started.load(), int(count));
+        BOOST_CHECK_EQUAL(succeeded.load(), int(count));
+    }
+
+    // Writing to a child that has already gone, on a thread that is not the main one. Repeated,
+    // since the signal has to be raised while the disposition is wrong to be noticed at all.
+    {
+        std::atomic<int> completed{0};
+        std::thread t([&completed] {
+            for (int i = 0; i < 10; i++) {
+                Popen p;
+                std::string err;
+                p.args(child_args({"exit", "0"})).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+                if (!p.start(&err) || !p.wait(Timeout)) {
+                    return;
+                }
+                std::ignore = p.communicate(std::string(1 << 20, 'x'), Timeout);
+                completed++;
+            }
+        });
+        t.join();
+        BOOST_CHECK_EQUAL(completed.load(), 10);
+    }
+
+    // Two threads waiting on children of their own at the same time. On POSIX a wait reaps by
+    // pid, so one thread must not collect the other's child and leave it waiting forever.
+    {
+        std::atomic<int> done{0};
+        const auto &run = [&done](int code) {
+            Popen p;
+            std::string err;
+            p.args(child_args({"exit", std::to_string(code)}));
+            if (!p.start(&err) || !p.wait(Timeout)) {
+                return;
+            }
+            if (p.returncode() && *p.returncode() == code) {
+                done++;
+            }
+        };
+        std::thread a([&run] { run(3); });
+        std::thread b([&run] { run(7); });
+        a.join();
+        b.join();
+        BOOST_CHECK_EQUAL(done.load(), 2);
+    }
+}
+
+// Both pipes filled past what they hold, at the same time.
+//
+// This is the case the class documents communicate() as existing for: a child writing to stderr
+// while the parent is still draining stdout blocks as soon as the stderr pipe is full, and a
+// reader taking one stream at a time never gets to the one that is blocking. The big-output case
+// above only fills stdout, so it does not reach this.
+BOOST_AUTO_TEST_CASE(test_both_pipes_fill) {
+    const long bytes = 512 * 1024;
+
+    {
+        Popen p;
+        std::string err;
+        p.args(child_args({"fill", std::to_string(bytes), "both"}))
+            .stdout_(Popen::PIPE)
+            .stderr_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(out.size(), size_t(bytes));
+        BOOST_CHECK_EQUAL(errout.size(), size_t(bytes));
+        BOOST_REQUIRE(p.returncode());
+        BOOST_CHECK_EQUAL(*p.returncode(), 0);
+    }
+
+    // The same, with input to write as well, so all three directions are moving at once.
+    {
+        Popen p;
+        std::string err;
+        p.args(child_args({"fill", std::to_string(bytes), "both"}))
+            .stdin_(Popen::PIPE)
+            .stdout_(Popen::PIPE)
+            .stderr_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate(std::string(256 * 1024, 'i'), Timeout);
+        BOOST_CHECK_EQUAL(out.size(), size_t(bytes));
+        BOOST_CHECK_EQUAL(errout.size(), size_t(bytes));
+        BOOST_REQUIRE(p.returncode());
+    }
+
+    // Folded together, the two counts land in one stream.
+    {
+        Popen p;
+        std::string err;
+        p.args(child_args({"fill", std::to_string(bytes), "both"}))
+            .stdout_(Popen::PIPE)
+            .stderr_(Popen::STDOUT);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(out.size(), size_t(bytes) * 2);
+        BOOST_CHECK(errout.empty());
+    }
+}
+
+// A Popen can be moved, which is what lets a function build one and hand it back.
+BOOST_AUTO_TEST_CASE(test_move) {
+    // Move construction takes the running child, its pipes and its pid across.
+    {
+        Popen a;
+        std::string err;
+        a.args(child_args({"cat"})).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(a.start(&err), err);
+        int pid = a.pid();
+        BOOST_REQUIRE(pid > 0);
+        auto *stream_before = &a.stdout_();
+
+        Popen b(std::move(a));
+        BOOST_CHECK_EQUAL(b.pid(), pid);
+
+        // The streams live behind the pointer that moved, so a reference taken before the move
+        // still names the same pipe afterwards.
+        BOOST_CHECK_EQUAL(&b.stdout_(), stream_before);
+
+        auto [out, errout] = b.communicate("moved\n", Timeout);
+        BOOST_CHECK_EQUAL(out, "moved\n");
+        BOOST_REQUIRE(b.returncode());
+        BOOST_CHECK_EQUAL(*b.returncode(), 0);
+    }
+
+    // Assigning over a Popen whose child is still running ends that child there and then. A
+    // swap would have handed it to the right hand side instead, leaving it alive for as long as
+    // that object lasts and giving the caller no way to say when it died.
+    {
+        Popen victim;
+        std::string err;
+        victim.args(shell_args(SleepLong));
+        BOOST_REQUIRE_MESSAGE(victim.start(&err), err);
+        int victim_pid = victim.pid();
+        BOOST_REQUIRE(process_alive(victim_pid));
+
+        Popen fresh;
+        fresh.args(child_args({"exit", "5"}));
+        BOOST_REQUIRE_MESSAGE(fresh.start(&err), err);
+        int fresh_pid = fresh.pid();
+
+        victim = std::move(fresh);
+        BOOST_CHECK(!process_alive(victim_pid));
+
+        BOOST_CHECK_EQUAL(victim.pid(), fresh_pid);
+        BOOST_REQUIRE(victim.wait(Timeout));
+        BOOST_CHECK_EQUAL(*victim.returncode(), 5);
+    }
+
+    // Built by a function and returned, which a deleted copy would have prevented on its own.
+    {
+        const auto &make = [] {
+            Popen p;
+            p.args(child_args({"cat"})).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+            return p;
+        };
+        Popen p = make();
+        std::string err;
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate("returned\n", Timeout);
+        BOOST_CHECK_EQUAL(out, "returned\n");
+    }
+
+    // A vector of them, which is a move on every reallocation.
+    {
+        std::vector<Popen> procs;
+        for (int i = 0; i < 4; i++) {
+            Popen p;
+            std::string err;
+            p.args(child_args({"exit", std::to_string(i)}));
+            BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+            procs.push_back(std::move(p));
+        }
+        for (int i = 0; i < 4; i++) {
+            BOOST_REQUIRE(procs[size_t(i)].wait(Timeout));
+            BOOST_CHECK_EQUAL(*procs[size_t(i)].returncode(), i);
+        }
+    }
+}
+
+// The ways a start can fail before there is any child to speak of. Each has to come back as a
+// failure with something readable in it, rather than as a crash or as a success with no process.
+BOOST_AUTO_TEST_CASE(test_start_failures) {
+    // nothing to run
+    {
+        Popen p;
+        std::string err;
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!err.empty());
+    }
+
+    // an empty argument vector, which is not the same as never having set one
+    {
+        Popen p;
+        std::string err;
+        p.args({});
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!err.empty());
+    }
+
+    // an empty program name
+    {
+        Popen p;
+        std::string err;
+        p.args({"", "arg"});
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!err.empty());
+    }
+
+    // a name that is nothing but blanks
+    {
+        Popen p;
+        std::string err;
+        p.args({"   "});
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!err.empty());
+    }
+
+    // a directory, which exists and is not a program
+    {
+        Popen p;
+        std::string err;
+        p.args({std::filesystem::temp_directory_path().string()});
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!err.empty());
+    }
+
+    // executable() naming something that is not there, whatever args[0] says
+    {
+        Popen p;
+        std::string err;
+        p.executable("no_such_executable_4b71").args({"cat"});
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!err.empty());
+    }
+
+    // A failure leaves nothing behind: no exit status, and the next start still works.
+    {
+        Popen p;
+        std::string err;
+        p.args({"no_such_program_4b71"});
+        BOOST_CHECK(!p.start(&err));
+        BOOST_CHECK(!p.returncode());
+
+        p.args(child_args({"exit", "0"}));
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE(p.wait(Timeout));
+        BOOST_CHECK_EQUAL(*p.returncode(), 0);
+    }
+}
+
+// A standard stream can be handed a FILE * or a descriptor of the caller's, which is how output
+// goes straight to a file without passing through this process at all.
+BOOST_AUTO_TEST_CASE(test_redirect_to_file_and_fd) {
+    // a FILE * of ours
+    {
+        TempFile file("cfile");
+        FILE *f = std::fopen(file.path().string().c_str(), "wb");
+        BOOST_REQUIRE(f != nullptr);
+
+        Popen p;
+        std::string err;
+        p.args(child_args({"argv", "written", "twice"})).stdout_(f);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE(p.wait(Timeout));
+        BOOST_CHECK_EQUAL(*p.returncode(), 0);
+
+        // Ours to close, since we opened it. The child had a copy of its own.
+        std::fclose(f);
+        BOOST_CHECK_EQUAL(file.read(), "written\ntwice\n");
+
+        // Nothing came back through this process, so there is no pipe to read.
+        BOOST_CHECK(!p.stdout_().is_open());
+    }
+
+    // a descriptor of ours
+    {
+        TempFile file("fd");
+        FILE *f = std::fopen(file.path().string().c_str(), "wb");
+        BOOST_REQUIRE(f != nullptr);
+#ifdef _WIN32
+        int fd = _fileno(f);
+#else
+        int fd = fileno(f);
+#endif
+        BOOST_REQUIRE(fd >= 0);
+
+        Popen p;
+        std::string err;
+        p.args(child_args({"argv", "by-descriptor"})).stdout_(fd);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE(p.wait(Timeout));
+        std::fclose(f);
+        BOOST_CHECK_EQUAL(file.read(), "by-descriptor\n");
+    }
+
+    // stderr to one file and stdout to another, kept apart
+    {
+        TempFile out_file("out");
+        TempFile err_file("err");
+        FILE *fout = std::fopen(out_file.path().string().c_str(), "wb");
+        FILE *ferr = std::fopen(err_file.path().string().c_str(), "wb");
+        BOOST_REQUIRE(fout != nullptr);
+        BOOST_REQUIRE(ferr != nullptr);
+
+        Popen p;
+        std::string err;
+        p.args(child_args({"fill", "1024", "both"})).stdout_(fout).stderr_(ferr);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_REQUIRE(p.wait(Timeout));
+        std::fclose(fout);
+        std::fclose(ferr);
+        BOOST_CHECK_EQUAL(out_file.read().size(), 1024u);
+        BOOST_CHECK_EQUAL(err_file.read().size(), 1024u);
+    }
+
+    // A file as the child's input, read to the end.
+    {
+        TempFile file("input");
+        {
+            std::ofstream out(file.path(), std::ios::binary);
+            out << "from a file\n";
+        }
+        FILE *f = std::fopen(file.path().string().c_str(), "rb");
+        BOOST_REQUIRE(f != nullptr);
+
+        Popen p;
+        std::string err;
+        p.args(child_args({"cat"})).stdin_(f).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        std::fclose(f);
+        BOOST_CHECK_EQUAL(out, "from a file\n");
+    }
+
+#ifndef _WIN32
+    // One child's output as another's input, the two joined by a pipe neither of them made.
+    // POSIX only, since this hands raw descriptors to both children.
+    {
+        int fds[2];
+        BOOST_REQUIRE_EQUAL(pipe(fds), 0);
+
+        Popen writer;
+        Popen reader;
+        std::string err;
+        writer.args(child_args({"argv", "through", "a", "pipe"}))
+            .stdout_(fds[1])
+            .pass_fds({fds[1]});
+        reader.args(child_args({"cat"})).stdin_(fds[0]).stdout_(Popen::PIPE).pass_fds({fds[0]});
+
+        BOOST_REQUIRE_MESSAGE(writer.start(&err), err);
+        BOOST_REQUIRE_MESSAGE(reader.start(&err), err);
+
+        // Both ends belong to the children now. Holding either one open here would keep the
+        // reader waiting for input that is never coming.
+        close(fds[0]);
+        close(fds[1]);
+
+        BOOST_REQUIRE(writer.wait(Timeout));
+        auto [out, errout] = reader.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(out, "through\na\npipe\n");
+    }
+#endif
+}
+
+// text() asks for the pipes to be opened in text mode, which on Windows turns the CRLF a program
+// writes into the LF a reader expects. Nothing changes elsewhere.
+BOOST_AUTO_TEST_CASE(test_text_mode) {
+    const auto &collect = [](bool text) {
+        Popen p;
+        std::string err;
+        p.args(shell_args(EchoThree)).stdout_(Popen::PIPE).text(text);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        return out;
+    };
+
+    std::string raw = collect(false);
+    std::string translated = collect(true);
+    BOOST_REQUIRE(!raw.empty());
+    BOOST_REQUIRE(!translated.empty());
+
+#ifdef _WIN32
+    BOOST_CHECK(raw.find('\r') != std::string::npos);
+    BOOST_CHECK(translated.find('\r') == std::string::npos);
+    BOOST_CHECK_EQUAL(translated.size() + std::count(raw.begin(), raw.end(), '\r'), raw.size());
+#else
+    // Nothing to translate, so the two are the same bytes.
+    BOOST_CHECK_EQUAL(raw, translated);
+    BOOST_CHECK(raw.find('\r') == std::string::npos);
+#endif
 }
 
 BOOST_AUTO_TEST_SUITE_END()

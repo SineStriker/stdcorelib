@@ -57,9 +57,21 @@ set_target_properties(test_plugin PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 )
 
-add_dependencies(${PROJECT_NAME} test_plugin)
+# A program for the popen tests to start. The shell covers most of what a child has to do, but
+# it cannot report the argument vector it was given, since it parses the command line a second
+# time before the program sees it.
+add_executable(test_child helpers/test_child.cpp)
+set_target_properties(test_child PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+)
+
+add_dependencies(${PROJECT_NAME} test_plugin test_child)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     TEST_PLUGIN_PATH="$<TARGET_FILE:test_plugin>"
+    TEST_CHILD_PATH="$<TARGET_FILE:test_child>"
 )
 
 # One entry rather than one per suite. The whole binary is a second, and twenty five process
