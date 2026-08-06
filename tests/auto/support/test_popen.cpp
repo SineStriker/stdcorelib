@@ -482,7 +482,11 @@ BOOST_AUTO_TEST_CASE(test_signal_returncode) {
 // Every descriptor a run opens has to come back, or a long-lived program runs out of them.
 BOOST_AUTO_TEST_CASE(test_no_fd_leak) {
     const auto &open_fd_count = []() {
+#ifdef __APPLE__
+        DIR *dir = opendir("/dev/fd");
+#else
         DIR *dir = opendir("/proc/self/fd");
+#endif
         if (!dir) {
             return -1;
         }
