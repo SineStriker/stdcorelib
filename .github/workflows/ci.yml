@@ -87,6 +87,12 @@ jobs:
   #
   # Three platforms rather than five: the flag is chosen by MSVC against not-MSVC, and these
   # three are the MSVC standard library, libstdc++ and libc++.
+  #
+  # Both flags are private to the library target, so the tests are built the ordinary way and run
+  # against a library that was not. That is the same split a consumer gets, and it is the only
+  # thing here that reaches the library's exception-free branches at run time: STDC_EXCEPTIONS is
+  # worked out per translation unit from __cpp_exceptions, so the code the #ifdefs in popen and
+  # elsewhere select is compiled by these two jobs and by nothing else.
   no-features:
     name: ${{ matrix.platform }} ${{ matrix.config }}
     runs-on: ${{ matrix.os }}
@@ -118,10 +124,14 @@ jobs:
             no-exceptions) flags="-DSTDC_ENABLE_EXCEPTIONS=OFF" ;;
             no-rtti)       flags="-DSTDC_ENABLE_RTTI=OFF" ;;
           esac
-          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_TESTS=OFF $flags
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_TESTS=ON $flags
 
       - name: Build
         run: cmake --build build
+
+      - name: Test
+        shell: bash
+        run: ./build/bin/test_auto
 
   # MinGW builds the library but does not run the tests: Boost.Test for MinGW is its own
   # undertaking, and what is worth knowing here is that the Windows sources compile and link
