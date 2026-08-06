@@ -187,8 +187,8 @@ namespace stdc::cli {
         }
 
         /// The name to show in the help text, when it should differ from name().
-        inline Argument &metavar(std::string display_name) {
-            _display_name = std::move(display_name);
+        inline Argument &metavar(std::string displayName) {
+            _displayName = std::move(displayName);
             return *this;
         }
         inline Argument &required(bool on = true) {
@@ -204,9 +204,9 @@ namespace stdc::cli {
         ///
         /// \pre It is readable as whatever type<T>() declared, and is one of the values
         ///      expect() allows, if either was given.
-        inline Argument &default_value(std::string value) {
+        inline Argument &defaultValue(std::string value) {
             _default = std::move(value);
-            _has_default = true;
+            _hasDefault = true;
             assertDefaultIsUsable();
             return *this;
         }
@@ -252,13 +252,13 @@ namespace stdc::cli {
         }
         /// The metavar if one was given, and the name otherwise.
         inline const std::string &displayName() const {
-            return _display_name.empty() ? _name : _display_name;
+            return _displayName.empty() ? _name : _displayName;
         }
         inline bool isRequired() const {
             return _required;
         }
         inline bool hasDefaultValue() const {
-            return _has_default;
+            return _hasDefault;
         }
         inline const std::string &defaultValue() const {
             return _default;
@@ -289,7 +289,7 @@ namespace stdc::cli {
             }
         }
         inline void assertDefaultIsUsable() const {
-            if (!_has_default) {
+            if (!_hasDefault) {
                 return;
             }
             assert((!_type.check || _type.check(_default)) &&
@@ -301,14 +301,14 @@ namespace stdc::cli {
 
         std::string _name;
         std::string _desc;
-        std::string _display_name;
+        std::string _displayName;
         std::string _default;
         std::vector<std::string> _expected;
         Validator _validator;
         detail::value_type_info _type;
         Arity _arity = Single;
         bool _required = true;
-        bool _has_default = false;
+        bool _hasDefault = false;
     };
 
     /// A named switch, with any number of arguments of its own.
@@ -386,8 +386,8 @@ namespace stdc::cli {
             _required = on;
             return *this;
         }
-        inline Option &short_match(ShortMatch rule = ShortMatchAll) {
-            _short_match = rule;
+        inline Option &shortMatch(ShortMatch rule) {
+            _shortMatch = rule;
             return *this;
         }
         inline Option &prior(Prior level) {
@@ -401,8 +401,8 @@ namespace stdc::cli {
         }
         /// How many times it may be given, zero meaning without limit. The last argument added is
         /// the one that repeats.
-        inline Option &multi(int max_occurrence = 0) {
-            _max_occurrence = max_occurrence;
+        inline Option &multi(int maxOccurrence = 0) {
+            _maxOccurrence = maxOccurrence;
             return *this;
         }
 
@@ -429,13 +429,13 @@ namespace stdc::cli {
             return _role;
         }
         inline ShortMatch shortMatch() const {
-            return _short_match;
+            return _shortMatch;
         }
         inline Prior prior() const {
             return _prior;
         }
         inline int maxOccurrence() const {
-            return _max_occurrence;
+            return _maxOccurrence;
         }
 
         /// What a role says about itself in the help text when nothing else was given.
@@ -475,9 +475,9 @@ namespace stdc::cli {
         std::string _desc;
         std::vector<Argument> _args;
         Role _role = NoRole;
-        ShortMatch _short_match = NoShortMatch;
+        ShortMatch _shortMatch = NoShortMatch;
         Prior _prior = NoPrior;
-        int _max_occurrence = 1;
+        int _maxOccurrence = 1;
         bool _required = false;
         bool _global = false;
     };
@@ -591,16 +591,16 @@ namespace stdc::cli {
 
         /// The help option, likewise.
         ///
-        /// \param show_if_no_arguments Answer a command line with nothing on it at all, so
-        ///        that a bare program name prints its help.
+        /// \param showIfNoArguments Answer a command line with nothing on it at all, so that a
+        ///        bare program name prints its help.
         /// \param global Keep it in scope for the subcommands as well.
         /// \param tokens The spellings, or the usual ones when empty.
         /// \param desc The description, or the usual one when empty.
-        inline Command &addHelpOption(bool show_if_no_arguments = false, bool global = false,
+        inline Command &addHelpOption(bool showIfNoArguments = false, bool global = false,
                                       std::vector<std::string> tokens = {}, std::string desc = {}) {
             return addOption(Option(Option::Help, std::move(tokens), std::move(desc))
-                                 .prior(show_if_no_arguments ? Option::AutoSetWhenNoSymbols
-                                                             : Option::IgnoreMissingSymbols)
+                                 .prior(showIfNoArguments ? Option::AutoSetWhenNoSymbols
+                                                          : Option::IgnoreMissingSymbols)
                                  .global(global));
         }
         inline Command &setDescription(std::string desc) {

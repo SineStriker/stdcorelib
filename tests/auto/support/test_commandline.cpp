@@ -187,7 +187,7 @@ BOOST_AUTO_TEST_CASE(test_argument_defaults) {
 }
 
 BOOST_AUTO_TEST_CASE(test_argument_setters_chain) {
-    auto arg = Argument("count", "How many").metavar("N").optional().default_value("1").type<int>();
+    auto arg = Argument("count", "How many").metavar("N").optional().defaultValue("1").type<int>();
 
     BOOST_CHECK_EQUAL(arg.displayName(), "N");
     BOOST_CHECK(!arg.isRequired());
@@ -273,7 +273,7 @@ BOOST_AUTO_TEST_CASE(test_option_setters_chain) {
     auto opt = Option({"-D", "--define"}, "Define a variable")
                    .arg("expr")
                    .multi()
-                   .short_match(Option::ShortMatchSingleChar)
+                   .shortMatch(Option::ShortMatchSingleChar)
                    .prior(Option::IgnoreMissingArguments)
                    .required()
                    .global();
@@ -490,7 +490,7 @@ BOOST_AUTO_TEST_CASE(test_remainder_takes_everything_left) {
 
 BOOST_AUTO_TEST_CASE(test_default_value_stands_in) {
     Parser parser(Command("prog").addArgument(
-        Argument("level", "How loud", false).default_value("3").type<int>()));
+        Argument("level", "How loud", false).defaultValue("3").type<int>()));
 
     BOOST_CHECK_EQUAL(ok(parser, {}).value<int>(0), 3);
     BOOST_CHECK_EQUAL(ok(parser, {"7"}).value<int>(0), 7);
@@ -537,7 +537,7 @@ BOOST_AUTO_TEST_CASE(test_short_match_joins_a_value_to_its_option) {
         Option({"-D", "--define"}, "Define")
             .arg("expr")
             .multi()
-            .short_match(Option::ShortMatchSingleChar),
+            .shortMatch(Option::ShortMatchSingleChar),
         Option({"-p"}, "Plain").arg("value"),
     }));
 
@@ -555,7 +555,7 @@ BOOST_AUTO_TEST_CASE(test_short_match_joins_a_value_to_its_option) {
 BOOST_AUTO_TEST_CASE(test_short_match_rules_differ) {
     auto build = [](Option::ShortMatch rule) {
         return Parser(Command("prog").addOption(
-            Option({"-1", "--one"}, "Numeric token").arg("value").short_match(rule)));
+            Option({"-1", "--one"}, "Numeric token").arg("value").shortMatch(rule)));
     };
 
     // A single letter means a letter, so an option spelled with a digit is not matched.
@@ -565,11 +565,11 @@ BOOST_AUTO_TEST_CASE(test_short_match_rules_differ) {
 
     // A longer token only matches under the rule that allows any length.
     Parser strict(Command("prog").addOption(
-        Option({"--jobs"}, "How many").arg("n").short_match(Option::ShortMatchSingleChar)));
+        Option({"--jobs"}, "How many").arg("n").shortMatch(Option::ShortMatchSingleChar)));
     BOOST_CHECK(!strict.parse(argv({"--jobs8"})).isValid());
 
     Parser loose(Command("prog").addOption(
-        Option({"--jobs"}, "How many").arg("n").short_match(Option::ShortMatchAll)));
+        Option({"--jobs"}, "How many").arg("n").shortMatch(Option::ShortMatchAll)));
     BOOST_CHECK_EQUAL(ok(loose, {"--jobs8"}).valueForOption("--jobs"), "8");
 }
 
@@ -982,17 +982,17 @@ BOOST_AUTO_TEST_CASE(test_a_subcommand_name_used_as_a_value) {
 // be discovered as a missing argument somewhere further on.
 BOOST_AUTO_TEST_CASE(test_short_matching_needs_one_required_argument) {
     Parser two(Command("prog").addOption(
-        Option({"-o"}, "Two values").arg("a").arg("b").short_match(Option::ShortMatchAll)));
+        Option({"-o"}, "Two values").arg("a").arg("b").shortMatch(Option::ShortMatchAll)));
     bad(two, {"-oX"}, ParseResult::UnknownOption);
     // Written out it is fine.
     BOOST_CHECK(ok(two, {"-o", "X", "Y"}).isOptionSet("-o"));
 
     Parser optional(Command("prog").addOption(
-        Option({"-p"}, "Maybe a value").arg("v", false).short_match(Option::ShortMatchAll)));
+        Option({"-p"}, "Maybe a value").arg("v", false).shortMatch(Option::ShortMatchAll)));
     bad(optional, {"-pX"}, ParseResult::UnknownOption);
 
     Parser none(Command("prog").addOption(
-        Option({"-f"}, "No value at all").short_match(Option::ShortMatchAll)));
+        Option({"-f"}, "No value at all").shortMatch(Option::ShortMatchAll)));
     bad(none, {"-fX"}, ParseResult::UnknownOption);
 }
 
@@ -1081,7 +1081,7 @@ namespace {
                                   .addOption(Option({"-f", "--force"}, "Overwrite")),
                               Command("configure", "Configure things")
                                   .addArgument(Argument("mode", "Which way", false)
-                                                   .default_value("fast")
+                                                   .defaultValue("fast")
                                                    .expect({"fast", "slow"}))
                                   .addOption(Option({"-p"}, "Project").arg("name").required()),
                               Command("orphan", "Not in any group"),
@@ -1164,7 +1164,7 @@ BOOST_AUTO_TEST_CASE(test_the_extras_are_asked_for) {
 BOOST_AUTO_TEST_CASE(test_an_options_own_argument_carries_its_extras_too) {
     Parser parser(Command("prog").addOption(
         Option({"-l"}, "How loud")
-            .arg(Argument("n", {}, false).default_value("1").expect({"0", "1", "2"}))));
+            .arg(Argument("n", {}, false).defaultValue("1").expect({"0", "1", "2"}))));
     parser.setDisplayOptions(Parser::ShowArgumentDefaultValue | Parser::ShowArgumentExpectedValues);
 
     auto text = parser.parse(argv({})).helpText();
