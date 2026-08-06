@@ -174,6 +174,13 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
+
+    # CMake does this for a shared library on its own. A static one needs it said out loud, or
+    # ELF refuses to link the archive into anything shared: a plugin that links the static build
+    # stops at "relocation R_X86_64_PC32 can not be used when making a shared object". Mach-O is
+    # position independent throughout and Windows has no such distinction, so this is where it
+    # shows.
+    POSITION_INDEPENDENT_CODE ON
 )
 
 # Add platform specific
