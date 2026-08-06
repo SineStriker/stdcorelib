@@ -61,3 +61,10 @@ add_dependencies(${PROJECT_NAME} test_plugin)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     TEST_PLUGIN_PATH="$<TARGET_FILE:test_plugin>"
 )
+
+# One entry rather than one per suite. The whole binary is a second, and twenty five process
+# starts cost more than the suites they would be splitting.
+#
+# Note that ctest exits 0 when it finds no tests at all, so anything running this in anger wants
+# --no-tests=error, or it is back to a green run of nothing.
+add_test(NAME ${PROJECT_NAME} COMMAND ${PROJECT_NAME})

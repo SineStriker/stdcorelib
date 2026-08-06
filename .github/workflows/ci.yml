@@ -75,11 +75,11 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      # Naming the binary rather than trusting that the build step ran it. A test CMakeLists that
-      # cannot find Boost used to warn and return, which is a green build with nothing in it.
+      # ctest rather than the binary by name, which leaves where it landed to CMake. The flag is
+      # not optional: ctest exits 0 when it finds no tests at all, and a green run of nothing is
+      # exactly what a test CMakeLists that could not find Boost once produced here.
       - name: Test
-        shell: bash
-        run: ./build/out/bin/test_auto
+        run: ctest --test-dir build --output-on-failure --no-tests=error
 
   # Exceptions and RTTI switched off, one at a time rather than together. Off together would
   # still compile both branches, but it would stop covering RTTI off with exceptions left on,
@@ -130,8 +130,7 @@ jobs:
         run: cmake --build build
 
       - name: Test
-        shell: bash
-        run: ./build/out/bin/test_auto
+        run: ctest --test-dir build --output-on-failure --no-tests=error
 
   # MinGW builds the library but does not run the tests: Boost.Test for MinGW is its own
   # undertaking, and what is worth knowing here is that the Windows sources compile and link

@@ -222,6 +222,8 @@ if(NOT WIN32)
 endif()
 
 if(STDC_BUILD_TESTS)
+    enable_testing()
+
     add_subdirectory(tests)
 endif()
 
