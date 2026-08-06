@@ -8,11 +8,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Every platform against every configuration, rather than the platforms against one and the
-  # configurations against one platform. The option handling is where they differ most: exceptions
-  # off is /EHs-c- on MSVC and -fno-exceptions elsewhere, and static against shared decides
-  # whether a plugin and its host share one type table or get one each. Testing those on Linux
-  # alone would have covered neither.
+  # Two axes, crossed only where the code paths actually cross. The library shape is one of those
+  # places: it decides dllexport against visibility, and whether a plugin and its host share one
+  # type table or get one each, which is different on every platform. So shape runs everywhere.
+  #
+  # Turning exceptions or RTTI off is not: the flag is picked by MSVC against not-MSVC, and the
+  # rest of what varies is which standard library is underneath. Three platforms cover both
+  # compiler families and all three standard libraries, and are in the no-features job below.
   build:
     name: ${{ matrix.platform }} ${{ matrix.config }}
     runs-on: ${{ matrix.os }}
@@ -20,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: [ linux-gcc, linux-clang, macos, windows-msvc, windows-clang-cl ]
-        config: [ shared, static, release, no-exceptions, no-rtti ]
+        config: [ shared, static, release ]
         include:
           - platform: linux-gcc
             os: ubuntu-latest
@@ -51,11 +53,9 @@ jobs:
         shell: bash
         run: |
           case "${{ matrix.config }}" in
-            shared)        flags="-DSTDC_BUILD_SHARED=ON";                   type=Debug;   tests=yes ;;
-            static)        flags="-DSTDC_BUILD_STATIC=ON";                   type=Debug;   tests=yes ;;
-            release)       flags="-DSTDC_BUILD_SHARED=ON";                   type=Release; tests=yes ;;
-            no-exceptions) flags="-DSTDC_ENABLE_EXCEPTIONS=OFF";             type=Debug;   tests=no  ;;
-            no-rtti)       flags="-DSTDC_ENABLE_RTTI=OFF";                   type=Debug;   tests=no  ;;
+            shared)  flags="-DSTDC_BUILD_SHARED=ON"; type=Debug;   tests=yes ;;
+            static)  flags="-DSTDC_BUILD_STATIC=ON"; type=Debug;   tests=yes ;;
+            release) flags="-DSTDC_BUILD_SHARED=ON"; type=Release; tests=yes ;;
           esac
           echo "flags=$flags" >> "$GITHUB_OUTPUT"
           echo "type=$type" >> "$GITHUB_OUTPUT"
@@ -71,19 +71,25 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja boost
 
-      # The runner has vcpkg but not at a path worth guessing at, so the one it exports is the one
-      # to use. Building boost-test from source is the slow step, which is what the cache is for.
-      - name: Locate vcpkg (Windows)
+      # Ninja is not on the Windows image, and there are two vcpkgs: the one Visual Studio bundles,
+      # which is what VCPKG_INSTALLATION_ROOT points at, and the one on PATH. Deriving the root
+      # from the executable that will actually run the install is what keeps those from being
+      # different directories.
+      - name: Install Ninja and locate vcpkg (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: echo "VCPKG_ROOT=$(cygpath -m "$VCPKG_INSTALLATION_ROOT")" >> "$GITHUB_ENV"
+        run: |
+          choco install ninja -y --no-progress
+          root=$(cygpath -m "$(dirname "$(command -v vcpkg)")")
+          echo "vcpkg root: $root"
+          echo "VCPKG_ROOT=$root" >> "$GITHUB_ENV"
 
       - name: Cache Boost.Test (Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-boost-test-x64-windows-v2
+          key: vcpkg-boost-test-x64-windows-v3
 
       - name: Install Boost.Test (Windows)
         if: runner.os == 'Windows' && steps.cfg.outputs.tests == 'yes'
@@ -102,14 +108,16 @@ jobs:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
         run: |
-          extra=""
+          # An array, because the vcpkg root can be inside Program Files and a bare $extra would
+          # split at the space.
+          extra=()
           if [ "${{ runner.os }}" = "Windows" ]; then
-            extra="-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+            extra=(-DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
           fi
           cmake -G Ninja -S . -B build \
             -DCMAKE_BUILD_TYPE=${{ steps.cfg.outputs.type }} \
             -DSTDC_BUILD_TESTS=${{ steps.cfg.outputs.tests == 'yes' && 'ON' || 'OFF' }} \
-            ${{ steps.cfg.outputs.flags }} $extra
+            ${{ steps.cfg.outputs.flags }} "${extra[@]}"
 
       - name: Build
         run: cmake --build build
@@ -121,6 +129,63 @@ jobs:
         shell: bash
         run: ./build/bin/test_auto
 
+  # Exceptions and RTTI switched off, one at a time rather than together. Off together would
+  # still compile both branches, but it would stop covering RTTI off with exceptions left on,
+  # which is the shape a downstream of this library actually builds.
+  #
+  # Three platforms rather than five: the flag is chosen by MSVC against not-MSVC, and these
+  # three are the MSVC standard library, libstdc++ and libc++.
+  no-features:
+    name: ${{ matrix.platform }} ${{ matrix.config }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ linux-gcc, macos, windows-msvc ]
+        config: [ no-exceptions, no-rtti ]
+        include:
+          - platform: linux-gcc
+            os: ubuntu-latest
+            cxx: g++
+          - platform: macos
+            os: macos-latest
+            cxx: clang++
+          - platform: windows-msvc
+            os: windows-latest
+            cxx: cl
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y --no-progress
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+
+      # No tests, so no Boost and no toolchain file.
+      - name: Build
+        shell: bash
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: |
+          case "${{ matrix.config }}" in
+            no-exceptions) flags="-DSTDC_ENABLE_EXCEPTIONS=OFF" ;;
+            no-rtti)       flags="-DSTDC_ENABLE_RTTI=OFF" ;;
+          esac
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_TESTS=OFF $flags
+          cmake --build build
+
   # MinGW builds the library but does not run the tests: Boost.Test for MinGW is its own
   # undertaking, and what is worth knowing here is that the Windows sources compile and link
   # against something other than the Microsoft toolchain.
@@ -130,7 +195,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        config: [ shared, static, no-exceptions, no-rtti ]
+        config: [ shared, static ]
     steps:
       - uses: actions/checkout@v4
 
@@ -147,10 +212,8 @@ jobs:
         shell: msys2 {0}
         run: |
           case "${{ matrix.config }}" in
-            shared)        flags="-DSTDC_BUILD_SHARED=ON" ;;
-            static)        flags="-DSTDC_BUILD_STATIC=ON" ;;
-            no-exceptions) flags="-DSTDC_ENABLE_EXCEPTIONS=OFF" ;;
-            no-rtti)       flags="-DSTDC_ENABLE_RTTI=OFF" ;;
+            shared) flags="-DSTDC_BUILD_SHARED=ON" ;;
+            static) flags="-DSTDC_BUILD_STATIC=ON" ;;
           esac
           cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_TESTS=OFF $flags
           cmake --build build
