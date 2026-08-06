@@ -247,13 +247,12 @@ namespace stdc::windows {
         /// Opens a subkey below this one.
         ///
         /// \param path the subkey, relative to this one
-        /// \param ec set to the failure reason instead of throwing
         /// \param access a bitwise or of \ref DesiredAccess values
         /// \return the subkey, owning its handle and closing it when it goes out of scope. Check
         ///         isValid() to see whether it opened.
         /// \throws std::system_error from the overload that takes no \a ec
         /// \note Every operation on this class comes in these two forms. The one taking an \a ec
-        ///       is \c noexcept, the one without throws.
+        ///       sets it to the failure reason and is \c noexcept, the one without throws.
         inline RegKey open(const std::wstring &path, int access = DA_Read);
         RegKey open(const std::wstring &path, std::error_code &ec, int access = DA_Read) noexcept;
 

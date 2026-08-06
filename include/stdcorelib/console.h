@@ -244,7 +244,7 @@ namespace stdc {
         ///       \c black or \c nocolor, each also available with a \c light prefix
         ///   \li the same again behind \c @, which sets the background instead of the foreground
         ///   \li a style: \c bold, \c italic, \c underline, \c strikethrough or \c nostyle
-        ///   \li \c intensified, or \c @intensified, to brighten whichever color is in effect
+        ///   \li \c intensified, or \c \@intensified, to brighten whichever color is in effect
         ///   \li \c reset, or \c clear, to drop back to plain text
         ///
         /// \param buf the text and the markup within it
