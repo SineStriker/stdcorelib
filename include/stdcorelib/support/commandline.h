@@ -17,6 +17,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -697,12 +698,28 @@ namespace stdc::cli {
         /// \warning The same. These point into the ParseResult.
         std::vector<std::string_view> rawValues(int index = 0) const;
 
-        /// Converted, saying whether it could be. False for a token that is not a \c T and
-        /// for one that is not there, leaving \a out alone.
-        template <class T>
-        bool tryValue(T *out, int index = 0, int occurrence = 0) const {
+        /// Converted, or nothing when there is nothing to convert.
+        ///
+        /// Nothing means one of two things: no token is there and no default value stands in
+        /// for it, or a token is there that is not a \c T. Declaring the type on the Argument
+        /// turns the second into a diagnostic while parsing, which leaves this meaning only the
+        /// first.
+        ///
+        /// \note An option given an empty value, \c --prefix= , reads as nothing here too,
+        ///       since what comes back is the same empty text either way. isSet() tells those
+        ///       two apart, and value<T>() gives the empty string rather than nothing.
+        ///
+        /// \code
+        ///   int jobs = result.option("-j").tryValue<int>().value_or(default_jobs());
+        /// \endcode
+        template <class T = std::string>
+        std::optional<T> tryValue(int index = 0, int occurrence = 0) const {
             auto raw = rawValue(index, occurrence);
-            return !raw.empty() && value_traits<T>::parse(raw, out);
+            T out{};
+            if (raw.empty() || !value_traits<T>::parse(raw, &out)) {
+                return std::nullopt;
+            }
+            return out;
         }
 
         /// The same without the check. A token that is not a \c T gives a value initialized
@@ -793,12 +810,28 @@ namespace stdc::cli {
         /// \warning The same. These point into this result.
         std::vector<std::string_view> rawValues(int index) const;
 
-        /// Converted, saying whether it could be. False for a token that is not a \c T and
-        /// for one that is not there, leaving \a out alone.
-        template <class T>
-        bool tryValue(T *out, int index) const {
+        /// Converted, or nothing when there is nothing to convert.
+        ///
+        /// Nothing means one of two things: no token is there and no default value stands in
+        /// for it, or a token is there that is not a \c T. Declaring the type on the Argument
+        /// turns the second into a diagnostic while parsing, which leaves this meaning only the
+        /// first.
+        ///
+        /// \note An option given an empty value, \c --prefix= , reads as nothing here too,
+        ///       since what comes back is the same empty text either way. isSet() tells those
+        ///       two apart, and value<T>() gives the empty string rather than nothing.
+        ///
+        /// \code
+        ///   int jobs = result.tryValue<int>(0).value_or(default_jobs());
+        /// \endcode
+        template <class T = std::string>
+        std::optional<T> tryValue(int index) const {
             auto raw = rawValue(index);
-            return !raw.empty() && value_traits<T>::parse(raw, out);
+            T out{};
+            if (raw.empty() || !value_traits<T>::parse(raw, &out)) {
+                return std::nullopt;
+            }
+            return out;
         }
 
         template <class T = std::string>
@@ -822,6 +855,12 @@ namespace stdc::cli {
         template <class T = std::string>
         T valueForOption(std::string_view token) const {
             return option(token).value<T>();
+        }
+
+        // @overload: valueForOption, saying whether there was one
+        template <class T = std::string>
+        std::optional<T> tryValueForOption(std::string_view token) const {
+            return option(token).tryValue<T>();
         }
 
         /// The help text for the command that was reached, prologue and epilogue included.

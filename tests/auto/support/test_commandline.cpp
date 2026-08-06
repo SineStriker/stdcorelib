@@ -1480,35 +1480,66 @@ BOOST_AUTO_TEST_CASE(test_reading_with_a_type_the_argument_never_declared) {
     Parser parser(Command("prog").addArgument(Argument("name")));
     auto result = ok(parser, {"not-a-number"});
 
-    int number = 12345;
-    BOOST_CHECK(!result.tryValue(&number, 0));
-    // The out stays as it was, so a caller can keep whatever it had.
-    BOOST_CHECK_EQUAL(number, 12345);
+    BOOST_CHECK(!result.tryValue<int>(0).has_value());
+    // The caller keeps whatever they had, said as a fallback rather than as a variable that
+    // may or may not have been written to.
+    BOOST_CHECK_EQUAL(result.tryValue<int>(0).value_or(12345), 12345);
     // The reading form gives a value initialized one instead, which is why the checking form
     // exists at all.
     BOOST_CHECK_EQUAL(result.value<int>(0), 0);
 
-    // What is there and does convert answers true.
+    // What is there and does convert comes back holding it.
     auto number_result = ok(Parser(Command("prog").addArgument(Argument("n"))), {"42"});
-    BOOST_CHECK(number_result.tryValue(&number, 0));
-    BOOST_CHECK_EQUAL(number, 42);
+    auto number = number_result.tryValue<int>(0);
+    BOOST_REQUIRE(number.has_value());
+    BOOST_CHECK_EQUAL(*number, 42);
 
-    // An argument that was never given is false rather than zero, which the reading form cannot
-    // tell apart from a zero that was given.
+    // An argument that was never given is nothing rather than zero, which the reading form
+    // cannot tell apart from a zero that was given. A zero that was given is a zero, and not
+    // nothing, which is the trap that a bare int return has and this does not.
     Parser optional(Command("prog").addArgument(Argument("n").optional()));
-    BOOST_CHECK(!ok(optional, {}).tryValue(&number, 0));
-    BOOST_CHECK(ok(optional, {"0"}).tryValue(&number, 0));
-    BOOST_CHECK_EQUAL(number, 0);
+    BOOST_CHECK(!ok(optional, {}).tryValue<int>(0).has_value());
+    BOOST_REQUIRE(ok(optional, {"0"}).tryValue<int>(0).has_value());
+    BOOST_CHECK_EQUAL(*ok(optional, {"0"}).tryValue<int>(0), 0);
+    BOOST_CHECK_EQUAL(ok(optional, {"0"}).tryValue<int>(0).value_or(99), 0);
+
+    // The default value stands in, so it is something rather than nothing.
+    Parser defaulted(
+        Command("prog").addArgument(Argument("n").optional().defaultValue("5").type<int>()));
+    BOOST_CHECK_EQUAL(ok(defaulted, {}).tryValue<int>(0).value_or(99), 5);
+
+    // The type defaults to a string, the same as the reading form.
+    static_assert(std::is_same_v<decltype(result.tryValue(0)), std::optional<std::string>>,
+                  "the checking read defaults to the type the reading one does");
 }
 
 BOOST_AUTO_TEST_CASE(test_the_checking_read_on_an_option) {
     Parser parser(Command("prog").addOption(Option({"-n"}, "How many").arg("count")));
 
-    int number = 0;
-    BOOST_CHECK(!ok(parser, {}).option("-n").tryValue(&number));
-    BOOST_CHECK(!ok(parser, {"-n", "many"}).option("-n").tryValue(&number));
-    BOOST_CHECK(ok(parser, {"-n", "7"}).option("-n").tryValue(&number));
-    BOOST_CHECK_EQUAL(number, 7);
+    BOOST_CHECK(!ok(parser, {}).option("-n").tryValue<int>().has_value());
+    BOOST_CHECK(!ok(parser, {"-n", "many"}).option("-n").tryValue<int>().has_value());
+    BOOST_CHECK_EQUAL(ok(parser, {"-n", "7"}).option("-n").tryValue<int>().value_or(0), 7);
+
+    // And through the shortcut, which has to answer the same as the long way round.
+    BOOST_CHECK(!ok(parser, {}).tryValueForOption<int>("-n").has_value());
+    BOOST_CHECK_EQUAL(ok(parser, {"-n", "7"}).tryValueForOption<int>("-n").value_or(0), 7);
+
+    // An option that was never declared is nothing, not a zero.
+    BOOST_CHECK(!ok(parser, {}).tryValueForOption<int>("-x").has_value());
+
+    // An option given an empty value reads as nothing here, since what comes back is the same
+    // empty text as for one that was never given. isSet() is what tells those two apart, and
+    // the reading form gives back the empty string.
+    Parser prefix(Command("prog").addOption(Option({"--prefix"}, "Prefix").arg("text")));
+    for (const auto &given : {std::vector<std::string>{"prog", "--prefix="},
+                              std::vector<std::string>{"prog", "--prefix", ""}}) {
+        auto result = prefix.parse(given);
+        BOOST_REQUIRE_MESSAGE(result.isValid(), result.errorText());
+        BOOST_CHECK(result.option("--prefix").isSet());
+        BOOST_CHECK(!result.option("--prefix").tryValue().has_value());
+        BOOST_CHECK_EQUAL(result.option("--prefix").value(), "");
+    }
+    BOOST_CHECK(!ok(prefix, {}).option("--prefix").isSet());
 }
 
 BOOST_AUTO_TEST_CASE(test_a_tree_with_nothing_in_it) {
