@@ -27,7 +27,7 @@ namespace {
 }
 
 BOOST_AUTO_TEST_CASE(test_vla_alloc) {
-    STDCORELIB_VLA_ALLOC(int, buf, 8);
+    STDC_VLA_ALLOC(int, buf, 8);
     for (int i = 0; i < 8; ++i) {
         buf[i] = i;
     }
@@ -38,7 +38,7 @@ BOOST_AUTO_TEST_CASE(test_vla_alloc) {
 BOOST_AUTO_TEST_CASE(test_vla_new) {
     BOOST_CHECK_EQUAL(Counted::g_count, 0);
     {
-        STDCORELIB_VLA_NEW(Counted, arr, 4);
+        STDC_VLA_NEW(Counted, arr, 4);
         BOOST_CHECK_EQUAL(Counted::g_count, 4);
         BOOST_CHECK_EQUAL(arr[3].i, 0); // default constructed
         arr[3].i = 1;

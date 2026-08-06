@@ -30,11 +30,11 @@ namespace stdc::console::detail {
     /// Only attributes that differ are emitted, and only ones being turned *on*: there is no code
     /// for clearing an individual attribute, so a caller that needs to drop one pairs this with
     /// sgr_reset_sequence() and re-applies what should stay. \c black has no code at all.
-    STDCORELIB_EXPORT std::string sgr_sequence(const attributes &from, const attributes &to);
+    STDC_EXPORT std::string sgr_sequence(const attributes &from, const attributes &to);
 
     /// Returns the sequence that puts a terminal back to its defaults, or an empty string when
     /// \a from already is the default.
-    STDCORELIB_EXPORT std::string sgr_reset_sequence(const attributes &from);
+    STDC_EXPORT std::string sgr_reset_sequence(const attributes &from);
 
 }
 

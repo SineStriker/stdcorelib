@@ -68,13 +68,13 @@ namespace stdc {
             ///     sequence was instead of giving up on the whole string
             /// @{
 
-            STDCORELIB_EXPORT static std::wstring from_utf8(const char *s, int size = -1);
+            STDC_EXPORT static std::wstring from_utf8(const char *s, int size = -1);
 
             static inline std::wstring from_utf8(const std::string_view &s) {
                 return from_utf8(s.data(), int(s.size()));
             }
 
-            STDCORELIB_EXPORT static std::string to_utf8(const wchar_t *s, int size = -1);
+            STDC_EXPORT static std::string to_utf8(const wchar_t *s, int size = -1);
 
             static inline std::string to_utf8(const std::wstring_view &s) {
                 return to_utf8(s.data(), int(s.size()));
@@ -89,13 +89,13 @@ namespace stdc {
             /// notion and a Windows API call, so it exists only there.
             /// @{
 
-            STDCORELIB_EXPORT static std::wstring from_ansi(const char *s, int size = -1);
+            STDC_EXPORT static std::wstring from_ansi(const char *s, int size = -1);
 
             static inline std::wstring from_ansi(const std::string_view &s) {
                 return from_ansi(s.data(), int(s.size()));
             }
 
-            STDCORELIB_EXPORT static std::string to_ansi(const wchar_t *s, int size = -1);
+            STDC_EXPORT static std::string to_ansi(const wchar_t *s, int size = -1);
 
             static inline std::string to_ansi(const std::wstring_view &s) {
                 return to_ansi(s.data(), int(s.size()));
@@ -129,7 +129,7 @@ namespace stdc {
 #endif
             }
 
-            STDCORELIB_EXPORT static std::string normalize_separators(const std::string &utf8_path,
+            STDC_EXPORT static std::string normalize_separators(const std::string &utf8_path,
                                                                       bool native);
         };
 
@@ -166,11 +166,11 @@ namespace stdc {
         }
 
         /// Concatenates \a v with \a delimiter between the pieces.
-        STDCORELIB_EXPORT std::string join(const array_view<std::string> &v,
+        STDC_EXPORT std::string join(const array_view<std::string> &v,
                                            const std::string_view &delimiter);
 
         // @overload: join(vector<string_view>, string_view)
-        STDCORELIB_EXPORT std::string join(const array_view<std::string_view> &v,
+        STDC_EXPORT std::string join(const array_view<std::string_view> &v,
                                            const std::string_view &delimiter);
 
         // @overload: join(initializer_list<string_view>, string_view)
@@ -185,11 +185,11 @@ namespace stdc {
         /// \warning The views point into \a s, which therefore has to outlive them. The overload
         ///          taking an rvalue \c std::string returns copies instead, since there would be
         ///          nothing left to point at.
-        STDCORELIB_EXPORT std::vector<std::string_view> split(const std::string_view &s,
+        STDC_EXPORT std::vector<std::string_view> split(const std::string_view &s,
                                                               const std::string_view &delimiter);
 
         // @overload: split(string &&, string_view)
-        STDCORELIB_EXPORT std::vector<std::string> split(std::string &&s,
+        STDC_EXPORT std::vector<std::string> split(std::string &&s,
                                                          const std::string_view &delimiter);
 
         // @overload: split(const char *, string_view)
@@ -201,7 +201,7 @@ namespace stdc {
         /// Substitutes \c %1, \c %2, ... in \a fmt with \a args, counting from one.
         ///
         /// \note A placeholder with no argument behind it is left as it stands.
-        STDCORELIB_EXPORT std::string format(const std::string_view &fmt,
+        STDC_EXPORT std::string format(const std::string_view &fmt,
                                              const array_view<std::string> &args);
 
         /// format() with the arguments spelled out, each run through to_string() first.
@@ -246,7 +246,7 @@ namespace stdc {
         /// \param s the text to expand
         /// \param find asked for each name, and returning nothing is how a name goes away
         /// \return the expanded text, or an empty string if a brace was left unbalanced
-        STDCORELIB_EXPORT std::string
+        STDC_EXPORT std::string
             varexp(const std::string_view &s,
                    const std::function<std::string(const std::string_view &)> &find);
 
@@ -500,9 +500,9 @@ namespace stdc {
 
     namespace str {
 
-        STDCORELIB_EXPORT std::string asprintf(const char *fmt, ...) STDCORELIB_PRINTF_FORMAT(1, 2);
+        STDC_EXPORT std::string asprintf(const char *fmt, ...) STDC_PRINTF_FORMAT(1, 2);
 
-        STDCORELIB_EXPORT std::string vasprintf(const char *fmt, va_list args);
+        STDC_EXPORT std::string vasprintf(const char *fmt, va_list args);
 
     }
 
@@ -510,7 +510,7 @@ namespace stdc {
     using str::vasprintf;
 
 #ifdef _WIN32
-    STDCORELIB_EXPORT const std::error_category &windows_utf8_category() noexcept;
+    STDC_EXPORT const std::error_category &windows_utf8_category() noexcept;
 #endif
 
 }

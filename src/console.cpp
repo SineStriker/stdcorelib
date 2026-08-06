@@ -678,9 +678,9 @@ namespace stdc {
             }
 
             // bg?
-            if (STDCORELIB_UNLIKELY(var.front() == '@')) {
+            if (STDC_UNLIKELY(var.front() == '@')) {
                 auto var1 = var.substr(1);
-                if (STDCORELIB_UNLIKELY(var1 == "intensified")) {
+                if (STDC_UNLIKELY(var1 == "intensified")) {
                     if (bg != nocolor)
                         bg |= intensified;
                     return true;
@@ -694,7 +694,7 @@ namespace stdc {
 
             // fg?
             {
-                if (STDCORELIB_UNLIKELY(var == "intensified")) {
+                if (STDC_UNLIKELY(var == "intensified")) {
                     if (fg != nocolor)
                         fg |= intensified;
                     return true;
@@ -848,7 +848,7 @@ namespace stdc {
             return ret;
         }
 
-        STDCORELIB_EXPORT int cvprintf(const char *fmt, va_list args) {
+        STDC_EXPORT int cvprintf(const char *fmt, va_list args) {
             return cvfprintf(stdout, fmt, args);
         }
 

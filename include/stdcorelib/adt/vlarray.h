@@ -411,7 +411,7 @@ namespace stdc {
         size_type m_capacity = 0;
         T *m_inline_begin = nullptr;
         size_type m_inline_capacity = 0;
-        STDCORELIB_NO_UNIQUE_ADDRESS Alloc m_alloc;
+        STDC_NO_UNIQUE_ADDRESS Alloc m_alloc;
     };
 
     template <class T, class Alloc>

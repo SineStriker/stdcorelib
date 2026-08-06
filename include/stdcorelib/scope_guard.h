@@ -37,7 +37,7 @@ namespace stdc {
         F m_func;
         bool m_active = true;
 
-        STDCORELIB_DISABLE_COPY(scope_guard)
+        STDC_DISABLE_COPY(scope_guard)
     };
 
     template <class F>

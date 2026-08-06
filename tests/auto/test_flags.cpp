@@ -13,13 +13,13 @@ namespace {
 
     enum class Permission { None = 0, Read = 0x01, Write = 0x02, Execute = 0x04 };
 
-    STDCORELIB_DECLARE_FLAGS(Permissions, Permission)
-    STDCORELIB_DECLARE_OPERATORS_FOR_FLAGS(Permissions)
+    STDC_DECLARE_FLAGS(Permissions, Permission)
+    STDC_DECLARE_OPERATORS_FOR_FLAGS(Permissions)
 
     enum class BigPermission : uint64_t { None = 0, A = 1ull << 40, B = 1ull << 41 };
 
-    STDCORELIB_DECLARE_FLAGS(BigPermissions, BigPermission)
-    STDCORELIB_DECLARE_OPERATORS_FOR_FLAGS(BigPermissions)
+    STDC_DECLARE_FLAGS(BigPermissions, BigPermission)
+    STDC_DECLARE_OPERATORS_FOR_FLAGS(BigPermissions)
 
 }
 
@@ -107,7 +107,7 @@ BOOST_AUTO_TEST_CASE(test_all_bitops) {
     BOOST_CHECK((rw & Permissions(Permission::Write)) == Permission::Write);
     BOOST_CHECK((rw ^ rw) == Permissions());
 
-    // the enum-on-the-left forms come from STDCORELIB_DECLARE_OPERATORS_FOR_FLAGS
+    // the enum-on-the-left forms come from STDC_DECLARE_OPERATORS_FOR_FLAGS
     BOOST_CHECK((Permission::Read | rw) == rw);
     BOOST_CHECK((Permission::Read & rw) == Permission::Read);
     BOOST_CHECK((Permission::Read ^ Permission::Write) == rw);

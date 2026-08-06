@@ -259,9 +259,9 @@ namespace stdc {
 
 }
 
-#define STDCORELIB_DECLARE_FLAGS(Flags, Enum) using Flags = ::stdc::flags<Enum>;
+#define STDC_DECLARE_FLAGS(Flags, Enum) using Flags = ::stdc::flags<Enum>;
 
-#define STDCORELIB_DECLARE_OPERATORS_FOR_FLAGS(Flags)                                              \
+#define STDC_DECLARE_OPERATORS_FOR_FLAGS(Flags)                                              \
     [[maybe_unused]] constexpr inline ::stdc::flags<typename Flags::enum_type> operator|(          \
         typename Flags::enum_type lhs, typename Flags::enum_type rhs) noexcept {                   \
         return ::stdc::flags<typename Flags::enum_type>(lhs) | rhs;                                \

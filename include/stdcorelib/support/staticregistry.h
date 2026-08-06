@@ -22,7 +22,7 @@ namespace stdc {
     ///   // in the host
     ///   class Codec { public: virtual ~Codec() = default; };
     ///   using CodecRegistry = stdc::StaticRegistry<Codec>;
-    ///   STDCORELIB_INSTANTIATE_STATIC_REGISTRY(Codec)   // once, in one .cpp
+    ///   STDC_INSTANTIATE_STATIC_REGISTRY(Codec)   // once, in one .cpp
     ///
     ///   // in the host or in any plugin
     ///   static CodecRegistry::Add<FlacCodec> x("flac", "Free Lossless Audio Codec");
@@ -193,7 +193,7 @@ namespace stdc {
             Entry _entry;
             Node _node;
 
-            STDCORELIB_DISABLE_COPY_MOVE(Add)
+            STDC_DISABLE_COPY_MOVE(Add)
         };
 
         /// Registers something built the way \a factory says, for the implementations that take
@@ -226,13 +226,13 @@ namespace stdc {
             Entry _entry;
             Node _node;
 
-            STDCORELIB_DISABLE_COPY_MOVE(AddFactory)
+            STDC_DISABLE_COPY_MOVE(AddFactory)
         };
 
         StaticRegistry() = delete;
 
     private:
-        // Declared here and defined by STDCORELIB_INSTANTIATE_STATIC_REGISTRY, so one module
+        // Declared here and defined by STDC_INSTANTIATE_STATIC_REGISTRY, so one module
         // owns the list and a plugin links against that one rather than growing a list of its
         // own. Both are null-initialized, which is a constant initializer, so they are already
         // in place when the static constructors that do the registering run.
@@ -255,7 +255,7 @@ namespace stdc {
 /// itself. Naming it rather than reopening it is what makes writing them anywhere else say so:
 /// the compiler answers "in namespace X, which does not enclose namespace stdc" instead of
 /// failing somewhere inside this header.
-#define STDCORELIB_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, EXPORT)                                \
+#define STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, EXPORT)                                \
     template <class T>                                                                             \
     typename ::stdc::StaticRegistry<T>::Node * ::stdc::StaticRegistry<T>::_head = nullptr;         \
     template <class T>                                                                             \
@@ -266,7 +266,7 @@ namespace stdc {
 ///
 /// Enough for a registry that lives in one module. A host that means to accept registrations
 /// from a plugin wants the EXPORT form above instead.
-#define STDCORELIB_INSTANTIATE_STATIC_REGISTRY(TYPE)                                               \
-    STDCORELIB_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, )
+#define STDC_INSTANTIATE_STATIC_REGISTRY(TYPE)                                               \
+    STDC_INSTANTIATE_STATIC_REGISTRY_EXPORT(TYPE, )
 
 #endif // STDCORELIB_STATICREGISTRY_H

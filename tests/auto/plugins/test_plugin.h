@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-#ifndef STDCORELIB_TEST_PLUGIN_H
-#define STDCORELIB_TEST_PLUGIN_H
+#ifndef STDC_TEST_PLUGIN_H
+#define STDC_TEST_PLUGIN_H
 
 #include <stdcorelib/adt/any.h>
 #include <stdcorelib/support/dynamicregistry.h>
@@ -54,4 +54,4 @@ TEST_PLUGIN_API const void *registry_plugin_address();
 
 /// @}
 
-#endif // STDCORELIB_TEST_PLUGIN_H
+#endif // STDC_TEST_PLUGIN_H

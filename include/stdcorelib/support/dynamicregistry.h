@@ -35,7 +35,7 @@ namespace stdc {
         ///       take the process down at exit. Nothing is gained by running it either: the
         ///       memory goes back at exit regardless, and the entries a destructor would release
         ///       may belong to code that has already been unloaded.
-        STDCORELIB_EXPORT void *shared_instance(std::string_view name, void *(*create)());
+        STDC_EXPORT void *shared_instance(std::string_view name, void *(*create)());
 
     }
 
@@ -262,7 +262,7 @@ namespace stdc {
         std::map<std::string, EntryPointer, std::less<>> _entries;
         std::vector<Listener *> _listeners;
 
-        STDCORELIB_DISABLE_COPY_MOVE(DynamicRegistry)
+        STDC_DISABLE_COPY_MOVE(DynamicRegistry)
     };
 
 }

@@ -66,7 +66,7 @@ namespace stdc {
         ///       copy of the library. Statically linking stdcorelib into two of them gives each
         ///       its own table, and then a type simply does not carry across, which is a refusal
         ///       rather than a wrong answer.
-        STDCORELIB_EXPORT const void *resolve_type_id(type_entry &entry);
+        STDC_EXPORT const void *resolve_type_id(type_entry &entry);
 
         template <class T>
         type_entry &entry_of() {

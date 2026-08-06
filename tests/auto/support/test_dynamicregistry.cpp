@@ -168,7 +168,7 @@ BOOST_AUTO_TEST_CASE(test_a_plugin_registers_where_the_host_looks) {
 
     BOOST_REQUIRE(add("from-the-plugin", 7));
 
-#  ifdef STDCORELIB_STATIC
+#  ifdef STDC_STATIC
     // Each module linked its own table, so each has a registry of its own. Nothing to check
     // beyond the plugin not having disturbed this one.
     BOOST_TEST_MESSAGE("stdcorelib is linked statically here, so the modules have a registry each");

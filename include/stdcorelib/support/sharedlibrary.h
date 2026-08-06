@@ -23,7 +23,7 @@ namespace stdc {
     ///   }
     ///   auto fn = reinterpret_cast<void *(*) (size_t)>(lib.resolve("malloc"));
     /// \endcode
-    class STDCORELIB_EXPORT SharedLibrary {
+    class STDC_EXPORT SharedLibrary {
     public:
         SharedLibrary();
         ~SharedLibrary();

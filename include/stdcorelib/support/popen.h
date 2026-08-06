@@ -44,7 +44,7 @@ namespace stdc {
     ///          this right.
     ///
     /// \sa https://docs.python.org/3/library/subprocess.html
-    class STDCORELIB_EXPORT Popen {
+    class STDC_EXPORT Popen {
     public:
         /// What to connect a standard stream to, beyond a descriptor or a \c FILE * of your own.
         enum IOType {
@@ -102,7 +102,7 @@ namespace stdc {
         /// One end of a pipe to the child, as an ordinary \c std::iostream.
         ///
         /// Only open for a stream that was set to \c PIPE, which is_open() reports.
-        class STDCORELIB_EXPORT Stream : public std::iostream {
+        class STDC_EXPORT Stream : public std::iostream {
         public:
             Stream();
             ~Stream() override;
@@ -128,7 +128,7 @@ namespace stdc {
             class Buf;
             std::unique_ptr<Buf> _buf;
 
-            STDCORELIB_DISABLE_COPY_MOVE(Stream)
+            STDC_DISABLE_COPY_MOVE(Stream)
         };
 
         Popen();

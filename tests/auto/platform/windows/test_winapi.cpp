@@ -80,7 +80,7 @@ BOOST_AUTO_TEST_CASE(test_dll_directory) {
 }
 
 BOOST_AUTO_TEST_CASE(test_environment_variable) {
-    const wchar_t *name = L"STDCORELIB_TEST_VAR";
+    const wchar_t *name = L"STDC_TEST_VAR";
     auto restore = stdc::make_scope_guard([&] { ::SetEnvironmentVariableW(name, nullptr); });
 
     BOOST_REQUIRE(::SetEnvironmentVariableW(name, L"value"));
@@ -99,17 +99,17 @@ BOOST_AUTO_TEST_CASE(test_environment_variable) {
 
     // one that was never set does not
     exists = true;
-    BOOST_CHECK(kernel32::GetEnvironmentVariableW(L"STDCORELIB_NO_SUCH_VAR", &exists).empty());
+    BOOST_CHECK(kernel32::GetEnvironmentVariableW(L"STDC_NO_SUCH_VAR", &exists).empty());
     BOOST_CHECK(!exists);
 }
 
 BOOST_AUTO_TEST_CASE(test_expand_environment_strings) {
-    const wchar_t *name = L"STDCORELIB_TEST_EXPAND";
+    const wchar_t *name = L"STDC_TEST_EXPAND";
     auto restore = stdc::make_scope_guard([&] { ::SetEnvironmentVariableW(name, nullptr); });
     BOOST_REQUIRE(::SetEnvironmentVariableW(name, L"expanded"));
 
     bool ok = false;
-    auto result = kernel32::ExpandEnvironmentStringsW(L"[%STDCORELIB_TEST_EXPAND%]", &ok);
+    auto result = kernel32::ExpandEnvironmentStringsW(L"[%STDC_TEST_EXPAND%]", &ok);
     BOOST_CHECK(ok);
     BOOST_CHECK(result == L"[expanded]");
     BOOST_CHECK(no_embedded_terminator(result));
@@ -121,8 +121,8 @@ BOOST_AUTO_TEST_CASE(test_expand_environment_strings) {
 
     // a name that resolves to nothing is left standing, which is the API's own behavior and not
     // a failure
-    BOOST_CHECK(kernel32::ExpandEnvironmentStringsW(L"%STDCORELIB_NO_SUCH_VAR%", &ok) ==
-                L"%STDCORELIB_NO_SUCH_VAR%");
+    BOOST_CHECK(kernel32::ExpandEnvironmentStringsW(L"%STDC_NO_SUCH_VAR%", &ok) ==
+                L"%STDC_NO_SUCH_VAR%");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

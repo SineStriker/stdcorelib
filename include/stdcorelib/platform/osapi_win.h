@@ -18,20 +18,20 @@
 
 namespace stdc {
 
-    STDCORELIB_EXPORT std::wstring winFormatError(DWORD error, DWORD languageId,
+    STDC_EXPORT std::wstring winFormatError(DWORD error, DWORD languageId,
                                                   va_list *args = nullptr);
 
-    STDCORELIB_EXPORT std::wstring winGetFullDllDirectory();
+    STDC_EXPORT std::wstring winGetFullDllDirectory();
 
-    STDCORELIB_EXPORT std::wstring winGetFullModuleFileName(HMODULE hModule);
+    STDC_EXPORT std::wstring winGetFullModuleFileName(HMODULE hModule);
 
-    STDCORELIB_EXPORT std::wstring win8bitToWide(const std::string_view &s, UINT cp, DWORD flags);
+    STDC_EXPORT std::wstring win8bitToWide(const std::string_view &s, UINT cp, DWORD flags);
 
-    STDCORELIB_EXPORT std::string winWideTo8bit(const std::wstring_view &s, UINT cp, DWORD flags);
+    STDC_EXPORT std::string winWideTo8bit(const std::wstring_view &s, UINT cp, DWORD flags);
 
-    STDCORELIB_EXPORT std::wstring winGetEnvironmentVariable(const wchar_t *name, bool *ok);
+    STDC_EXPORT std::wstring winGetEnvironmentVariable(const wchar_t *name, bool *ok);
 
-    STDCORELIB_EXPORT RTL_OSVERSIONINFOW winSystemVersion();
+    STDC_EXPORT RTL_OSVERSIONINFOW winSystemVersion();
 
 }
 

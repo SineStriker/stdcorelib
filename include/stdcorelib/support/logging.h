@@ -21,7 +21,7 @@ namespace stdc {
         const char *category = nullptr;
     };
 
-    class STDCORELIB_EXPORT Logger {
+    class STDC_EXPORT Logger {
     public:
         enum Level {
             Trace = 1,
@@ -107,7 +107,7 @@ namespace stdc {
     /// already in effect.
     ///
     /// \sa setFilterRules()
-    class STDCORELIB_EXPORT LogCategory {
+    class STDC_EXPORT LogCategory {
     public:
         explicit LogCategory(const char *name);
         ~LogCategory();

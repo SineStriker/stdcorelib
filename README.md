@@ -26,13 +26,13 @@ cmake --install build --config Release
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `STDCORELIB_BUILD_STATIC` | `OFF` | Force a static library |
-| `STDCORELIB_BUILD_SHARED` | `OFF` | Force a shared library |
-| `STDCORELIB_BUILD_TESTS` | `OFF` | Build the test suite, which needs Boost.Test |
-| `STDCORELIB_ENABLE_EXCEPTIONS` | `ON` | Off compiles the library with exceptions disabled |
-| `STDCORELIB_INSTALL` | `ON` | Generate the install and package config targets |
+| `STDC_BUILD_STATIC` | `OFF` | Force a static library |
+| `STDC_BUILD_SHARED` | `OFF` | Force a shared library |
+| `STDC_BUILD_TESTS` | `OFF` | Build the test suite, which needs Boost.Test |
+| `STDC_ENABLE_EXCEPTIONS` | `ON` | Off compiles the library with exceptions disabled |
+| `STDC_INSTALL` | `ON` | Generate the install and package config targets |
 
-With neither `STDCORELIB_BUILD_STATIC` nor `STDCORELIB_BUILD_SHARED` set, it follows `BUILD_SHARED_LIBS`, defaulting to static.
+With neither `STDC_BUILD_STATIC` nor `STDC_BUILD_SHARED` set, it follows `BUILD_SHARED_LIBS`, defaulting to static.
 
 ## Integration with CMake Projects
 
@@ -210,7 +210,7 @@ Every operation comes in two forms: one taking an `std::error_code` and `noexcep
 | `flags.h` | Type-safe bit flags over an enum, in the shape of `QFlags` |
 | `scope_guard.h` | Run something on the way out, unless `dismiss()` says otherwise |
 | `support/versionnumber.h` | A four-part version that parses, prints, compares and hashes |
-| `vla.h` | `STDCORELIB_VLA_ALLOC` and `STDCORELIB_VLA_NEW`, stack arrays sized at run time |
+| `vla.h` | `STDC_VLA_ALLOC` and `STDC_VLA_NEW`, stack arrays sized at run time |
 | `pimpl.h` | The `stdc_impl_t` boilerplate used across the library |
 
 ```cpp

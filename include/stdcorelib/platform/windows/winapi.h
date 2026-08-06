@@ -12,7 +12,7 @@
 
 namespace stdc::winapi {
 
-    struct STDCORELIB_EXPORT kernel32 {
+    struct STDC_EXPORT kernel32 {
         //
         // winbase
         //
@@ -43,7 +43,7 @@ namespace stdc::winapi {
         static std::wstring ExpandEnvironmentStringsW(LPCWSTR src, bool *ok);
     };
 
-    struct STDCORELIB_EXPORT user32 {
+    struct STDC_EXPORT user32 {
         // To be added...
     };
 

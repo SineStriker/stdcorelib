@@ -387,14 +387,14 @@ namespace stdc {
         sigset_t _old{};
         bool _was_blocked = false;
 #endif
-        STDCORELIB_DISABLE_COPY_MOVE(sigpipe_guard)
+        STDC_DISABLE_COPY_MOVE(sigpipe_guard)
     };
 
     /// Runs \a body on a worker thread and leaves whatever it throws in \a error for the thread
     /// that joins it, since an exception crossing a thread boundary would call std::terminate.
     template <class F>
     void run_capturing(std::exception_ptr &error, F &&body) {
-#ifdef STDCORELIB_EXCEPTIONS
+#ifdef STDC_EXCEPTIONS
         try {
             body();
         } catch (...) {
@@ -468,7 +468,7 @@ namespace stdc {
             }
         };
 
-#ifdef STDCORELIB_EXCEPTIONS
+#ifdef STDC_EXCEPTIONS
         try {
             start_workers();
         } catch (...) {

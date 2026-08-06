@@ -20,17 +20,17 @@ namespace stdc {
 
         /// The executable's own path, taken from the OS rather than from \c argv[0], which the
         /// parent process is free to have set to anything.
-        STDCORELIB_EXPORT std::filesystem::path application_path();
+        STDC_EXPORT std::filesystem::path application_path();
 
         /// The directory holding the executable, which is where to look for files shipped
         /// alongside it.
-        STDCORELIB_EXPORT std::filesystem::path application_directory();
+        STDC_EXPORT std::filesystem::path application_directory();
 
         /// The executable's file name, extension included.
-        STDCORELIB_EXPORT std::filesystem::path application_filename();
+        STDC_EXPORT std::filesystem::path application_filename();
 
         /// The file name with its extension removed, as UTF-8.
-        STDCORELIB_EXPORT std::string application_name();
+        STDC_EXPORT std::string application_name();
 
         /// @}
 
@@ -42,25 +42,25 @@ namespace stdc {
         /// \return a view over storage that lives as long as the process
         /// \note On Windows these come from the wide command line, so a path \c main() could not
         ///       spell survives intact.
-        STDCORELIB_EXPORT array_view<std::string> command_line_arguments();
+        STDC_EXPORT array_view<std::string> command_line_arguments();
 
         /// Splits \a command the way the host would, undoing the quoting that
         /// join_command_line() applies.
         ///
         /// \sa join_command_line()
-        STDCORELIB_EXPORT std::vector<std::string>
+        STDC_EXPORT std::vector<std::string>
             split_command_line(const std::string_view &command);
 
         /// Joins \a args into one command line, quoting each so that the receiving program takes
         /// it apart into the same pieces.
         ///
         /// \sa split_command_line()
-        STDCORELIB_EXPORT std::string join_command_line(const std::vector<std::string> &args);
+        STDC_EXPORT std::string join_command_line(const std::vector<std::string> &args);
 
         /// @}
 
         /// The environment of the current process, as UTF-8.
-        STDCORELIB_EXPORT std::map<std::string, std::string> environment();
+        STDC_EXPORT std::map<std::string, std::string> environment();
 
     }
 

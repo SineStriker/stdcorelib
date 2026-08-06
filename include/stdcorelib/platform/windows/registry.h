@@ -26,7 +26,7 @@ namespace stdc::windows {
     /// \warning The \c toXxx() readers do not convert between types. Reading against the wrong
     ///          one hands back a default, meaning 0 or an empty string, and says nothing went
     ///          wrong, so check with isInt64(), isString() and the rest first.
-    class STDCORELIB_EXPORT RegValue {
+    class STDC_EXPORT RegValue {
     public:
         enum Type {
             Invalid = -1,
@@ -148,7 +148,7 @@ namespace stdc::windows {
         return static_cast<uint64_t>(toInt64());
     }
 
-    class STDCORELIB_EXPORT RegKey {
+    class STDC_EXPORT RegKey {
     public:
         enum DesiredAccess {
             DA_Delete = DELETE,
@@ -644,7 +644,7 @@ namespace stdc::windows {
         mutable DWORD _max_key_name_size = 0;
         mutable DWORD _max_value_name_size = 0;
 
-        STDCORELIB_DISABLE_COPY(RegKey);
+        STDC_DISABLE_COPY(RegKey);
 
         friend class key_iterator;
         friend class value_iterator;

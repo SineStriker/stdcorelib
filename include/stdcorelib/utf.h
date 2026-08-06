@@ -45,23 +45,23 @@ namespace stdc {
         /// otherwise says nothing about whether the input was empty or bad.
         /// @{
 
-        STDCORELIB_EXPORT std::u16string
+        STDC_EXPORT std::u16string
             utf8_to_utf16(std::string_view s, error_policy policy = replace, bool *ok = nullptr);
 
-        STDCORELIB_EXPORT std::u32string
+        STDC_EXPORT std::u32string
             utf8_to_utf32(std::string_view s, error_policy policy = replace, bool *ok = nullptr);
 
-        STDCORELIB_EXPORT std::string
+        STDC_EXPORT std::string
             utf16_to_utf8(std::u16string_view s, error_policy policy = replace, bool *ok = nullptr);
 
-        STDCORELIB_EXPORT std::u32string utf16_to_utf32(std::u16string_view s,
+        STDC_EXPORT std::u32string utf16_to_utf32(std::u16string_view s,
                                                         error_policy policy = replace,
                                                         bool *ok = nullptr);
 
-        STDCORELIB_EXPORT std::string
+        STDC_EXPORT std::string
             utf32_to_utf8(std::u32string_view s, error_policy policy = replace, bool *ok = nullptr);
 
-        STDCORELIB_EXPORT std::u16string utf32_to_utf16(std::u32string_view s,
+        STDC_EXPORT std::u16string utf32_to_utf16(std::u32string_view s,
                                                         error_policy policy = replace,
                                                         bool *ok = nullptr);
 
@@ -73,10 +73,10 @@ namespace stdc {
         /// UTF-16 on Windows and UTF-32 elsewhere.
         /// @{
 
-        STDCORELIB_EXPORT std::wstring
+        STDC_EXPORT std::wstring
             utf8_to_wide(std::string_view s, error_policy policy = replace, bool *ok = nullptr);
 
-        STDCORELIB_EXPORT std::string
+        STDC_EXPORT std::string
             wide_to_utf8(std::wstring_view s, error_policy policy = replace, bool *ok = nullptr);
 
         /// @}
@@ -86,9 +86,9 @@ namespace stdc {
         /// Whether the input is well formed, without building the converted string.
         /// @{
 
-        STDCORELIB_EXPORT bool is_valid_utf8(std::string_view s);
-        STDCORELIB_EXPORT bool is_valid_utf16(std::u16string_view s);
-        STDCORELIB_EXPORT bool is_valid_utf32(std::u32string_view s);
+        STDC_EXPORT bool is_valid_utf8(std::string_view s);
+        STDC_EXPORT bool is_valid_utf16(std::u16string_view s);
+        STDC_EXPORT bool is_valid_utf32(std::u32string_view s);
 
         /// @}
 

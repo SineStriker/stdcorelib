@@ -5,11 +5,11 @@ project(stdcorelib VERSION 0.0.1.2 LANGUAGES CXX)
 # ----------------------------------
 # Build Options
 # ----------------------------------
-option(STDCORELIB_BUILD_STATIC "Build static library" OFF)
-option(STDCORELIB_BUILD_SHARED "Build shared library" OFF)
-option(STDCORELIB_BUILD_TESTS "Build test cases" OFF)
-option(STDCORELIB_ENABLE_EXCEPTIONS "Build the library with exceptions" ON)
-option(STDCORELIB_INSTALL "Install library" ON)
+option(STDC_BUILD_STATIC "Build static library" OFF)
+option(STDC_BUILD_SHARED "Build shared library" OFF)
+option(STDC_BUILD_TESTS "Build test cases" OFF)
+option(STDC_ENABLE_EXCEPTIONS "Build the library with exceptions" ON)
+option(STDC_INSTALL "Install library" ON)
 
 # ----------------------------------
 # CMake Settings
@@ -40,7 +40,7 @@ elseif(MINGW)
     set(CMAKE_SHARED_LIBRARY_PREFIX "")
 endif()
 
-if(STDCORELIB_INSTALL)
+if(STDC_INSTALL)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
 endif()
@@ -48,8 +48,8 @@ endif()
 # ----------------------------------
 # Project Variables
 # ----------------------------------
-set(STDCORELIB_VERSION ${PROJECT_VERSION})
-set(STDCORELIB_INSTALL_NAME ${PROJECT_NAME})
+set(STDC_VERSION ${PROJECT_VERSION})
+set(STDC_INSTALL_NAME ${PROJECT_NAME})
 
 # ----------------------------------
 # Main Project
@@ -113,9 +113,9 @@ if(TRUE)
     unset(_temp)
 endif()
 
-if(STDCORELIB_BUILD_STATIC OR(NOT STDCORELIB_BUILD_SHARED AND NOT BUILD_SHARED_LIBS))
+if(STDC_BUILD_STATIC OR(NOT STDC_BUILD_SHARED AND NOT BUILD_SHARED_LIBS))
     add_library(${PROJECT_NAME} STATIC)
-    target_compile_definitions(${PROJECT_NAME} PUBLIC STDCORELIB_STATIC)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC STDC_STATIC)
 else()
     add_library(${PROJECT_NAME} SHARED)
 endif()
@@ -123,9 +123,9 @@ endif()
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 target_sources(${PROJECT_NAME} PRIVATE ${_src})
-target_compile_definitions(${PROJECT_NAME} PRIVATE STDCORELIB_LIBRARY)
+target_compile_definitions(${PROJECT_NAME} PRIVATE STDC_LIBRARY)
 
-if(NOT STDCORELIB_ENABLE_EXCEPTIONS)
+if(NOT STDC_ENABLE_EXCEPTIONS)
     if(MSVC)
         # Not /EHsc-, which does not disable anything: the trailing minus binds to the c, so it
         # says extern "C" functions may throw and leaves exceptions on. _CPPUNWIND stays defined.
@@ -170,9 +170,9 @@ if(WIN32)
     include("cmake/winrc.cmake")
 endif()
 
-if(STDCORELIB_INSTALL)
+if(STDC_INSTALL)
     install(TARGETS ${PROJECT_NAME}
-        EXPORT ${STDCORELIB_INSTALL_NAME}Targets
+        EXPORT ${STDC_INSTALL_NAME}Targets
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" OPTIONAL
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" OPTIONAL
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" OPTIONAL
@@ -194,39 +194,39 @@ if(NOT WIN32)
     endif()
 endif()
 
-if(STDCORELIB_BUILD_TESTS)
+if(STDC_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-if(STDCORELIB_INSTALL)
+if(STDC_INSTALL)
     # Add install target
-    set(_install_dir ${CMAKE_INSTALL_LIBDIR}/cmake/${STDCORELIB_INSTALL_NAME})
+    set(_install_dir ${CMAKE_INSTALL_LIBDIR}/cmake/${STDC_INSTALL_NAME})
 
     # Add version file
     write_basic_package_version_file(
-        "${CMAKE_CURRENT_BINARY_DIR}/${STDCORELIB_INSTALL_NAME}ConfigVersion.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/${STDC_INSTALL_NAME}ConfigVersion.cmake"
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY AnyNewerVersion
     )
 
     # Add configuration file
     configure_package_config_file(
-        ${CMAKE_CURRENT_LIST_DIR}/${STDCORELIB_INSTALL_NAME}Config.cmake.in
-        "${CMAKE_CURRENT_BINARY_DIR}/${STDCORELIB_INSTALL_NAME}Config.cmake"
+        ${CMAKE_CURRENT_LIST_DIR}/${STDC_INSTALL_NAME}Config.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/${STDC_INSTALL_NAME}Config.cmake"
         INSTALL_DESTINATION ${_install_dir}
         NO_CHECK_REQUIRED_COMPONENTS_MACRO
     )
 
     # Install cmake files
     install(FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/${STDCORELIB_INSTALL_NAME}Config.cmake"
-        "${CMAKE_CURRENT_BINARY_DIR}/${STDCORELIB_INSTALL_NAME}ConfigVersion.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/${STDC_INSTALL_NAME}Config.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/${STDC_INSTALL_NAME}ConfigVersion.cmake"
         DESTINATION ${_install_dir}
     )
 
     # Install cmake targets files
-    install(EXPORT ${STDCORELIB_INSTALL_NAME}Targets
-        FILE "${STDCORELIB_INSTALL_NAME}Targets.cmake"
+    install(EXPORT ${STDC_INSTALL_NAME}Targets
+        FILE "${STDC_INSTALL_NAME}Targets.cmake"
         NAMESPACE stdcorelib::
         DESTINATION ${_install_dir}
     )

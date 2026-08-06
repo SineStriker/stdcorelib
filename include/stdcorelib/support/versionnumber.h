@@ -11,7 +11,7 @@
 
 namespace stdc {
 
-    class STDCORELIB_EXPORT VersionNumber {
+    class STDC_EXPORT VersionNumber {
     public:
         VersionNumber();
         explicit VersionNumber(int major, int minor = 0, int patch = 0, int tweak = 0);
@@ -54,7 +54,7 @@ namespace stdc {
 namespace std {
 
     template <>
-    struct STDCORELIB_EXPORT hash<stdc::VersionNumber> {
+    struct STDC_EXPORT hash<stdc::VersionNumber> {
         size_t operator()(const stdc::VersionNumber &key) const;
     };
 

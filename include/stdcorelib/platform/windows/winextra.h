@@ -12,13 +12,13 @@
 
 namespace stdc::windows {
 
-    STDCORELIB_EXPORT std::wstring SystemError(DWORD error_code, DWORD language_id = 0);
+    STDC_EXPORT std::wstring SystemError(DWORD error_code, DWORD language_id = 0);
 
-    STDCORELIB_EXPORT RTL_OSVERSIONINFOW SystemVersion();
+    STDC_EXPORT RTL_OSVERSIONINFOW SystemVersion();
 
-    STDCORELIB_EXPORT std::chrono::system_clock::time_point FileTimeToTimePoint(const FILETIME &ft);
+    STDC_EXPORT std::chrono::system_clock::time_point FileTimeToTimePoint(const FILETIME &ft);
 
-    STDCORELIB_EXPORT FILETIME TimePointToFileTime(const std::chrono::system_clock::time_point &tp);
+    STDC_EXPORT FILETIME TimePointToFileTime(const std::chrono::system_clock::time_point &tp);
 
 }
 

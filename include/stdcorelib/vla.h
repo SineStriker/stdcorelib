@@ -8,12 +8,12 @@
 #include <new>
 
 #if defined(_MSC_VER)
-#  define STDCORELIB_ALLOCA(size) _alloca(size)
+#  define STDC_ALLOCA(size) _alloca(size)
 #elif defined(__GNUC__) || defined(__clang__)
-#  define STDCORELIB_ALLOCA(size) alloca(size)
+#  define STDC_ALLOCA(size) alloca(size)
 #endif
 
-#ifdef STDCORELIB_ALLOCA
+#ifdef STDC_ALLOCA
 
 /// Allocates an uninitialized buffer of \a SIZE elements of \a TYPE on the stack, and declares
 /// \a NAME as a pointer to it.
@@ -21,8 +21,8 @@
 /// \warning The storage dies with the enclosing function, not the enclosing scope, so a loop
 ///          that allocates on every pass keeps growing the frame. Nothing frees it either, which
 ///          is why the size has to be bounded by something the caller controls.
-#  define STDCORELIB_VLA_ALLOC(TYPE, NAME, SIZE)                                                   \
-      TYPE *NAME = (TYPE *) STDCORELIB_ALLOCA((SIZE) * sizeof(TYPE))
+#  define STDC_VLA_ALLOC(TYPE, NAME, SIZE)                                                   \
+      TYPE *NAME = (TYPE *) STDC_ALLOCA((SIZE) * sizeof(TYPE))
 
 namespace stdc::vla::detail {
 
@@ -48,13 +48,13 @@ namespace stdc::vla::detail {
 
 }
 
-/// Like STDCORELIB_VLA_ALLOC(), for a type that needs constructing. A guard in the same scope
+/// Like STDC_VLA_ALLOC(), for a type that needs constructing. A guard in the same scope
 /// default constructs the elements and destroys them on the way out.
 ///
-/// \sa STDCORELIB_VLA_ALLOC()
-#  define STDCORELIB_VLA_NEW(TYPE, NAME, SIZE)                                                     \
+/// \sa STDC_VLA_ALLOC()
+#  define STDC_VLA_NEW(TYPE, NAME, SIZE)                                                     \
       const size_t NAME##_vla_size_ = (SIZE);                                                      \
-      STDCORELIB_VLA_ALLOC(TYPE, NAME, NAME##_vla_size_);                                          \
+      STDC_VLA_ALLOC(TYPE, NAME, NAME##_vla_size_);                                          \
       ::stdc::vla::detail::ScopeGuard<TYPE> NAME##_vla_guard_(NAME, NAME##_vla_size_);
 
 #endif

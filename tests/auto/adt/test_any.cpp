@@ -332,7 +332,7 @@ BOOST_AUTO_TEST_CASE(test_identity_across_a_module_boundary) {
     BOOST_CHECK(any_cast<int>(&fromPlugin) == nullptr);
     BOOST_CHECK(!fromPlugin.type().name().empty());
 
-#  ifdef STDCORELIB_STATIC
+#  ifdef STDC_STATIC
     // Each module linked its own copy of the table, so a type is not expected to carry across.
     // The checks above still hold, because refusing is the only alternative allowed.
     BOOST_TEST_MESSAGE("stdcorelib is linked statically here, so the modules have a table each "
@@ -354,7 +354,7 @@ BOOST_AUTO_TEST_CASE(test_size_is_a_buffer_plus_a_pointer) {
     BOOST_CHECK_EQUAL(sizeof(any), 2 * sizeof(void *) + sizeof(void *));
 }
 
-#ifdef STDCORELIB_EXCEPTIONS
+#ifdef STDC_EXCEPTIONS
 BOOST_AUTO_TEST_CASE(test_value_cast_throws_on_the_wrong_type) {
     any value = 42;
     BOOST_CHECK_EQUAL(any_cast<int>(value), 42);

@@ -60,7 +60,7 @@ namespace stdc {
 
         /// Returns the mode the process is set to.
         /// \sa set_color_mode()
-        STDCORELIB_EXPORT color_mode get_color_mode();
+        STDC_EXPORT color_mode get_color_mode();
 
         /// Overrides the mode process wide.
         ///
@@ -69,14 +69,14 @@ namespace stdc {
         /// \param mode the mode to force, or \c automatic to go back to deciding per target
         /// \note Also drops what has been detected about the targets seen so far. Call this again
         ///       with the current mode after a \c freopen() to force them to be probed anew.
-        STDCORELIB_EXPORT void set_color_mode(color_mode mode);
+        STDC_EXPORT void set_color_mode(color_mode mode);
 
         /// Returns the mode that will actually be used for \a file.
         ///
         /// \param file the target to resolve against, which is probed on the first call and
         ///        remembered afterwards
         /// \return one of \c never, \c vt or \c windows_legacy, never \c automatic
-        STDCORELIB_EXPORT color_mode resolve_color_mode(FILE *file);
+        STDC_EXPORT color_mode resolve_color_mode(FILE *file);
 
         /// @}
 
@@ -95,29 +95,29 @@ namespace stdc {
         /// \return the number of bytes of \a buf written, escape sequences not counted
         /// \note Whether the attributes are emitted at all rests on resolve_color_mode() for
         ///       \a file, so a redirected stream receives the text alone.
-        STDCORELIB_EXPORT int fputs(int style, int fg, int bg, const char *buf, FILE *file);
+        STDC_EXPORT int fputs(int style, int fg, int bg, const char *buf, FILE *file);
 
         // @overload: fputs
-        STDCORELIB_EXPORT int fputs(int style, int fg, int bg, const std::string_view &buf,
+        STDC_EXPORT int fputs(int style, int fg, int bg, const std::string_view &buf,
                                     FILE *file);
 
         /// Like fputs(), to \c stdout and followed by a newline.
-        STDCORELIB_EXPORT int puts(int style, int fg, int bg, const char *buf);
+        STDC_EXPORT int puts(int style, int fg, int bg, const char *buf);
 
         // @overload: puts
-        STDCORELIB_EXPORT int puts(int style, int fg, int bg, const std::string_view &buf);
+        STDC_EXPORT int puts(int style, int fg, int bg, const std::string_view &buf);
 
         /// Like fputs(), with printf-style formatting.
-        STDCORELIB_EXPORT int fprintf(int style, int fg, int bg, FILE *file, const char *fmt, ...)
-            STDCORELIB_PRINTF_FORMAT(5, 6);
+        STDC_EXPORT int fprintf(int style, int fg, int bg, FILE *file, const char *fmt, ...)
+            STDC_PRINTF_FORMAT(5, 6);
 
-        STDCORELIB_EXPORT int vfprintf(int style, int fg, int bg, FILE *file, const char *fmt,
+        STDC_EXPORT int vfprintf(int style, int fg, int bg, FILE *file, const char *fmt,
                                        va_list args);
 
-        STDCORELIB_EXPORT int printf(int style, int fg, int bg, const char *fmt, ...)
-            STDCORELIB_PRINTF_FORMAT(4, 5);
+        STDC_EXPORT int printf(int style, int fg, int bg, const char *fmt, ...)
+            STDC_PRINTF_FORMAT(4, 5);
 
-        STDCORELIB_EXPORT int vprintf(int style, int fg, int bg, const char *fmt, va_list args);
+        STDC_EXPORT int vprintf(int style, int fg, int bg, const char *fmt, va_list args);
 
         /// Like fputs(), with formatN() placeholders (\c %1, \c %2, ...) rather than printf
         /// conversions.
@@ -166,14 +166,14 @@ namespace stdc {
             return console::puts(nostyle, nocolor, nocolor, buf);
         }
 
-        STDCORELIB_EXPORT int u8fprintf(FILE *file, const char *fmt, ...)
-            STDCORELIB_PRINTF_FORMAT(2, 3);
+        STDC_EXPORT int u8fprintf(FILE *file, const char *fmt, ...)
+            STDC_PRINTF_FORMAT(2, 3);
 
-        STDCORELIB_EXPORT int u8vfprintf(FILE *file, const char *fmt, va_list args);
+        STDC_EXPORT int u8vfprintf(FILE *file, const char *fmt, va_list args);
 
-        STDCORELIB_EXPORT int u8printf(const char *fmt, ...) STDCORELIB_PRINTF_FORMAT(1, 2);
+        STDC_EXPORT int u8printf(const char *fmt, ...) STDC_PRINTF_FORMAT(1, 2);
 
-        STDCORELIB_EXPORT int u8vprintf(const char *fmt, va_list args);
+        STDC_EXPORT int u8vprintf(const char *fmt, va_list args);
 
         template <class... Args>
         inline int u8print(const std::string_view &format, Args &&...args) {
@@ -260,30 +260,30 @@ namespace stdc {
         /// \endcode
         ///
         /// \sa fputs(), which takes the same attributes as arguments
-        STDCORELIB_EXPORT int cfputs(const char *buf, FILE *file);
+        STDC_EXPORT int cfputs(const char *buf, FILE *file);
 
         // @overload: cfputs
-        STDCORELIB_EXPORT int cfputs(const std::string_view &buf, FILE *file);
+        STDC_EXPORT int cfputs(const std::string_view &buf, FILE *file);
 
         /// Like cfputs(), to \c stdout and followed by a newline.
-        STDCORELIB_EXPORT int cputs(const char *buf);
+        STDC_EXPORT int cputs(const char *buf);
 
         // @overload: cputs
-        STDCORELIB_EXPORT int cputs(const std::string_view &buf);
+        STDC_EXPORT int cputs(const std::string_view &buf);
 
         /// Like cfputs(), with printf-style formatting.
         ///
         /// \warning The markup is read after the formatting, so a \c %s expanding to text that
         ///          holds \c ${ or \c $$ has it eaten rather than printed. Write text you do not
         ///          control with u8fprintf() instead.
-        STDCORELIB_EXPORT int cfprintf(FILE *file, const char *fmt, ...)
-            STDCORELIB_PRINTF_FORMAT(2, 3);
+        STDC_EXPORT int cfprintf(FILE *file, const char *fmt, ...)
+            STDC_PRINTF_FORMAT(2, 3);
 
-        STDCORELIB_EXPORT int cvfprintf(FILE *file, const char *fmt, va_list args);
+        STDC_EXPORT int cvfprintf(FILE *file, const char *fmt, va_list args);
 
-        STDCORELIB_EXPORT int cprintf(const char *fmt, ...) STDCORELIB_PRINTF_FORMAT(1, 2);
+        STDC_EXPORT int cprintf(const char *fmt, ...) STDC_PRINTF_FORMAT(1, 2);
 
-        STDCORELIB_EXPORT int cvprintf(const char *fmt, va_list args);
+        STDC_EXPORT int cvprintf(const char *fmt, va_list args);
 
         /// Like cfputs(), with formatN() placeholders (\c %1, \c %2, ...).
         template <class... Args>

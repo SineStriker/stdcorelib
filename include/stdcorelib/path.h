@@ -57,7 +57,7 @@ namespace stdc {
         ///
         /// \warning A symlink followed by \c .. therefore lands somewhere canonical() would not,
         ///          since the lexical answer ignores where the link actually pointed.
-        STDCORELIB_EXPORT std::filesystem::path clean_path(const std::filesystem::path &path);
+        STDC_EXPORT std::filesystem::path clean_path(const std::filesystem::path &path);
 
         /// Rewrites the separators as \c /, or as the platform's own when \a native is set.
         inline std::string normalize_separators(const std::filesystem::path &path,
