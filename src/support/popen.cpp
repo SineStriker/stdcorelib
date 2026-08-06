@@ -356,20 +356,19 @@ namespace stdc {
     /// Ignores SIGPIPE for its lifetime, so that a write to a pipe whose reader has gone returns
     /// EPIPE instead of ending the process. Nothing to do on Windows.
     ///
-    /// This used to block the signal rather than ignore it, and put it back afterwards. Blocking
-    /// does not generate the signal any less, it only holds it, so the queue has to be emptied
-    /// before the mask goes back, and there is no portable way to do that: sigtimedwait is absent
-    /// on macOS, and sigpending there does not report a SIGPIPE the calling thread just caused.
-    /// Measured on both, with the write on a worker thread the way communicate() does it:
+    /// This used to block the signal instead. Blocking does not stop the signal being
+    /// generated, only delivered, so the queue has to be emptied before the mask goes back, and
+    /// there is no portable way to do that. macOS has no sigtimedwait, and its sigpending does
+    /// not report a SIGPIPE the calling thread has just caused. Measured on both, with the write
+    /// on a worker thread the way communicate() does it:
     ///
     ///   \li block, then unblock: dies on macOS, survives on Linux
     ///   \li block, then sigpending and sigwait: dies on macOS, survives on Linux
     ///   \li ignore: survives on both
     ///
-    /// \note The disposition belongs to the process, not to this thread, so a program that wanted
-    ///       SIGPIPE to end it will not get that during the window a write is in flight. The
-    ///       alternative was ending the process, which is worse. Children are unaffected either
-    ///       way, since this is only ever entered after the fork.
+    /// \note The disposition belongs to the process rather than to this thread, so a program
+    ///       that wanted SIGPIPE to end it will not get that while a write is in flight.
+    ///       Children are unaffected, since this is only entered after the fork.
     class sigpipe_guard {
     public:
 #ifdef _WIN32

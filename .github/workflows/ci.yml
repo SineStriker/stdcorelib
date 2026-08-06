@@ -1,20 +1,22 @@
 name: CI
 
 # Work happens on dev and lands on main, so main is the only branch worth spending runners on.
-# workflow_dispatch stays because it is manual, which is how a run is repeated without a push.
+# workflow_dispatch is there to repeat a run without pushing.
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  # Two axes, crossed only where the code paths actually cross. The library shape is one of those
-  # places: it decides dllexport against visibility, and whether a plugin and its host share one
-  # type table or get one each, which is different on every platform. So shape runs everywhere.
+  # Two axes, crossed only where the code paths cross.
   #
-  # Turning exceptions or RTTI off is not: the flag is picked by MSVC against not-MSVC, and the
-  # rest of what varies is which standard library is underneath. Three platforms cover both
-  # compiler families and all three standard libraries, and are in the no-features job below.
+  # Shape runs on every platform. It decides dllexport against visibility, and whether a plugin
+  # and its host share one type table, and that differs per platform.
+  #
+  # Turning exceptions or RTTI off does not need every platform. The flag is chosen by MSVC
+  # against not-MSVC, and the rest of what varies is the standard library underneath, so three
+  # platforms cover both compiler families and all three standard libraries. That is the
+  # no-features job below.
   build:
     name: ${{ matrix.platform }} ${{ matrix.config }}
     runs-on: ${{ matrix.os }}
@@ -75,24 +77,22 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      # ctest rather than the binary by name, which leaves where it landed to CMake. The flag is
-      # not optional: ctest exits 0 when it finds no tests at all, and a green run of nothing is
-      # exactly what a test CMakeLists that could not find Boost once produced here.
+      # ctest rather than the binary by name, so that where it landed is CMake's business. The
+      # flag is not optional. ctest exits 0 when it finds no tests at all, which is what a test
+      # CMakeLists that could not find Boost once produced here.
       - name: Test
         run: ctest --test-dir build --output-on-failure --no-tests=error
 
-  # Exceptions and RTTI switched off, one at a time rather than together. Off together would
-  # still compile both branches, but it would stop covering RTTI off with exceptions left on,
-  # which is the shape a downstream of this library actually builds.
+  # Exceptions and RTTI switched off, one at a time. Off together would stop covering RTTI off
+  # with exceptions left on, which is the shape a downstream of this library builds.
   #
-  # Three platforms rather than five: the flag is chosen by MSVC against not-MSVC, and these
-  # three are the MSVC standard library, libstdc++ and libc++.
+  # Three platforms rather than five, being the MSVC standard library, libstdc++ and libc++.
   #
   # Both flags are private to the library target, so the tests are built the ordinary way and run
-  # against a library that was not. That is the same split a consumer gets, and it is the only
-  # thing here that reaches the library's exception-free branches at run time: STDC_EXCEPTIONS is
-  # worked out per translation unit from __cpp_exceptions, so the code the #ifdefs in popen and
-  # elsewhere select is compiled by these two jobs and by nothing else.
+  # against a library that was not. A consumer gets the same split. This is also the only thing
+  # here that runs the library's exception-free branches: STDC_EXCEPTIONS is worked out per
+  # translation unit from __cpp_exceptions, so the code under those #ifdefs is compiled by these
+  # two jobs and by nothing else.
   no-features:
     name: ${{ matrix.platform }} ${{ matrix.config }}
     runs-on: ${{ matrix.os }}
@@ -132,13 +132,12 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure --no-tests=error
 
-  # Doxygen is a check here as much as an output. The comments carry markup, and markup that does
-  # not say what it meant to say has nowhere else to be caught: WARN_AS_ERROR in the Doxyfile is
-  # what makes this step fail rather than quietly produce a wrong page. Its first run found three,
+  # Doxygen is a check as much as an output. WARN_AS_ERROR in the Doxyfile is what makes this
+  # step fail rather than quietly produce a wrong page. Its first run found three defects,
   # including a \param naming an argument the function never had.
   #
-  # One platform, because what it reads is the headers, and the Doxyfile predefines the platform
-  # switches itself rather than taking them from whoever is running.
+  # One platform is enough. It reads the headers, and the Doxyfile predefines the platform
+  # switches itself.
   docs:
     name: docs
     runs-on: ubuntu-latest

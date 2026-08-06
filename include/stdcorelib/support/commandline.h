@@ -51,14 +51,13 @@ namespace stdc::cli {
 
     namespace detail {
 
-        /// The two halves of a type, kept as function pointers so that Argument can carry a type
-        /// without being a template and without a virtual call per token.
+        /// A type's check and its name, as function pointers, so that Argument can hold a
+        /// type without being a template.
         struct value_type_info {
             /// Whether the token is a \c T. Null means anything goes, which is the default.
             bool (*check)(std::string_view) = nullptr;
-            /// What to call it when a diagnostic or the help text has to name it. Held rather
-            /// than copied, so a value_traits returning the c_str of something it built on the
-            /// spot leaves this pointing at freed bytes. A literal is what belongs here.
+            /// The name used in diagnostics and in the help text. Must be a literal, since
+            /// it is held rather than copied.
             const char *name = nullptr;
         };
 
@@ -73,8 +72,7 @@ namespace stdc::cli {
             return {&check_value<T>, value_traits<T>::type_name()};
         }
 
-        /// Everything a ParseResult holds, which is only ever touched by the parser and by the
-        /// result's own accessors.
+        /// What a ParseResult holds.
         class parse_data;
 
         STDC_EXPORT bool parse_signed(std::string_view token, int64_t *out, int64_t min,
@@ -120,8 +118,8 @@ namespace stdc::cli {
         }
     };
 
-    /// Every integer type but \c bool, which is spelled out above. The range of the target type is
-    /// part of the check, so \c 300 is not a \c uint8_t.
+    /// Every integer type except \c bool, which has its own above. The range of the target
+    /// type is part of the check, so \c 300 is not a \c uint8_t.
     template <class T>
     struct value_traits<T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>>> {
         static inline bool parse(std::string_view token, T *out) {
@@ -168,13 +166,13 @@ namespace stdc::cli {
     /// One positional value a command or an option takes.
     class Argument {
     public:
-        /// How many tokens it eats.
+        /// How many tokens it takes.
         enum Arity {
             /// Exactly one.
             Single,
-            /// One or more, stopping early enough to leave what follows its own tokens.
+            /// One or more. Leaves enough tokens for the required arguments after it.
             Multiple,
-            /// Everything that is left, options included and unexamined.
+            /// Everything left, including anything that looks like an option.
             Remainder,
         };
 
@@ -187,7 +185,7 @@ namespace stdc::cli {
             : _name(std::move(name)), _desc(std::move(desc)), _required(required) {
         }
 
-        /// What to call it in the help text, when the name is not what a reader wants to see.
+        /// The name to show in the help text, when it should differ from name().
         inline Argument &metavar(std::string display_name) {
             _display_name = std::move(display_name);
             return *this;
@@ -200,15 +198,15 @@ namespace stdc::cli {
             _required = !on;
             return *this;
         }
-        /// Handed back by the result when the argument was not given. Stored as text, like
-        /// everything else, and converted by whoever reads it.
+        /// The value the result gives when the argument was not given. Stored as text and
+        /// converted when read.
         inline Argument &default_value(std::string value) {
             _default = std::move(value);
             _has_default = true;
             return *this;
         }
-        /// The complete set of tokens this will accept, for the arguments that are really a
-        /// choice between a few words.
+        /// The only values this accepts, for an argument that is a choice between a few
+        /// words.
         ///
         /// \pre Every one of them is readable as whatever type<T>() declared.
         inline Argument &expect(std::vector<std::string> values) {
@@ -228,8 +226,8 @@ namespace stdc::cli {
             _arity = on ? Multiple : Single;
             return *this;
         }
-        /// Declares what the tokens mean, which is both a check made while parsing and a word for
-        /// the help text. Without it anything is acceptable and the type shows up as a string.
+        /// Declares the type. Tokens are checked against it while parsing, and its name
+        /// appears in the help text. Without it any token is accepted.
         ///
         /// \pre Whatever expect() was given, if anything, is readable as a \c T.
         template <class T>
@@ -296,11 +294,11 @@ namespace stdc::cli {
         bool _has_default = false;
     };
 
-    /// A named switch, with however many arguments of its own.
+    /// A named switch, with any number of arguments of its own.
     class Option {
     public:
-        /// What the program means by the option, for the few that every program has. A role picks
-        /// the usual tokens and lets the parser act on it without being told the spelling.
+        /// What the option means, for the few every program has. A role brings the usual
+        /// spellings, and lets a caller ask by role rather than by spelling.
         enum Role {
             NoRole,
             Debug,
@@ -322,8 +320,8 @@ namespace stdc::cli {
             ShortMatchAll,
         };
 
-        /// The highest level among the options given is the one that decides, which is what
-        /// lets \c --help be answered on a command line missing everything it requires.
+        /// The highest level among the options given decides. This is what lets \c --help be
+        /// answered on a command line that is missing everything it requires.
         enum Prior {
             NoPrior,
             /// Its own missing arguments are not an error.
@@ -358,8 +356,7 @@ namespace stdc::cli {
               _desc(desc.empty() ? defaultDescription(role) : std::move(desc)), _role(role) {
         }
 
-        /// An argument of its own. An option's argument carries no description, having the
-        /// option's to stand on.
+        /// Adds an argument. An option's argument needs no description of its own.
         inline Option &arg(std::string name, bool required = true) {
             _args.emplace_back(Argument(std::move(name), {}, required));
             return *this;
@@ -560,7 +557,7 @@ namespace stdc::cli {
             _catalogue = std::move(catalogue);
             return *this;
         }
-        /// What a Version option prints. Setting it is what makes that option worth having.
+        /// What a Version option prints.
         inline Command &setVersion(std::string version) {
             _version = std::move(version);
             return *this;
@@ -580,6 +577,8 @@ namespace stdc::cli {
         /// \param show_if_no_arguments Answer a command line with nothing on it at all, so
         ///        that a bare program name prints its help.
         /// \param global Keep it in scope for the subcommands as well.
+        /// \param tokens The spellings, or the usual ones when empty.
+        /// \param desc The description, or the usual one when empty.
         inline Command &addHelpOption(bool show_if_no_arguments = false, bool global = false,
                                       std::vector<std::string> tokens = {}, std::string desc = {}) {
             return addOption(Option(Option::Help, std::move(tokens), std::move(desc))
@@ -651,7 +650,7 @@ namespace stdc::cli {
         CommandCatalogue _catalogue;
     };
 
-    /// What one option's occurrences came to. Handed out by ParseResult rather than built.
+    /// What one option was given. Obtained from ParseResult::option().
     class STDC_EXPORT OptionResult {
     public:
         /// How many times the option was given.
@@ -662,12 +661,11 @@ namespace stdc::cli {
         /// The option itself, or null when it was never declared.
         const Option *option() const;
 
-        /// The \a index'th argument of the \a occurrence'th appearance, as text. Empty when
-        /// there is no such thing, which a default value has already been substituted into.
+        /// The \a index'th argument of the \a occurrence'th appearance, as text, or the
+        /// default value where there is one. Empty when there is neither.
         std::string_view rawValue(int index = 0, int occurrence = 0) const;
 
-        /// Every value the \a index'th argument took, across every occurrence. This is what a
-        /// repeatable option is for.
+        /// Every value the \a index'th argument took, across every occurrence.
         std::vector<std::string_view> rawValues(int index = 0) const;
 
         /// Converted, saying whether it could be. False for a token that is not a \c T and
@@ -678,15 +676,15 @@ namespace stdc::cli {
             return !raw.empty() && value_traits<T>::parse(raw, out);
         }
 
-        /// The same again, for when the caller would rather read than check. A token that is not
-        /// a \c T gives a value initialized \c T, which is why declaring the type on the
-        /// Argument is worth doing: that turns a mismatch into a parse error instead of a zero.
+        /// The same without the check. A token that is not a \c T gives a value initialized
+        /// \c T. Declare the type on the Argument to have that rejected while parsing instead.
         template <class T = std::string_view>
         T value(int index = 0, int occurrence = 0) const {
             T out{};
             value_traits<T>::parse(rawValue(index, occurrence), &out);
             return out;
         }
+
         template <class T = std::string_view>
         std::vector<T> values(int index = 0) const {
             std::vector<T> out;
@@ -736,12 +734,12 @@ namespace stdc::cli {
             return error() == NoError;
         }
         Error error() const;
-        /// A sentence naming what went wrong and where, ready to be printed.
+        /// What went wrong, ready to be printed.
         const std::string &errorText() const;
 
-        /// The command the tokens led to, which is the root when no subcommand was named.
+        /// The command that was reached, which is the root when no subcommand was named.
         const Command *command() const;
-        /// The names walked through to reach it, the root's first.
+        /// The names from the root down to it, the root first.
         const std::vector<std::string> &commandPath() const;
 
         /// Runs the handler of the command that was reached. \a errorCode is returned instead
@@ -749,8 +747,7 @@ namespace stdc::cli {
         int invoke(int errorCode = -1) const;
 
         bool isOptionSet(std::string_view token) const;
-        /// Whether an option carrying \a role was given. What \c --help was spelled as is then
-        /// no concern of the caller's.
+        /// Whether an option carrying \a role was given, whatever it was spelled as.
         bool isRoleSet(Option::Role role) const;
         OptionResult option(std::string_view token) const;
 
@@ -784,8 +781,7 @@ namespace stdc::cli {
             return out;
         }
 
-        /// The first argument of \a token's first occurrence, which is what an option carrying
-        /// one value is usually asked for.
+        /// The first argument of \a token's first occurrence.
         template <class T = std::string_view>
         T valueForOption(std::string_view token) const {
             return option(token).value<T>();
@@ -827,7 +823,7 @@ namespace stdc::cli {
             AllowDosShortOptions = 0x8,
             /// A single dash starts nothing.
             DontAllowUnixShortOptions = 0x10,
-            /// \c @file is replaced by the lines of that file.
+            /// \c \@file is replaced by the lines of that file.
             EnableResponseFile = 0x20,
         };
 
@@ -841,8 +837,8 @@ namespace stdc::cli {
             ShowArgumentExpectedValues = 0x2,
             /// Mark the options that have to be given.
             ShowOptionIsRequired = 0x4,
-            /// Line the descriptions of every group up with each other rather than group by
-            /// group, so that a catalogue reads as one table.
+            /// Line the descriptions of every group up with each other, so that a catalogue
+            /// reads as one table.
             AlignAllCatalogues = 0x8,
         };
 
@@ -857,11 +853,10 @@ namespace stdc::cli {
         Parser(Parser &&other) noexcept;
         Parser &operator=(Parser &&other) noexcept;
 
-        /// Replaces the tree, which a program normally does once by handing it to the
-        /// constructor instead.
+        /// Sets a new root command, replacing the one given to the constructor.
         ///
-        /// \note A result already handed out keeps the tree it was parsed against, and goes
-        ///       on answering about that one.
+        /// \note Do not change it once parse() has been called. A ParseResult reads the tree it
+        ///       was parsed against, and keeps reading the old one.
         void setRootCommand(Command root);
         const Command &rootCommand() const;
 

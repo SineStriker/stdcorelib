@@ -265,8 +265,8 @@ if(STDC_INSTALL)
         FILES_MATCHING PATTERN "*.h"
     )
 
-    # Under the project's own name, since a prefix shared with anything else has one share/LICENSE
-    # and no way to say whose it is.
+    # Under the project's own name, so that a prefix holding more than one project keeps them
+    # apart.
     install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
         DESTINATION ${CMAKE_INSTALL_DATADIR}/${STDC_INSTALL_NAME}
     )

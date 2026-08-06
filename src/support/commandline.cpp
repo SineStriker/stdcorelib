@@ -570,24 +570,23 @@ namespace stdc::cli {
     // ---------------------------------------------------------------------------------------
     // Parsing
     //
-    // Three of the rules below are the ones a reader coming from SysCmdLine will find are not
-    // the ones there. Each is a line that one accepts and this refuses, and each was measured
-    // against it rather than read out of it.
+    // Three rules below differ from SysCmdLine, which this replaces. Each is a line SysCmdLine
+    // accepts and this refuses. All three were measured against it.
     //
-    // A subcommand is looked for after the options the root declared. Stopping at the first
-    // option, as that one does, leaves a global option unusable in the place every program with
-    // one puts it, and the tokens after it are dropped on the floor. An option belonging to the
-    // subcommand rather than to the root is still unknown in front of it, which is the case that
-    // ought to be refused and is.
+    // A subcommand is looked for after the options the root declared. SysCmdLine stops looking
+    // at the first option, so a global option cannot be written where every program with one
+    // puts it, and the tokens after it are dropped. An option belonging to the subcommand rather
+    // than to the root is still unknown in front of it, which is the case that should be
+    // refused.
     //
-    // Positional tokens a command cannot take are an error. Where they are dropped instead, a
-    // mistyped subcommand is a silent success, which was measured: a root declaring nothing
-    // accepted four surplus tokens and did nothing with them.
+    // Positional tokens a command cannot take are an error. SysCmdLine drops them, so a mistyped
+    // subcommand succeeds silently. Measured: a root declaring no arguments accepted four
+    // surplus tokens and did nothing with them.
     //
     // An option that needs a value will not take a token that is a declared option of the same
-    // command. Saying so beats swallowing --force and leaving the reader to work out where it
-    // went. Only a declared option counts, so a negative number or a name nobody declared is a
-    // value like any other, which is the case that has to keep working.
+    // command. Reporting it beats swallowing --force and leaving the reader to find out where it
+    // went. Only a declared option counts, so a negative number or an undeclared name is still a
+    // value.
     // ---------------------------------------------------------------------------------------
 
     namespace {
