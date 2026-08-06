@@ -79,7 +79,7 @@ jobs:
       # cannot find Boost used to warn and return, which is a green build with nothing in it.
       - name: Test
         shell: bash
-        run: ./build/bin/test_auto
+        run: ./build/out/bin/test_auto
 
   # Exceptions and RTTI switched off, one at a time rather than together. Off together would
   # still compile both branches, but it would stop covering RTTI off with exceptions left on,
@@ -131,7 +131,7 @@ jobs:
 
       - name: Test
         shell: bash
-        run: ./build/bin/test_auto
+        run: ./build/out/bin/test_auto
 
   # MinGW builds the library but does not run the tests: Boost.Test for MinGW is its own
   # undertaking, and what is worth knowing here is that the Windows sources compile and link
