@@ -1125,9 +1125,64 @@ BOOST_AUTO_TEST_CASE(test_usage_names_the_path_it_took) {
     BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage: prog [options] [commands]"));
     BOOST_CHECK(has(parser.parse(argv({"copy", "a", "b"})).helpText(),
                     "Usage: prog copy [options] <src>... <dest>"));
-    // An optional argument is bracketed, and one that repeats carries the ellipsis.
+    // An optional argument is bracketed, and one that repeats carries the ellipsis. Here the
+    // only option is a required one, so it is spelled out and there is no hint left to print.
     BOOST_CHECK(has(parser.parse(argv({"configure"})).helpText(),
-                    "Usage: prog configure [options] [<mode>]"));
+                    "Usage: prog configure -p <name> [<mode>]"));
+}
+
+// An option that has to be given belongs on the usage line. Left inside "[options]" it is
+// indistinguishable from the ones that can be left out, which is the one thing about it that
+// matters.
+BOOST_AUTO_TEST_CASE(test_usage_spells_out_the_options_that_are_required) {
+    // Its first spelling and whatever it takes, in the order they were declared, ahead of the
+    // hint that stands for the rest.
+    {
+        Parser parser(Command("prog")
+                          .addArgument(Argument("path"))
+                          .addOption(Option({"-o", "--output"}, "Where to write").arg("file")
+                                         .required())
+                          .addOption(Option({"-v"}, "Say more")));
+        BOOST_CHECK(has(parser.parse(argv({})).helpText(),
+                        "Usage: prog -o <file> [options] <path>"));
+    }
+
+    // More than one, and no hint left when every option is accounted for.
+    {
+        Parser parser(Command("prog")
+                          .addOption(Option({"-i"}, "In").arg("in").required())
+                          .addOption(Option({"-o"}, "Out").arg("out").required()));
+        BOOST_CHECK(has(parser.parse(argv({"-i", "a", "-o", "b"})).helpText(),
+                        "Usage: prog -i <in> -o <out>\n"));
+    }
+
+    // Nothing required reads as it did before.
+    {
+        Parser parser(Command("prog").addOption(Option({"-v"}, "Say more")));
+        BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage: prog [options]\n"));
+    }
+
+    // An option carrying an optional argument of its own keeps that argument's brackets.
+    {
+        Parser parser(Command("prog").addOption(
+            Option({"-c"}, "Config").arg("file", false).required()));
+        BOOST_CHECK(has(parser.parse(argv({"-c"})).helpText(), "Usage: prog -c [<file>]\n"));
+    }
+
+    // A subcommand's own required options, on its own usage line.
+    {
+        Parser parser(Command("prog").addCommand(
+            Command("build").addOption(Option({"-t"}, "Target").arg("name").required())));
+        auto text = parser.parse(argv({"build", "-t", "x"})).helpText();
+        BOOST_CHECK(has(text, "Usage: prog build -t <name>\n"));
+    }
+
+    // An option with no spelling cannot be typed, so it is not in the hint either. It used to
+    // be counted, which put "[options]" on a command that had nothing to offer.
+    {
+        Parser parser(Command("prog").addOption(Option()));
+        BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage: prog\n"));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(test_a_catalogue_names_the_headings_and_keeps_their_order) {

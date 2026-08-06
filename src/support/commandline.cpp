@@ -594,7 +594,17 @@ namespace stdc::cli {
             for (size_t i = 0; i < path.size(); ++i) {
                 usage += (i ? " " : "") + path[i];
             }
-            if (!command.options().empty()) {
+            // An option that has to be given is not optional information, so it is spelled out
+            // where a reader looks first rather than left inside "[options]". The hint stays for
+            // whatever is left, and goes away when nothing is.
+            size_t required_count = 0;
+            for (const auto &option : named) {
+                if (option.isRequired()) {
+                    usage += " " + displayed(option, false);
+                    required_count++;
+                }
+            }
+            if (named.size() > required_count) {
                 usage += " [options]";
             }
             for (const auto &argument : command.arguments()) {
