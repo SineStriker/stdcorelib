@@ -47,83 +47,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
       - name: Settings for this configuration
         id: cfg
         shell: bash
         run: |
           case "${{ matrix.config }}" in
-            shared)  flags="-DSTDC_BUILD_SHARED=ON"; type=Debug;   tests=yes ;;
-            static)  flags="-DSTDC_BUILD_STATIC=ON"; type=Debug;   tests=yes ;;
-            release) flags="-DSTDC_BUILD_SHARED=ON"; type=Release; tests=yes ;;
+            shared)  flags="-DSTDC_BUILD_SHARED=ON"; type=Debug   ;;
+            static)  flags="-DSTDC_BUILD_STATIC=ON"; type=Debug   ;;
+            release) flags="-DSTDC_BUILD_SHARED=ON"; type=Release ;;
           esac
           echo "flags=$flags" >> "$GITHUB_OUTPUT"
           echo "type=$type" >> "$GITHUB_OUTPUT"
-          echo "tests=$tests" >> "$GITHUB_OUTPUT"
-
-      - name: Install Ninja and Boost.Test (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build libboost-test-dev
-
-      - name: Install Ninja and Boost.Test (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ninja boost
-
-      # Ninja is not on the Windows image, and there are two vcpkgs: the one Visual Studio bundles
-      # and the one on PATH. Deriving the root from the executable that will actually run the
-      # install is what keeps those from being different directories.
-      #
-      # It is carried under our own name, not VCPKG_ROOT. vcvars sets VCPKG_ROOT to the copy
-      # Visual Studio bundles, so the msvc-dev-cmd step below silently repoints it between the
-      # install and the configure: Boost lands in one vcpkg and CMake is aimed at the other.
-      - name: Install Ninja and locate vcpkg (Windows)
-        id: vcpkg
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          choco install ninja -y --no-progress
-          root=$(cygpath -m "$(dirname "$(command -v vcpkg)")")
-          echo "vcpkg root: $root"
-          echo "STDC_VCPKG_ROOT=$root" >> "$GITHUB_ENV"
-          echo "VCPKG_DEFAULT_BINARY_CACHE=$RUNNER_TEMP\\vcpkg-archives" >> "$GITHUB_ENV"
-          mkdir -p "$RUNNER_TEMP/vcpkg-archives"
-          # The port versions come from whichever vcpkg the image shipped, so its commit is what
-          # decides whether a cached binary is still the right one.
-          echo "rev=$(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo unknown)" \
-            >> "$GITHUB_OUTPUT"
-
-      # vcpkg's own binary cache, not a copy of installed/. Caching installed/ caches the *state*
-      # that says a package is present, so one incomplete save gets replayed on every later run
-      # and vcpkg answers "already installed" for a tree that is not there, which is a green
-      # install step followed by a find_package that comes up empty. A binary cache only skips
-      # the compile: the install still runs, and still writes the whole tree.
-      - name: Cache vcpkg binaries (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/vcpkg-archives
-          key: vcpkg-boost-test-x64-windows-${{ steps.vcpkg.outputs.rev }}
-          restore-keys: vcpkg-boost-test-x64-windows-
-
-      - name: Install Boost.Test (Windows)
-        if: runner.os == 'Windows' && steps.cfg.outputs.tests == 'yes'
-        shell: bash
-        run: |
-          vcpkg install boost-test:x64-windows
-          # find_package(Boost CONFIG) turns on exactly one file, which the boost-cmake port
-          # brings in as a dependency of boost-test. Saying whether it arrived makes a failure
-          # downstream one question rather than two.
-          config="$STDC_VCPKG_ROOT/installed/x64-windows/share/boost/BoostConfig.cmake"
-          ls -l "$config" || { echo "missing: $config"; ls "$STDC_VCPKG_ROOT/installed" || true; }
-
-      # Ninja everywhere, which needs the MSVC environment on Windows since there is no generator
-      # to set it up.
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: runner.os == 'Windows'
-        with:
-          arch: x64
 
       - name: Configure
         shell: bash
@@ -131,28 +67,17 @@ jobs:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
         run: |
-          # An array, because the vcpkg root can be inside Program Files and a bare $extra would
-          # split at the space.
-          extra=()
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            # The prefix path as well as the toolchain file. The toolchain works out the triplet
-            # for itself, and naming the directory outright is one fewer thing to be wrong.
-            extra=(-DCMAKE_TOOLCHAIN_FILE="$STDC_VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-                   -DVCPKG_TARGET_TRIPLET=x64-windows
-                   -DCMAKE_PREFIX_PATH="$STDC_VCPKG_ROOT/installed/x64-windows")
-          fi
           cmake -G Ninja -S . -B build \
             -DCMAKE_BUILD_TYPE=${{ steps.cfg.outputs.type }} \
-            -DSTDC_BUILD_TESTS=${{ steps.cfg.outputs.tests == 'yes' && 'ON' || 'OFF' }} \
-            ${{ steps.cfg.outputs.flags }} "${extra[@]}"
+            -DSTDC_BUILD_TESTS=ON \
+            ${{ steps.cfg.outputs.flags }}
 
       - name: Build
         run: cmake --build build
 
-      # Boost missing makes the test CMakeLists warn and return, which leaves a green build with
-      # nothing built at all. Naming the binary is what turns that into a failure.
+      # Naming the binary rather than trusting that the build step ran it. A test CMakeLists that
+      # cannot find Boost used to warn and return, which is a green build with nothing in it.
       - name: Test
-        if: steps.cfg.outputs.tests == 'yes'
         shell: bash
         run: ./build/bin/test_auto
 
@@ -182,26 +107,9 @@ jobs:
             cxx: cl
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
-      - name: Install Ninja (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
-
-      - name: Install Ninja (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ninja
-
-      - name: Install Ninja (Windows)
-        if: runner.os == 'Windows'
-        run: choco install ninja -y --no-progress
-
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: runner.os == 'Windows'
-        with:
-          arch: x64
-
-      # No tests, so no Boost and no toolchain file.
-      - name: Build
+      - name: Configure
         shell: bash
         env:
           CXX: ${{ matrix.cxx }}
@@ -211,7 +119,9 @@ jobs:
             no-rtti)       flags="-DSTDC_ENABLE_RTTI=OFF" ;;
           esac
           cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_TESTS=OFF $flags
-          cmake --build build
+
+      - name: Build
+        run: cmake --build build
 
   # MinGW builds the library but does not run the tests: Boost.Test for MinGW is its own
   # undertaking, and what is worth knowing here is that the Windows sources compile and link
