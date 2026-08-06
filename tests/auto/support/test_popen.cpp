@@ -701,7 +701,17 @@ BOOST_AUTO_TEST_CASE(test_user_and_groups) {
         BOOST_REQUIRE_EQUAL(started, privileged);
         if (!started) {
             BOOST_CHECK(!err.empty());
-            BOOST_CHECK(p.returncode());
+
+            // A start that failed reports no process, since there is none to report.
+            BOOST_CHECK_EQUAL(p.pid(), -1);
+            BOOST_CHECK(!p.returncode());
+
+            // And the child that got as far as fork was reaped on the way out, so this process
+            // has nothing left to collect.
+            int status = 0;
+            errno = 0;
+            BOOST_CHECK_EQUAL(waitpid(-1, &status, WNOHANG), -1);
+            BOOST_CHECK_EQUAL(errno, ECHILD);
             return;
         }
         auto [out, errout] = p.communicate({}, Timeout);

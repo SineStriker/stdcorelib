@@ -134,6 +134,11 @@ namespace stdc {
         Popen();
         ~Popen();
 
+        /// Moving takes the child, its pipes and its settings across. Assigning over a Popen
+        /// whose child is still running ends that child first.
+        ///
+        /// \note A Popen that has been moved from holds nothing and is only good for being
+        ///       destroyed or assigned to.
         Popen(Popen &&RHS) noexcept;
         Popen &operator=(Popen &&RHS) noexcept;
 
@@ -290,6 +295,8 @@ namespace stdc {
         /// \param err_msg filled in with a readable description when this fails, if not null
         /// \retval true the child is running, and any \c PIPE stream is open
         /// \retval false nothing was started, with the reason in error_code()
+        /// \note One Popen runs one child. Calling this again after a child has been started is
+        ///       not supported. Use another Popen.
         bool start(std::string *err_msg = nullptr);
 
         /// The error from the last operation, cleared at the start of each one.

@@ -546,8 +546,12 @@ namespace stdc {
         std::swap(_impl, RHS._impl);
     }
 
+    // Not a swap. Swapping would hand this object's child to RHS, which then kills it whenever
+    // RHS happens to go away, so a caller assigning over a running process could not say when it
+    // ended. Releasing here ends it at the assignment, and leaves RHS in the same empty state the
+    // move constructor leaves it in.
     Popen &Popen::operator=(Popen &&RHS) noexcept {
-        std::swap(_impl, RHS._impl);
+        _impl = std::move(RHS._impl);
         return *this;
     }
 
@@ -715,6 +719,13 @@ namespace stdc {
         if (result) {
             return true;
         }
+
+        // A start that did not happen leaves no process behind. On unix a failing exec is
+        // reported by a child that has already been forked and reaped, which would otherwise
+        // show up here as the exit status of a process the caller never got, and as a pid.
+        // Windows never had either, so this is also what makes the two agree.
+        impl.pid = -1;
+        impl.returncode.reset();
 
         // system api error
         if (err_msg) {
