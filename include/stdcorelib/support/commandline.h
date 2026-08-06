@@ -11,6 +11,7 @@
 #ifndef STDCORELIB_COMMANDLINE_H
 #define STDCORELIB_COMMANDLINE_H
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <functional>
@@ -200,9 +201,13 @@ namespace stdc::cli {
         }
         /// The value the result gives when the argument was not given. Stored as text and
         /// converted when read.
+        ///
+        /// \pre It is readable as whatever type<T>() declared, and is one of the values
+        ///      expect() allows, if either was given.
         inline Argument &default_value(std::string value) {
             _default = std::move(value);
             _has_default = true;
+            assertDefaultIsUsable();
             return *this;
         }
         /// The only values this accepts, for an argument that is a choice between a few
@@ -212,6 +217,7 @@ namespace stdc::cli {
         inline Argument &expect(std::vector<std::string> values) {
             _expected = std::move(values);
             assertExpectedMatchType();
+            assertDefaultIsUsable();
             return *this;
         }
         inline Argument &validate(Validator validator) {
@@ -234,6 +240,7 @@ namespace stdc::cli {
         inline Argument &type() {
             _type = detail::type_info_for<T>();
             assertExpectedMatchType();
+            assertDefaultIsUsable();
             return *this;
         }
 
@@ -270,7 +277,7 @@ namespace stdc::cli {
         }
 
     private:
-        /// Either half may be written first, so both call this.
+        /// Any of the three may be written first, so each calls what it can now check.
         inline void assertExpectedMatchType() const {
             if (!_type.check) {
                 return;
@@ -280,6 +287,16 @@ namespace stdc::cli {
                        "an expected value of this argument is not of the type it declared");
                 (void) item;
             }
+        }
+        inline void assertDefaultIsUsable() const {
+            if (!_has_default) {
+                return;
+            }
+            assert((!_type.check || _type.check(_default)) &&
+                   "the default value of this argument is not of the type it declared");
+            assert((_expected.empty() ||
+                    std::find(_expected.begin(), _expected.end(), _default) != _expected.end()) &&
+                   "the default value of this argument is not one of the values it expects");
         }
 
         std::string _name;
