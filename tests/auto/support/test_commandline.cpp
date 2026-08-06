@@ -1030,4 +1030,177 @@ BOOST_AUTO_TEST_CASE(test_an_empty_command_line_is_not_an_error_by_itself) {
     BOOST_CHECK(parser.parse({"prog"}).isValid());
 }
 
+// ---------------------------------------------------------------------------------------------
+// The help text
+// ---------------------------------------------------------------------------------------------
+
+namespace {
+
+    /// Where \a needle starts, so that two of them can be compared for order.
+    size_t at(const std::string &text, std::string_view needle) {
+        auto pos = text.find(needle);
+        BOOST_REQUIRE_MESSAGE(pos != std::string::npos, "\"" << needle << "\" is nowhere in:\n"
+                                                             << text);
+        return pos;
+    }
+
+    bool has(const std::string &text, std::string_view needle) {
+        return text.find(needle) != std::string::npos;
+    }
+
+    /// The column the description starts at on the line holding \a left, for the cases about
+    /// lining things up.
+    size_t descriptionColumn(const std::string &text, std::string_view left) {
+        auto start = text.rfind('\n', at(text, left)) + 1;
+        auto line = text.substr(start, text.find('\n', start) - start);
+        auto after = line.find(left) + left.size();
+        auto column = line.find_first_not_of(' ', after);
+        BOOST_REQUIRE_MESSAGE(column != std::string::npos, "nothing after \"" << left << "\"");
+        return column;
+    }
+
+    Parser helpTree() {
+        CommandCatalogue catalogue;
+        catalogue.addCommands("Filesystem Commands", {"copy"})
+            .addCommands("Buildsystem Commands", {"configure"});
+
+        Parser parser(Command("prog", "What the program is for")
+                          .addOptions({Option(Option::Help), Option(Option::Verbose).global()})
+                          .addCommands({
+                              Command("copy", "Copy things")
+                                  .addArguments({Argument("src", "Where from").multi(),
+                                                 Argument("dest", "Where to")})
+                                  .addOption(Option({"-f", "--force"}, "Overwrite")),
+                              Command("configure", "Configure things")
+                                  .addArgument(Argument("mode", "Which way", false)
+                                                   .default_value("fast")
+                                                   .expect({"fast", "slow"}))
+                                  .addOption(Option({"-p"}, "Project").arg("name").required()),
+                              Command("orphan", "Not in any group"),
+                          })
+                          .setCatalogue(catalogue));
+        parser.setPrologue("A prologue line");
+        parser.setEpilogue("An epilogue line");
+        return parser;
+    }
+
+}
+
+BOOST_AUTO_TEST_CASE(test_help_layout_is_in_a_fixed_order) {
+    auto text = helpTree().parse(argv({})).helpText();
+
+    BOOST_CHECK(at(text, "A prologue line") < at(text, "What the program is for"));
+    BOOST_CHECK(at(text, "What the program is for") < at(text, "Usage:"));
+    BOOST_CHECK(at(text, "Usage:") < at(text, "Options:"));
+    BOOST_CHECK(at(text, "Options:") < at(text, "Filesystem Commands:"));
+    BOOST_CHECK(at(text, "Filesystem Commands:") < at(text, "An epilogue line"));
+}
+
+BOOST_AUTO_TEST_CASE(test_usage_names_the_path_it_took) {
+    auto parser = helpTree();
+    BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage: prog [options] [commands]"));
+    BOOST_CHECK(has(parser.parse(argv({"copy", "a", "b"})).helpText(),
+                    "Usage: prog copy [options] <src>... <dest>"));
+    // An optional argument is bracketed, and one that repeats carries the ellipsis.
+    BOOST_CHECK(has(parser.parse(argv({"configure"})).helpText(),
+                    "Usage: prog configure [options] [<mode>]"));
+}
+
+BOOST_AUTO_TEST_CASE(test_a_catalogue_names_the_headings_and_keeps_their_order) {
+    auto text = helpTree().parse(argv({})).helpText();
+
+    BOOST_CHECK(at(text, "Filesystem Commands:") < at(text, "Buildsystem Commands:"));
+    // What the catalogue does not mention still shows, under the usual heading, at the end.
+    // Anchored to the start of a line, since "Commands:" is a tail of the headings above it.
+    BOOST_CHECK(at(text, "Buildsystem Commands:") < at(text, "\nCommands:"));
+    BOOST_CHECK(at(text, "\nCommands:") < at(text, "orphan"));
+
+    // Every command appears exactly once, wherever it was put.
+    for (auto name : {"copy", "configure", "orphan"}) {
+        BOOST_CHECK_MESSAGE(has(text, name), name);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(test_aligning_all_catalogues_shares_one_column) {
+    auto parser = helpTree();
+
+    parser.setDisplayOptions(Parser::Normal);
+    auto apart = parser.parse(argv({})).helpText();
+    // Group by group, a short group is narrow.
+    BOOST_CHECK(descriptionColumn(apart, "copy") < descriptionColumn(apart, "-h, --help"));
+
+    parser.setDisplayOptions(Parser::AlignAllCatalogues);
+    auto together = parser.parse(argv({})).helpText();
+    BOOST_CHECK_EQUAL(descriptionColumn(together, "copy"),
+                      descriptionColumn(together, "configure"));
+    BOOST_CHECK_EQUAL(descriptionColumn(together, "copy"),
+                      descriptionColumn(together, "-h, --help"));
+}
+
+BOOST_AUTO_TEST_CASE(test_the_extras_are_asked_for) {
+    auto parser = helpTree();
+
+    auto plain = parser.parse(argv({"configure"})).helpText();
+    BOOST_CHECK(!has(plain, "default:"));
+    BOOST_CHECK(!has(plain, "fast, slow"));
+    BOOST_CHECK(!has(plain, "(required)"));
+
+    parser.setDisplayOptions(Parser::ShowArgumentDefaultValue | Parser::ShowArgumentExpectedValues |
+                             Parser::ShowOptionIsRequired);
+    auto full = parser.parse(argv({"configure"})).helpText();
+    BOOST_CHECK(has(full, "(default: fast)"));
+    BOOST_CHECK(has(full, "[fast, slow]"));
+    BOOST_CHECK(has(full, "(required)"));
+}
+
+BOOST_AUTO_TEST_CASE(test_an_options_own_argument_carries_its_extras_too) {
+    Parser parser(Command("prog").addOption(
+        Option({"-l"}, "How loud")
+            .arg(Argument("n", {}, false).default_value("1").expect({"0", "1", "2"}))));
+    parser.setDisplayOptions(Parser::ShowArgumentDefaultValue | Parser::ShowArgumentExpectedValues);
+
+    auto text = parser.parse(argv({})).helpText();
+    BOOST_CHECK(has(text, "-l [<n>]"));
+    BOOST_CHECK(has(text, "(default: 1)"));
+    BOOST_CHECK(has(text, "[0, 1, 2]"));
+}
+
+BOOST_AUTO_TEST_CASE(test_roles_describe_themselves) {
+    // The three options every program has are otherwise the three with nothing written beside
+    // them, which is where a generated help text starts looking unfinished.
+    Parser parser(Command("prog").addOptions({Option(Option::Help), Option(Option::Version),
+                                              Option(Option::Verbose), Option(Option::Debug)}));
+    auto text = parser.parse(argv({})).helpText();
+
+    BOOST_CHECK(has(text, "Show this help and exit"));
+    BOOST_CHECK(has(text, "Show the version and exit"));
+    BOOST_CHECK(has(text, "Print more information"));
+    BOOST_CHECK(has(text, "Print debugging information"));
+
+    // A description of one's own wins.
+    Parser named(Command("prog").addOption(Option(Option::Help, {}, "Read this")));
+    BOOST_CHECK(has(named.parse(argv({})).helpText(), "Read this"));
+    BOOST_CHECK(!has(named.parse(argv({})).helpText(), "Show this help"));
+}
+
+BOOST_AUTO_TEST_CASE(test_help_of_a_command_that_was_never_reached_is_empty) {
+    // A default constructed result has no command, and asking it for help is empty rather than
+    // a walk off the end.
+    ParseResult empty;
+    BOOST_CHECK(empty.helpText().empty());
+    BOOST_CHECK(empty.command() == nullptr);
+}
+
+BOOST_AUTO_TEST_CASE(test_a_parser_can_be_built_and_returned) {
+    // helpTree() above returns a named local, which needs the move that deleting the copy
+    // suppressed. This is the case that found it.
+    auto parser = helpTree();
+    BOOST_CHECK_EQUAL(parser.rootCommand().name(), "prog");
+    BOOST_CHECK_EQUAL(parser.prologue(), "A prologue line");
+
+    Parser moved = std::move(parser);
+    BOOST_CHECK_EQUAL(moved.rootCommand().name(), "prog");
+    BOOST_CHECK(moved.parse(argv({"copy", "a", "b"})).isValid());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

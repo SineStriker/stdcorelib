@@ -332,7 +332,7 @@ namespace stdc::cli {
         /// does. Empty tokens take the usual spelling for the role.
         inline Option(Role role, std::vector<std::string> tokens = {}, std::string desc = {})
             : _tokens(tokens.empty() ? defaultTokens(role) : std::move(tokens)),
-              _desc(std::move(desc)), _role(role) {
+              _desc(desc.empty() ? defaultDescription(role) : std::move(desc)), _role(role) {
         }
 
         /// An argument of its own. An option's argument carries no description, having the
@@ -399,6 +399,23 @@ namespace stdc::cli {
         }
         inline int maxOccurrence() const {
             return _max_occurrence;
+        }
+
+        /// What a role says about itself in the help text when nothing else was given. Without
+        /// these the three options every program has are the three with no description.
+        static inline std::string defaultDescription(Role role) {
+            switch (role) {
+                case Help:
+                    return "Show this help and exit";
+                case Version:
+                    return "Show the version and exit";
+                case Verbose:
+                    return "Print more information";
+                case Debug:
+                    return "Print debugging information";
+                default:
+                    return {};
+            }
         }
 
         /// The spellings a role answers to when none were given.
@@ -714,12 +731,35 @@ namespace stdc::cli {
             return option(token).value<T>();
         }
 
+        /// The help text for the command that was reached, prologue and epilogue included.
+        std::string helpText() const;
+        /// Writes helpText() to stdout.
+        void showHelp() const;
+        /// Writes what went wrong to stderr, with a line saying how to ask for help. Does
+        /// nothing when the parse succeeded.
+        void showError() const;
+
     private:
         friend class Parser;
         std::shared_ptr<detail::parse_data> _impl;
     };
 
     /// Turns arguments into a ParseResult against a command tree.
+    ///
+    /// \note Written to be spelled the way syscmdline is spelled, and it parses the same lines
+    ///       the same way but for three places, each of them a case syscmdline accepts and this
+    ///       refuses. They were measured against it rather than read out of it.
+    ///
+    ///       \li A subcommand is still found after an option that the root declared, so
+    ///           \c prog \c -V \c copy \c x reaches \c copy. syscmdline stops looking at the
+    ///           first option, which leaves a global option unusable in the place every program
+    ///           with one puts it. An option belonging to the subcommand rather than the root is
+    ///           still unknown in front of it, which is the case that ought to be refused.
+    ///       \li Positional tokens a command cannot take are TooManyArguments. syscmdline drops
+    ///           them without a word, so a mistyped subcommand is a silent success.
+    ///       \li An option that needs a value will not take a token that is a declared option of
+    ///           the same command, and says so instead. Anything else starting with a dash, a
+    ///           negative number or a name nobody declared, is a value as it is there.
     class STDC_EXPORT Parser {
     public:
         /// What the tokenizer will accept beyond the usual.
@@ -739,12 +779,35 @@ namespace stdc::cli {
             EnableResponseFile = 0x20,
         };
 
+        /// What the help text says beyond the necessary. The layout itself is fixed: prologue,
+        /// description, usage, arguments, options, commands, epilogue. syscmdline lets the order
+        /// be built up item by item, and the one program doing so uses it to restate the default
+        /// order and add an epilogue.
+        enum DisplayOption {
+            Normal = 0,
+            /// Say what an argument falls back to when it is not given.
+            ShowArgumentDefaultValue = 0x1,
+            /// List the words an argument accepts, where it accepts only a few.
+            ShowArgumentExpectedValues = 0x2,
+            /// Mark the options that have to be given.
+            ShowOptionIsRequired = 0x4,
+            /// Line the descriptions of every group up with each other rather than group by
+            /// group, so that a catalogue reads as one table.
+            AlignAllCatalogues = 0x8,
+        };
+
         Parser();
         explicit Parser(Command root);
         ~Parser();
 
         Parser(const Parser &other) = delete;
         Parser &operator=(const Parser &other) = delete;
+
+        // Movable, so that a parser can be built and returned by a function of its own, which is
+        // how a program with more than three commands keeps main readable. Declaring the copy
+        // deleted is what suppressed these.
+        Parser(Parser &&other) noexcept;
+        Parser &operator=(Parser &&other) noexcept;
 
         void setRootCommand(Command root);
         const Command &rootCommand() const;
@@ -754,6 +817,10 @@ namespace stdc::cli {
         const std::string &prologue() const;
         void setEpilogue(std::string text);
         const std::string &epilogue() const;
+
+        /// A bitwise or of DisplayOption values.
+        void setDisplayOptions(int options);
+        int displayOptions() const;
 
         ParseResult parse(const std::vector<std::string> &args, int parseOptions = Standard) const;
         /// Parses and runs the handler that was reached, which is what a \c main wants.

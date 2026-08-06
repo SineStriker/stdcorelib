@@ -3,6 +3,7 @@
 #include "commandline.h"
 
 #include <cerrno>
+#include <cstdio>
 #include <charconv>
 #include <cstdlib>
 #include <cstring>
@@ -169,6 +170,12 @@ namespace stdc::cli {
         std::vector<OptionData> options;
         std::unordered_map<std::string, size_t> by_token;
 
+        /// Copied from the parser, so that a result can print its own help without being handed
+        /// the parser that made it.
+        std::string prologue;
+        std::string epilogue;
+        int display_options = Parser::Normal;
+
         ParseResult::Error error = ParseResult::NoError;
         std::string error_text;
 
@@ -177,6 +184,15 @@ namespace stdc::cli {
             return it == by_token.end() ? nullptr : &options[it->second];
         }
     };
+
+    namespace {
+
+        /// Defined further down, beside the rest of the layout. Named here because the result's
+        /// accessors come first and one of them prints.
+        std::string helpFor(const Command &command, const std::vector<std::string> &path,
+                            const std::string &prologue, const std::string &epilogue, int flags);
+
+    }
 
     // ---------------------------------------------------------------------------------------
     // OptionResult
@@ -295,6 +311,239 @@ namespace stdc::cli {
             res.emplace_back(item);
         }
         return res;
+    }
+
+    std::string ParseResult::helpText() const {
+        if (!_impl->target) {
+            return {};
+        }
+        return helpFor(*_impl->target, _impl->path, _impl->prologue, _impl->epilogue,
+                       _impl->display_options);
+    }
+
+    void ParseResult::showHelp() const {
+        auto text = helpText();
+        std::fwrite(text.data(), 1, text.size(), stdout);
+        std::fflush(stdout);
+    }
+
+    void ParseResult::showError() const {
+        if (isValid()) {
+            return;
+        }
+        std::string text = _impl->error_text + "\n";
+        if (_impl->target) {
+            std::string name;
+            for (size_t i = 0; i < _impl->path.size(); ++i) {
+                name += (i ? " " : "") + _impl->path[i];
+            }
+            text += "Try \"" + name + " --help\" for more information.\n";
+        }
+        std::fwrite(text.data(), 1, text.size(), stderr);
+        std::fflush(stderr);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Help
+    // ---------------------------------------------------------------------------------------
+
+    namespace {
+
+        /// One line of a list: what it is called on the left, what it does on the right.
+        struct Entry {
+            std::string left;
+            std::string right;
+        };
+
+        /// A heading and the lines under it. A list with nothing to group has one group whose
+        /// name is the usual heading.
+        struct Section {
+            std::string title;
+            std::vector<Entry> entries;
+        };
+
+        constexpr int indent = 2;
+        constexpr int gap = 4;
+
+        /// <name>, or [name] where it may be left out, with an ellipsis where it repeats.
+        std::string displayed(const Argument &argument) {
+            std::string res = "<" + argument.displayName() + ">";
+            if (argument.arity() != Argument::Single) {
+                res += "...";
+            }
+            return argument.isRequired() ? res : "[" + res + "]";
+        }
+
+        /// The option and whatever it takes, as it would be typed.
+        std::string displayed(const Option &option, bool all_spellings) {
+            std::string res;
+            if (all_spellings) {
+                for (size_t i = 0; i < option.tokens().size(); ++i) {
+                    res += (i ? ", " : "") + option.tokens()[i];
+                }
+            } else {
+                res = option.token();
+            }
+            for (const auto &argument : option.arguments()) {
+                res += " " + displayed(argument);
+            }
+            return res;
+        }
+
+        /// Puts \a names into the groups \a catalogue asks for, in the order the catalogue gives
+        /// them, with whatever it does not mention left under \a fallback at the end.
+        template <class T, class Name, class Line>
+        std::vector<Section> grouped(const std::vector<T> &items,
+                                     const std::vector<CommandCatalogue::Group> &groups,
+                                     const std::string &fallback, Name name, Line line) {
+            std::vector<Section> res;
+            std::vector<bool> taken(items.size(), false);
+
+            for (const auto &group : groups) {
+                Section section{group.name, {}};
+                for (const auto &wanted : group.members) {
+                    for (size_t i = 0; i < items.size(); ++i) {
+                        if (!taken[i] && name(items[i]) == wanted) {
+                            section.entries.push_back(line(items[i]));
+                            taken[i] = true;
+                            break;
+                        }
+                    }
+                }
+                if (!section.entries.empty()) {
+                    res.push_back(std::move(section));
+                }
+            }
+
+            Section rest{fallback, {}};
+            for (size_t i = 0; i < items.size(); ++i) {
+                if (!taken[i]) {
+                    rest.entries.push_back(line(items[i]));
+                }
+            }
+            if (!rest.entries.empty()) {
+                res.push_back(std::move(rest));
+            }
+            return res;
+        }
+
+        void writeSections(std::string &out, const std::vector<Section> &sections, size_t width) {
+            for (const auto &section : sections) {
+                out += "\n" + section.title + ":\n";
+                for (const auto &entry : section.entries) {
+                    out += std::string(indent, ' ') + entry.left;
+                    if (!entry.right.empty()) {
+                        out += std::string(width - entry.left.size() + gap, ' ') + entry.right;
+                    }
+                    out += "\n";
+                }
+            }
+        }
+
+        size_t widestOf(const std::vector<Section> &sections) {
+            size_t width = 0;
+            for (const auto &section : sections) {
+                for (const auto &entry : section.entries) {
+                    width = (std::max) (width, entry.left.size());
+                }
+            }
+            return width;
+        }
+
+        std::string helpFor(const Command &command, const std::vector<std::string> &path,
+                            const std::string &prologue, const std::string &epilogue, int flags) {
+            const auto &catalogue = command.catalogue();
+            bool align_all = (flags & Parser::AlignAllCatalogues) != 0;
+
+            // What an argument adds to the right hand column beyond its description. The same
+            // for an argument of a command and an argument of an option, since a default value
+            // is worth as much in either place.
+            auto extras = [flags](const Argument &argument) {
+                std::string res;
+                if ((flags & Parser::ShowArgumentExpectedValues) &&
+                    !argument.expectedValues().empty()) {
+                    std::string words;
+                    for (const auto &item : argument.expectedValues()) {
+                        words += (words.empty() ? "" : ", ") + item;
+                    }
+                    res += " [" + words + "]";
+                }
+                if ((flags & Parser::ShowArgumentDefaultValue) && argument.hasDefaultValue()) {
+                    res += " (default: " + argument.defaultValue() + ")";
+                }
+                return res;
+            };
+            auto argument_line = [extras](const Argument &argument) {
+                return Entry{displayed(argument), argument.description() + extras(argument)};
+            };
+            auto option_line = [flags, extras](const Option &option) {
+                std::string right = option.description();
+                for (const auto &argument : option.arguments()) {
+                    right += extras(argument);
+                }
+                if ((flags & Parser::ShowOptionIsRequired) && option.isRequired()) {
+                    right += " (required)";
+                }
+                return Entry{displayed(option, true), right};
+            };
+            auto command_line = [](const Command &item) {
+                return Entry{item.name(), item.description()};
+            };
+
+            auto arguments = grouped(
+                command.arguments(), catalogue.argumentGroups(), "Arguments",
+                [](const Argument &item) { return item.name(); }, argument_line);
+            auto options = grouped(
+                command.options(), catalogue.optionGroups(), "Options",
+                [](const Option &item) { return item.token(); }, option_line);
+            auto commands = grouped(
+                command.commands(), catalogue.commandGroups(), "Commands",
+                [](const Command &item) { return item.name(); }, command_line);
+
+            std::string out;
+            if (!prologue.empty()) {
+                out += prologue + "\n";
+            }
+            if (!command.description().empty()) {
+                out += (out.empty() ? "" : "\n") + command.description() + "\n";
+            }
+
+            // Usage
+            std::string usage;
+            for (size_t i = 0; i < path.size(); ++i) {
+                usage += (i ? " " : "") + path[i];
+            }
+            if (!command.options().empty()) {
+                usage += " [options]";
+            }
+            for (const auto &argument : command.arguments()) {
+                usage += " " + displayed(argument);
+            }
+            if (!command.commands().empty()) {
+                usage += " [commands]";
+            }
+            out += (out.empty() ? "" : "\n") + std::string("Usage: ") + usage + "\n";
+
+            if (align_all) {
+                size_t width =
+                    (std::max) ({widestOf(arguments), widestOf(options), widestOf(commands)});
+                writeSections(out, arguments, width);
+                writeSections(out, options, width);
+                writeSections(out, commands, width);
+            } else {
+                for (const auto *list : {&arguments, &options, &commands}) {
+                    for (const auto &section : *list) {
+                        writeSections(out, {section}, widestOf({section}));
+                    }
+                }
+            }
+
+            if (!epilogue.empty()) {
+                out += "\n" + epilogue + "\n";
+            }
+            return out;
+        }
+
     }
 
     // ---------------------------------------------------------------------------------------
@@ -841,6 +1090,7 @@ namespace stdc::cli {
         std::shared_ptr<Command> root = std::make_shared<Command>();
         std::string prologue;
         std::string epilogue;
+        int display_options = Parser::Normal;
     };
 
     Parser::Parser() : _impl(std::make_unique<Impl>()) {
@@ -851,6 +1101,10 @@ namespace stdc::cli {
     }
 
     Parser::~Parser() = default;
+
+    Parser::Parser(Parser &&other) noexcept = default;
+
+    Parser &Parser::operator=(Parser &&other) noexcept = default;
 
     void Parser::setRootCommand(Command root) {
         *_impl->root = std::move(root);
@@ -876,10 +1130,21 @@ namespace stdc::cli {
         return _impl->epilogue;
     }
 
+    void Parser::setDisplayOptions(int options) {
+        _impl->display_options = options;
+    }
+
+    int Parser::displayOptions() const {
+        return _impl->display_options;
+    }
+
     ParseResult Parser::parse(const std::vector<std::string> &args, int parseOptions) const {
         ParseResult result;
         result._impl->root = _impl->root;
         result._impl->target = _impl->root.get();
+        result._impl->prologue = _impl->prologue;
+        result._impl->epilogue = _impl->epilogue;
+        result._impl->display_options = _impl->display_options;
         ParserCore(result._impl.get(), parseOptions).run(args);
         return result;
     }
