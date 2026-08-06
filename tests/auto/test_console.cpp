@@ -308,8 +308,8 @@ BOOST_AUTO_TEST_CASE(test_forced_vt_emits_escapes) {
 // The escape builder itself, exhaustively. This is the part that cannot be reached through a
 // FILE at all without a terminal.
 BOOST_AUTO_TEST_CASE(test_sgr_sequence) {
-    using detail::attributes;
-    using detail::sgr_sequence;
+    using console::detail::attributes;
+    using console::detail::sgr_sequence;
 
     const attributes none;
 
@@ -366,8 +366,8 @@ BOOST_AUTO_TEST_CASE(test_sgr_sequence) {
 }
 
 BOOST_AUTO_TEST_CASE(test_sgr_reset_sequence) {
-    using detail::attributes;
-    using detail::sgr_reset_sequence;
+    using console::detail::attributes;
+    using console::detail::sgr_reset_sequence;
 
     // already at the defaults
     BOOST_CHECK_EQUAL(sgr_reset_sequence(attributes{}), "");
@@ -384,7 +384,7 @@ BOOST_AUTO_TEST_CASE(test_sgr_reset_sequence) {
 }
 
 BOOST_AUTO_TEST_CASE(test_attributes_compare) {
-    using detail::attributes;
+    using console::detail::attributes;
 
     BOOST_CHECK(attributes{} == attributes({nostyle, nocolor, nocolor}));
     BOOST_CHECK(attributes({bold, red, blue}) == attributes({bold, red, blue}));

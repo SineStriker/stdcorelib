@@ -1,0 +1,168 @@
+name: CI
+
+# Work happens on dev and lands on main, so main is the only branch worth spending runners on.
+# workflow_dispatch stays because it is manual, which is how a run is repeated without a push.
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # The library is built shared here rather than static, because that is the arrangement the
+  # cross module tests are about: a plugin and a host that share one copy of stdcorelib. A static
+  # build gives each of them a copy and those tests check the other branch.
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux gcc
+            os: ubuntu-latest
+            cxx: g++
+          - name: linux clang
+            os: ubuntu-latest
+            cxx: clang++
+          - name: macos clang
+            os: macos-latest
+            cxx: clang++
+          - name: windows msvc
+            os: windows-latest
+            toolset: v143
+          - name: windows clang-cl
+            os: windows-latest
+            toolset: ClangCL
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Boost.Test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libboost-test-dev ninja-build
+
+      - name: Install Boost.Test (macOS)
+        if: runner.os == 'macOS'
+        run: brew install boost ninja
+
+      # vcpkg is already on the Windows image. Building boost-test from source is the slow step
+      # here, which is what the cache is for.
+      - name: Cache vcpkg
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          # Where the image puts vcpkg. Spelled out rather than taken from
+          # VCPKG_INSTALLATION_ROOT, which is a runner variable and not one a with: block can
+          # be relied on to see.
+          path: C:\vcpkg\installed
+          key: vcpkg-boost-test-x64-windows-v1
+
+      - name: Install Boost.Test (Windows)
+        if: runner.os == 'Windows'
+        run: vcpkg install boost-test:x64-windows
+
+      - name: Configure (Unix)
+        if: runner.os != 'Windows'
+        env:
+          CXX: ${{ matrix.cxx }}
+        run: >
+          cmake -G Ninja -S . -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DSTDC_BUILD_SHARED=ON
+          -DSTDC_BUILD_TESTS=ON
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: >
+          cmake -G "Visual Studio 17 2022" -A x64 -T ${{ matrix.toolset }} -S . -B build
+          -DSTDC_BUILD_SHARED=ON
+          -DSTDC_BUILD_TESTS=ON
+          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: cmake --build build --config Debug
+
+      # Boost missing makes the test CMakeLists warn and return, which leaves the build green with
+      # nothing built. Naming the binary is what turns that into a failure.
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        run: ./build/bin/test_auto
+
+      # The Visual Studio generator is multi config, so the binary lands under a config directory.
+      # The debug postfix the CMakeLists sets reaches the libraries, not this.
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: ./build/bin/Debug/test_auto.exe
+
+  # MinGW builds the library but does not run the tests: Boost.Test for MinGW is its own
+  # undertaking, and what is worth knowing here is that the Windows sources compile and link
+  # against something other than the Microsoft toolchain.
+  build-mingw:
+    name: windows mingw
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+
+      - name: Build shared
+        shell: msys2 {0}
+        run: |
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_SHARED=ON
+          cmake --build build
+
+      - name: Build static
+        shell: msys2 {0}
+        run: |
+          cmake -G Ninja -S . -B build-static -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_STATIC=ON
+          cmake --build build-static
+
+  # The option combinations that have broken before without anybody noticing. Exceptions off
+  # stopped compiling once and was found by hand months later, so it is a build here.
+  options:
+    name: build options
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libboost-test-dev ninja-build
+
+      - name: Exceptions off
+        run: |
+          cmake -G Ninja -S . -B build-noexcept -DCMAKE_BUILD_TYPE=Debug \
+            -DSTDC_ENABLE_EXCEPTIONS=OFF -DSTDC_BUILD_TESTS=OFF
+          cmake --build build-noexcept
+
+      - name: RTTI off
+        env:
+          CXXFLAGS: -fno-rtti
+        run: |
+          cmake -G Ninja -S . -B build-nortti -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_TESTS=OFF
+          cmake --build build-nortti
+
+      # Static is the arrangement where a plugin and its host each get their own copy of the
+      # type table, which the tests have a branch for.
+      - name: Static, with tests
+        run: |
+          cmake -G Ninja -S . -B build-static -DCMAKE_BUILD_TYPE=Debug \
+            -DSTDC_BUILD_STATIC=ON -DSTDC_BUILD_TESTS=ON
+          cmake --build build-static
+          ./build-static/bin/test_auto
+
+      - name: Release
+        run: |
+          cmake -G Ninja -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+            -DSTDC_BUILD_SHARED=ON -DSTDC_BUILD_TESTS=ON
+          cmake --build build-release
+          ./build-release/bin/test_auto
