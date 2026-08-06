@@ -76,6 +76,7 @@ jobs:
       # from the executable that will actually run the install is what keeps those from being
       # different directories.
       - name: Install Ninja and locate vcpkg (Windows)
+        id: vcpkg
         if: runner.os == 'Windows'
         shell: bash
         run: |
@@ -83,24 +84,36 @@ jobs:
           root=$(cygpath -m "$(dirname "$(command -v vcpkg)")")
           echo "vcpkg root: $root"
           echo "VCPKG_ROOT=$root" >> "$GITHUB_ENV"
+          echo "VCPKG_DEFAULT_BINARY_CACHE=$RUNNER_TEMP\\vcpkg-archives" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/vcpkg-archives"
+          # The port versions come from whichever vcpkg the image shipped, so its commit is what
+          # decides whether a cached binary is still the right one.
+          echo "rev=$(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+            >> "$GITHUB_OUTPUT"
 
-      - name: Cache Boost.Test (Windows)
+      # vcpkg's own binary cache, not a copy of installed/. Caching installed/ caches the *state*
+      # that says a package is present, so one incomplete save gets replayed on every later run
+      # and vcpkg answers "already installed" for a tree that is not there, which is a green
+      # install step followed by a find_package that comes up empty. A binary cache only skips
+      # the compile: the install still runs, and still writes the whole tree.
+      - name: Cache vcpkg binaries (Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
-          path: ${{ env.VCPKG_ROOT }}/installed
-          key: vcpkg-boost-test-x64-windows-v3
+          path: ${{ runner.temp }}/vcpkg-archives
+          key: vcpkg-boost-test-x64-windows-${{ steps.vcpkg.outputs.rev }}
+          restore-keys: vcpkg-boost-test-x64-windows-
 
       - name: Install Boost.Test (Windows)
         if: runner.os == 'Windows' && steps.cfg.outputs.tests == 'yes'
         shell: bash
         run: |
           vcpkg install boost-test:x64-windows
-          # Where it landed, so that a find_package that comes up empty is one question rather
-          # than two.
-          echo "--- $VCPKG_ROOT/installed ---"
-          ls "$VCPKG_ROOT/installed" || true
-          ls "$VCPKG_ROOT/installed/x64-windows/share" | head -20 || true
+          # find_package(Boost CONFIG) turns on exactly one file, which the boost-cmake port
+          # brings in as a dependency of boost-test. Saying whether it arrived makes a failure
+          # downstream one question rather than two.
+          config="$VCPKG_ROOT/installed/x64-windows/share/boost/BoostConfig.cmake"
+          ls -l "$config" || { echo "missing: $config"; ls "$VCPKG_ROOT/installed" || true; }
 
       # Ninja everywhere, which needs the MSVC environment on Windows since there is no generator
       # to set it up.
