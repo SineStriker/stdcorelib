@@ -6,9 +6,7 @@
 
 #include "str.h"
 
-namespace stdc {
-
-}
+namespace stdc {}
 
 namespace stdc::windows {
 
@@ -43,47 +41,39 @@ namespace stdc::windows {
         return result;
     }
 
-    // TODO: review
+    namespace {
+
+        // A FILETIME counts hundreds of nanoseconds from 1601. system_clock counts from 1970.
+        // This is the distance between the two, in the unit they are converted through.
+        constexpr uint64_t UnixEpochInFileTime = 116444736000000000ULL;
+
+        using FileTimeDuration = std::chrono::duration<int64_t, std::ratio<1, 10'000'000>>;
+
+    }
+
     std::chrono::system_clock::time_point FileTimeToTimePoint(const FILETIME &ft) {
-        // 合并 64 位值
-        const uint64_t filetime =
-            (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+        const uint64_t ticks = (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
 
-        // 定义时间差常量（1601→1970）
-        constexpr uint64_t win_epoch_offset = 116444736000000000ULL; // 100ns 单位
+        // A timestamp from before 1970 makes this wrap, and reading the result back as signed is
+        // what turns it into the negative duration it should be.
+        const FileTimeDuration since_epoch(static_cast<int64_t>(ticks - UnixEpochInFileTime));
 
-        // 转换为 C++ chrono 的 duration 类型
-        using filetime_duration =
-            std::chrono::duration<int64_t, std::ratio<1, 10'000'000> // 精确表示 100ns
-                                  >;
-
-        // 计算从 1970 开始的 duration
-        const auto since_epoch = filetime_duration(filetime - win_epoch_offset);
-
-        // 转换为 system_clock 的时间点
         return std::chrono::system_clock::time_point(
             std::chrono::duration_cast<std::chrono::system_clock::duration>(since_epoch));
     }
 
-    // TODO: review
     FILETIME TimePointToFileTime(const std::chrono::system_clock::time_point &tp) {
-        // 计算与 FILETIME epoch 的时差
-        constexpr auto epoch_diff = std::chrono::duration_cast<std::chrono::system_clock::duration>(
-            std::chrono::duration<uint64_t, std::ratio<1, 10'000'000>>(11644473600ULL *
-                                                                       10'000'000));
+        const auto since_epoch =
+            std::chrono::duration_cast<FileTimeDuration>(tp.time_since_epoch());
 
-        const auto since_epoch = tp.time_since_epoch() + epoch_diff;
-        const auto ft_duration =
-            std::chrono::duration_cast<std::chrono::duration<uint64_t, std::ratio<1, 10'000'000>>>(
-                since_epoch);
-
-        // 转换为 FILETIME 结构
-        ULARGE_INTEGER ull;
-        ull.QuadPart = ft_duration.count();
+        // The wrap above, undone. A negative count wraps on the way into the unsigned value and
+        // wraps back when the offset is added.
+        ULARGE_INTEGER ticks;
+        ticks.QuadPart = static_cast<uint64_t>(since_epoch.count()) + UnixEpochInFileTime;
 
         FILETIME ft;
-        ft.dwLowDateTime = ull.LowPart;
-        ft.dwHighDateTime = ull.HighPart;
+        ft.dwLowDateTime = ticks.LowPart;
+        ft.dwHighDateTime = ticks.HighPart;
         return ft;
     }
 

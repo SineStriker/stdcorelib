@@ -6,11 +6,7 @@
 #include <stdcorelib/adt/any.h>
 #include <stdcorelib/support/dynamicregistry.h>
 
-#ifdef _WIN32
-#  define TEST_PLUGIN_API extern "C" __declspec(dllexport)
-#else
-#  define TEST_PLUGIN_API extern "C" __attribute__((visibility("default")))
-#endif
+#define TEST_PLUGIN_API extern "C" STDC_DECL_EXPORT
 
 /// Spelled out of this one header on both sides of the boundary, which is the case that decides
 /// whether identity survives.

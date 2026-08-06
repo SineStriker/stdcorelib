@@ -323,12 +323,12 @@ namespace stdc {
         }
 
         std::string vasprintf(const char *fmt, va_list args) {
-            static constexpr int STACK_BUFFER_SIZE = 4096; // 栈上缓冲区大小
+            static constexpr int STACK_BUFFER_SIZE = 4096;
 
+            // A va_list can only be walked once, and the long path below has to walk it again.
             va_list args_copy;
-            va_copy(args_copy, args); // 复制 va_list
+            va_copy(args_copy, args);
 
-            // 第一次尝试：使用栈上缓冲区
             char stack_buffer[STACK_BUFFER_SIZE];
             int len = std::vsnprintf(stack_buffer, STACK_BUFFER_SIZE, fmt, args);
             if (len < 0) {
@@ -337,15 +337,12 @@ namespace stdc {
             }
 
             if (len < STACK_BUFFER_SIZE) {
-                // 如果栈上缓冲区足够，直接输出
                 return std::string(stack_buffer, len);
             }
 
-            // 如果栈上缓冲区不足，则在堆上分配足够的空间
+            // vsnprintf reported how much room it wanted, so the second pass is the last one.
             std::string heap_buffer;
-            heap_buffer.resize(len + 1); // +1 用于 '\0'
-
-            // 使用副本重新格式化
+            heap_buffer.resize(len + 1); // the terminator vsnprintf insists on writing
             len = std::vsnprintf(heap_buffer.data(), len + 1, fmt, args_copy);
             heap_buffer.resize(len);
 

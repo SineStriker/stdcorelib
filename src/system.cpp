@@ -286,7 +286,7 @@ namespace stdc {
 #ifdef _WIN32
         PROCESS_MEMORY_COUNTERS pmc;
         if (::GetProcessMemoryInfo(::GetCurrentProcess(), &pmc, sizeof(pmc))) {
-            return pmc.WorkingSetSize; // 以字节为单位
+            return pmc.WorkingSetSize; // already in bytes
         }
         return 0;
 #elif defined __APPLE__

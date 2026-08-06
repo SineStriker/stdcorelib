@@ -294,10 +294,10 @@ namespace stdc {
         auto fileName = path.string();
         size_t soPos;
         if (fileName.size() >= 3 && (soPos = fileName.rfind(".so")) != std::string::npos) {
-            // 检查 .so 后是否有版本号部分
+            // Whatever follows the .so, which is either nothing or a version.
             std::string_view suffix = std::string_view(fileName).substr(soPos + 3);
             if (suffix.empty()) {
-                return true; // 仅有 .so，无版本号
+                return true; // plain .so
             }
             return suffix.front() == '.' && suffix.size() > 1 &&
                    checkVersionSuffix(suffix.substr(1));
