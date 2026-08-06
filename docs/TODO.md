@@ -5,13 +5,6 @@ Usable, and used, but the version number is honest: interfaces still move.
 ## Known gaps
 
 - The registry code assumes a little-endian host
-- Nine `std::min` and `std::max` calls in `str.h` and `adt/vlarray.h` are written without the
-  parentheses that keep a macro from claiming them, so a caller who includes `<windows.h>`
-  without `NOMINMAX` first cannot compile those headers
-- A subcommand's help text lists neither the global options it inherited nor any required one
-  among them, because the renderer reads only the command's own. The parser still demands them,
-  so the help text and the behavior disagree.
-- The usage line is not wrapped, only the descriptions below it
 - `cli::OptionResult` holds a raw pointer into the result it came from, with nothing tying their
   lifetimes together, so `parser.parse(args).option("-f")` dangles at the semicolon
 - `cli::ParseResult::value<T>()` answers with a value initialized `T` when the conversion fails.

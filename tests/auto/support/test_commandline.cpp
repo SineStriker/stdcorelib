@@ -1131,10 +1131,11 @@ BOOST_AUTO_TEST_CASE(test_usage_names_the_path_it_took) {
     BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage: prog [options] [commands]"));
     BOOST_CHECK(has(parser.parse(argv({"copy", "a", "b"})).helpText(),
                     "Usage: prog copy [options] <src>... <dest>"));
-    // An optional argument is bracketed, and one that repeats carries the ellipsis. Here the
-    // only option is a required one, so it is spelled out and there is no hint left to print.
+    // An optional argument is bracketed, and one that repeats carries the ellipsis. The only
+    // option this command declares is a required one, so it is spelled out, and the hint stands
+    // for the root's global that it inherited.
     BOOST_CHECK(has(parser.parse(argv({"configure"})).helpText(),
-                    "Usage: prog configure -p <name> [<mode>]"));
+                    "Usage: prog configure -p <name> [options] [<mode>]"));
 }
 
 // An option that has to be given belongs on the usage line. Left inside "[options]" it is
@@ -1849,6 +1850,162 @@ BOOST_AUTO_TEST_CASE(test_wrapping_counts_columns_not_bytes) {
         // And never split through the middle of a character, which would leave a broken byte
         // sequence in the output.
         BOOST_CHECK_EQUAL((line.size() - line.find_first_not_of(' ')) % 3, 0u);
+    }
+}
+
+// A subcommand is handed the globals of every command above it, and it will be refused for
+// leaving out a required one, so its help text has to say what they are. It used to list only
+// what the command declared itself, which left "option \"-C\" is required" naming something the
+// reader had just been told to look for in a help text that never mentioned it.
+BOOST_AUTO_TEST_CASE(test_a_subcommand_lists_what_it_inherited) {
+    const auto &tree = [] {
+        Parser parser(Command("prog")
+                          .addOptions({
+                              Option({"-v", "--verbose"}, "Say more").global(),
+                              Option({"-C"}, "Work here").arg("dir").global().required(),
+                              Option({"--local"}, "Root only"),
+                          })
+                          .addCommand(Command("build", "Build it")
+                                          .addArgument(Argument("target"))
+                                          .addOption(Option({"-j"}, "Jobs").arg("n"))));
+        parser.setTextWidth(80);
+        return parser;
+    };
+
+    auto parser = tree();
+    auto text = parser.parse(argv({"build", "x"})).helpText();
+
+    // Under a heading of their own, since they belong to the program rather than here.
+    BOOST_CHECK(has(text, "Global options:"));
+    BOOST_CHECK(at(text, "Options:") < at(text, "Global options:"));
+    BOOST_CHECK(has(text, "-v, --verbose"));
+    BOOST_CHECK(has(text, "-C <dir>"));
+
+    // The command's own stay where they were.
+    BOOST_CHECK(has(text, "-j <n>"));
+
+    // An option the root kept to itself is not in scope here and is not listed.
+    BOOST_CHECK(!has(text, "--local"));
+
+    // The required one is on the usage line, the same as a required option of its own.
+    BOOST_CHECK(has(text, "Usage: prog build -C <dir> [options] <target>"));
+
+    // What the help says and what the parser does have to be the same thing.
+    auto refused = parser.parse(argv({"build", "x"}));
+    BOOST_REQUIRE(!refused.isValid());
+    BOOST_CHECK(has(refused.errorText(), "-C"));
+    BOOST_CHECK(ok(parser, {"-C", "somewhere", "build", "x"}).isOptionSet("-C"));
+
+    // The root has nothing above it, so it has no such section.
+    BOOST_CHECK(!has(parser.parse(argv({})).helpText(), "Global options:"));
+}
+
+// Inheritance is from every command above, not only the one directly above.
+BOOST_AUTO_TEST_CASE(test_globals_reach_a_grandchild) {
+    Parser parser(Command("prog")
+                      .addOption(Option({"--root-wide"}, "From the top").global())
+                      .addCommand(Command("remote", "Remotes")
+                                      .addOption(Option({"--mid"}, "From the middle").global())
+                                      .addOption(Option({"--mid-local"}, "Not inherited"))
+                                      .addCommand(Command("add", "Add one")
+                                                      .addArgument(Argument("name")))));
+    parser.setTextWidth(80);
+
+    auto text = parser.parse(argv({"remote", "add", "x"})).helpText();
+    BOOST_CHECK(has(text, "Global options:"));
+    BOOST_CHECK(has(text, "--root-wide"));
+    BOOST_CHECK(has(text, "--mid"));
+    BOOST_CHECK(!has(text, "--mid-local"));
+
+    // And the middle command sees the root's but not its own child's.
+    auto middle = parser.parse(argv({"remote"})).helpText();
+    BOOST_CHECK(has(middle, "--root-wide"));
+    BOOST_CHECK(has(middle, "--mid-local"));
+}
+
+// The usage line is wrapped like everything else, with what follows lined up under the command
+// name rather than back at the margin.
+BOOST_AUTO_TEST_CASE(test_the_usage_line_is_wrapped) {
+    const auto &usageLines = [](int width) {
+        Parser parser(Command("program")
+                          .addOption(Option({"--output"}, "Out").arg("file").required())
+                          .addOption(Option({"--config"}, "Config").arg("path").required())
+                          .addOption(Option({"--target"}, "Target").arg("triple").required())
+                          .addOption(Option({"-v"}, "Loud"))
+                          .addArguments({Argument("source"), Argument("destination")}));
+        parser.setTextWidth(width);
+        auto text = parser.parse({"program"}).helpText();
+
+        std::vector<std::string> res;
+        for (size_t start = text.find("Usage:"); start != std::string::npos;) {
+            auto end = text.find('\n', start);
+            auto line = text.substr(start, end == std::string::npos ? end : end - start);
+            res.push_back(line);
+            if (end == std::string::npos) {
+                break;
+            }
+            start = end + 1;
+            // A continuation is indented under the command name and holds no colon heading.
+            if (text.compare(start, 7, "       ") != 0) {
+                break;
+            }
+        }
+        return res;
+    };
+
+    // Wide enough for all of it.
+    {
+        auto lines = usageLines(200);
+        BOOST_REQUIRE_EQUAL(lines.size(), 1u);
+        BOOST_CHECK(has(lines[0], "--output <file>"));
+        BOOST_CHECK(has(lines[0], "<destination>"));
+    }
+
+    // Not wide enough, so it breaks and nothing runs past the edge.
+    {
+        auto lines = usageLines(50);
+        BOOST_REQUIRE_GT(lines.size(), 1u);
+        for (const auto &line : lines) {
+            BOOST_CHECK_MESSAGE(stdc::console::display_width(line) <= 50,
+                                "usage line runs past the width: [" + line + "]");
+        }
+
+        // Lined up under the program name, which is where "Usage: " ends.
+        for (size_t i = 1; i < lines.size(); ++i) {
+            BOOST_CHECK_EQUAL(lines[i].find_first_not_of(' '), 7u);
+        }
+
+    }
+
+    // An option and the value it takes are one piece, so a break never falls between them.
+    // Checked across a range of widths, since any single width only puts the break in one place
+    // and the pieces would sit together by luck at most of them.
+    for (int width = 28; width <= 70; width++) {
+        for (const auto &line : usageLines(width)) {
+            for (const auto &pair : {std::make_pair("--output", "--output <file>"),
+                                     std::make_pair("--config", "--config <path>"),
+                                     std::make_pair("--target", "--target <triple>")}) {
+                if (line.find(pair.first) == std::string::npos) {
+                    continue;
+                }
+                BOOST_CHECK_MESSAGE(has(line, pair.second),
+                                    std::string(pair.first) + " was split at width " +
+                                        std::to_string(width) + ": [" + line + "]");
+            }
+        }
+    }
+
+    // Every piece survives however it is broken up.
+    {
+        std::string joined;
+        for (const auto &line : usageLines(40)) {
+            auto first = line.find_first_not_of(' ');
+            joined += (joined.empty() ? "" : " ") + line.substr(first);
+        }
+        for (const auto *piece : {"--output <file>", "--config <path>", "--target <triple>",
+                                  "[options]", "<source>", "<destination>"}) {
+            BOOST_CHECK_MESSAGE(has(joined, piece), std::string("lost ") + piece);
+        }
     }
 }
 

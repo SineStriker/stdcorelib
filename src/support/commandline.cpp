@@ -207,6 +207,7 @@ namespace stdc::cli {
         /// Defined further down, beside the rest of the layout. Named here because the result's
         /// accessors come first and one of them prints.
         std::string helpFor(const Command &command, const std::vector<std::string> &path,
+                            const std::vector<const Option *> &inherited,
                             const std::string &prologue, const std::string &epilogue, int flags,
                             int text_width);
 
@@ -385,7 +386,24 @@ namespace stdc::cli {
         // Zero means ask, and the answer is whatever stdout is: a terminal's width, or 80
         // columns for a pipe or a file, so help captured into one reads the same everywhere.
         int width = _impl->text_width > 0 ? _impl->text_width : console::width(stdout);
-        return helpFor(*_impl->target, _impl->path, _impl->prologue, _impl->epilogue,
+
+        // The globals of every command above this one, gathered by walking down the path the
+        // way the parser did. What it gathered on the way is what it demands here, so this is
+        // where the help text has to agree with it.
+        std::vector<const Option *> inherited;
+        if (_impl->root && _impl->path.size() > 1) {
+            const Command *at = _impl->root.get();
+            for (size_t i = 1; i < _impl->path.size() && at; ++i) {
+                for (const auto &option : at->options()) {
+                    if (option.isGlobal()) {
+                        inherited.push_back(&option);
+                    }
+                }
+                at = at->findCommand(_impl->path[i]);
+            }
+        }
+
+        return helpFor(*_impl->target, _impl->path, inherited, _impl->prologue, _impl->epilogue,
                        _impl->display_options, width);
     }
 
@@ -609,6 +627,7 @@ namespace stdc::cli {
         }
 
         std::string helpFor(const Command &command, const std::vector<std::string> &path,
+                            const std::vector<const Option *> &inherited,
                             const std::string &prologue, const std::string &epilogue, int flags,
                             int text_width) {
             const auto &catalogue = command.catalogue();
@@ -668,6 +687,25 @@ namespace stdc::cli {
                 command.commands(), catalogue.commandGroups(), "Commands",
                 [](const Command &item) { return item.name(); }, command_line);
 
+            // What the commands above declared global is in scope here and is demanded here, so
+            // it is listed here. Under a heading of its own, since it belongs to the program
+            // rather than to this command, and since the catalogue's groups were written for
+            // this command's own options and have nothing to say about these.
+            std::vector<Option> globals;
+            for (const auto *option : inherited) {
+                if (!option->tokens().empty()) {
+                    globals.push_back(*option);
+                }
+            }
+            std::vector<Section> global_options;
+            if (!globals.empty()) {
+                Section section{"Global options", {}};
+                for (const auto &option : globals) {
+                    section.entries.push_back(option_line(option));
+                }
+                global_options.push_back(std::move(section));
+            }
+
             std::string out;
             if (!prologue.empty()) {
                 out += prologue + "\n";
@@ -676,40 +714,69 @@ namespace stdc::cli {
                 out += (out.empty() ? "" : "\n") + command.description() + "\n";
             }
 
-            // Usage
-            std::string usage;
+            // Usage, as pieces that each stay whole. An option and the value it takes are one
+            // piece, since breaking between them would read as two separate things.
+            std::string head;
             for (size_t i = 0; i < path.size(); ++i) {
-                usage += (i ? " " : "") + path[i];
+                head += (i ? " " : "") + path[i];
             }
+
             // An option that has to be given is not optional information, so it is spelled out
             // where a reader looks first rather than left inside "[options]". The hint stays for
             // whatever is left, and goes away when nothing is.
-            size_t required_count = 0;
-            for (const auto &option : named) {
-                if (option.isRequired()) {
-                    usage += " " + displayed(option, false);
-                    required_count++;
+            std::vector<std::string> parts;
+            size_t optional_count = 0;
+            for (const auto *list : {&named, &globals}) {
+                for (const auto &option : *list) {
+                    if (option.isRequired()) {
+                        parts.push_back(displayed(option, false));
+                    } else {
+                        optional_count++;
+                    }
                 }
             }
-            if (named.size() > required_count) {
-                usage += " [options]";
+            if (optional_count > 0) {
+                parts.push_back("[options]");
             }
             for (const auto &argument : command.arguments()) {
-                usage += " " + displayed(argument);
+                parts.push_back(displayed(argument));
             }
             if (!command.commands().empty()) {
-                usage += " [commands]";
+                parts.push_back("[commands]");
             }
-            out += (out.empty() ? "" : "\n") + std::string("Usage: ") + usage + "\n";
+
+            // Wrapped like everything else, with what follows lined up under the command name
+            // rather than back at the margin, so a long line still reads as one thing.
+            const std::string lead = "Usage: ";
+            std::string line = lead + head;
+            int line_width = console::display_width(line);
+            std::string usage;
+            for (const auto &part : parts) {
+                int part_width = console::display_width(part);
+                bool at_margin = line_width == int(lead.size());
+                if (!at_margin && line_width + 1 + part_width > text_width) {
+                    usage += line + "\n";
+                    line = std::string(lead.size(), ' ');
+                    line_width = int(lead.size());
+                    at_margin = true;
+                }
+                // At the margin the piece goes straight down under the command name. Anywhere
+                // else it needs the space that separates it from what came before.
+                line += at_margin ? part : " " + part;
+                line_width += at_margin ? part_width : 1 + part_width;
+            }
+            usage += line;
+            out += (out.empty() ? "" : "\n") + usage + "\n";
 
             if (align_all) {
-                size_t width =
-                    (std::max) ({widestOf(arguments), widestOf(options), widestOf(commands)});
+                size_t width = (std::max) ({widestOf(arguments), widestOf(options),
+                                            widestOf(global_options), widestOf(commands)});
                 writeSections(out, arguments, width, text_width);
                 writeSections(out, options, width, text_width);
+                writeSections(out, global_options, width, text_width);
                 writeSections(out, commands, width, text_width);
             } else {
-                for (const auto *list : {&arguments, &options, &commands}) {
+                for (const auto *list : {&arguments, &options, &global_options, &commands}) {
                     for (const auto &section : *list) {
                         writeSections(out, {section}, widestOf({section}), text_width);
                     }
