@@ -543,6 +543,28 @@ namespace stdc::cli {
             _version = std::move(version);
             return *this;
         }
+
+        /// The version option, with the level that lets it be answered on a command line that is
+        /// otherwise missing everything it needs.
+        inline Command &addVersionOption(std::string version, std::vector<std::string> tokens = {},
+                                         std::string desc = {}) {
+            _version = std::move(version);
+            return addOption(Option(Option::Version, std::move(tokens), std::move(desc))
+                                 .prior(Option::IgnoreMissingSymbols));
+        }
+
+        /// The help option, likewise.
+        ///
+        /// \param show_if_no_arguments Answer a command line with nothing on it at all, which is
+        ///        what makes a bare program name print its help instead of complaining.
+        /// \param global Keep it in scope for the subcommands as well.
+        inline Command &addHelpOption(bool show_if_no_arguments = false, bool global = false,
+                                      std::vector<std::string> tokens = {}, std::string desc = {}) {
+            return addOption(Option(Option::Help, std::move(tokens), std::move(desc))
+                                 .prior(show_if_no_arguments ? Option::AutoSetWhenNoSymbols
+                                                             : Option::IgnoreMissingSymbols)
+                                 .global(global));
+        }
         inline Command &setDescription(std::string desc) {
             _desc = std::move(desc);
             return *this;

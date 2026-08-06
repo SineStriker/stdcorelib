@@ -962,6 +962,15 @@ namespace stdc::cli {
             }
 
             if (taken < positional.size()) {
+                // Nothing placed at all, on a command that has subcommands, means the token sat
+                // where a subcommand goes. Saying so beats counting arguments at somebody who
+                // mistyped a name.
+                if (taken == 0 && !r->target->commands().empty()) {
+                    fail(ParseResult::UnknownCommand, "\"" + positional[0] +
+                                                          "\" is not a command of \"" +
+                                                          r->target->name() + "\"");
+                    return;
+                }
                 fail(ParseResult::TooManyArguments, "\"" + positional[taken] +
                                                         "\" is one argument more than \"" +
                                                         r->target->name() + "\" takes");

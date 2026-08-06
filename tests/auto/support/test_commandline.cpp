@@ -333,7 +333,7 @@ BOOST_AUTO_TEST_CASE(test_command_collects_what_it_is_given) {
 }
 
 BOOST_AUTO_TEST_CASE(test_command_addition_appends_rather_than_replaces) {
-    // Called twice, which is how corecmd adds the common options after the specific ones.
+    // Called twice, which is how a program adds its common options after the specific ones.
     Command command("x");
     command.addOption(Option("-a")).addOptions({Option("-b"), Option("-c")});
     BOOST_CHECK_EQUAL(command.options().size(), 3u);
@@ -392,7 +392,7 @@ BOOST_AUTO_TEST_CASE(test_catalogue_groups_by_heading) {
 
 BOOST_AUTO_TEST_CASE(test_a_command_tree_copies_whole) {
     // These are values, so handing one around is a copy and not a share. Building a command in a
-    // lambda and returning it, which is how corecmd writes every one of them, has to work.
+    // lambda and returning it, which is how a tree of any size gets built, has to work.
     auto make = [] {
         return Command("copy", "Copy files").addOption(Option("-f")).addArgument(Argument("src"));
     };
@@ -614,8 +614,16 @@ BOOST_AUTO_TEST_CASE(test_subcommands) {
     BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "copy"}));
     BOOST_CHECK_EQUAL(result.value(0), "a");
 
-    // A name that is no subcommand is a positional of the root, which has none.
-    bad(parser, {"nonsense"}, ParseResult::TooManyArguments);
+    // A name that is no subcommand, on a command that takes no arguments either, is named as
+    // the command it is not rather than counted as an argument too many.
+    auto failure = bad(parser, {"nonsense"}, ParseResult::UnknownCommand);
+    BOOST_CHECK(failure.errorText().find("nonsense") != std::string::npos);
+
+    // Where the command does take arguments, a name that is not a subcommand is one of those,
+    // and only the surplus is counted.
+    Parser mixed(Command("prog").addArgument(Argument("a")).addCommand(Command("copy")));
+    BOOST_CHECK_EQUAL(ok(mixed, {"nonsense"}).value(0), "nonsense");
+    bad(mixed, {"one", "two"}, ParseResult::TooManyArguments);
 }
 
 BOOST_AUTO_TEST_CASE(test_nested_subcommands) {
@@ -1201,6 +1209,115 @@ BOOST_AUTO_TEST_CASE(test_a_parser_can_be_built_and_returned) {
     Parser moved = std::move(parser);
     BOOST_CHECK_EQUAL(moved.rootCommand().name(), "prog");
     BOOST_CHECK(moved.parse(argv({"copy", "a", "b"})).isValid());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shapes a whole program asks for
+//
+// Transcribing a real build tool's command tree against this library turned up three things
+// nothing above had declared. They are here as what they are rather than as whose they were:
+// which program wanted them is that program's business, and its own suite is where it belongs.
+// ---------------------------------------------------------------------------------------------
+
+BOOST_AUTO_TEST_CASE(test_an_option_carrying_two_arguments) {
+    // One option, a pair of values, given more than once. Nothing above declares one, and a tool
+    // that maps patterns onto directories is built out of little else.
+    Parser parser(Command("prog")
+                      .addArguments({Argument("src"), Argument("dest")})
+                      .addOptions({Option({"-i", "--include"}, "A pattern and its subdirectory")
+                                       .arg("regex")
+                                       .arg("subdir")
+                                       .multi(),
+                                   Option({"-e", "--exclude"}, "A pattern").arg("regex").multi()}));
+
+    auto result = ok(parser, {"src", "dst", "-i", "a", "x", "-i", "b", "y", "-e", "z"});
+    BOOST_CHECK_EQUAL(result.value(0), "src");
+    BOOST_CHECK_EQUAL(result.value(1), "dst");
+
+    auto include = result.option("-i");
+    BOOST_REQUIRE_EQUAL(include.count(), 2);
+    // Slot by slot within one occurrence, which is the only way a pair means anything.
+    BOOST_CHECK_EQUAL(include.rawValue(0, 0), "a");
+    BOOST_CHECK_EQUAL(include.rawValue(1, 0), "x");
+    BOOST_CHECK_EQUAL(include.rawValue(0, 1), "b");
+    BOOST_CHECK_EQUAL(include.rawValue(1, 1), "y");
+    // Or everything one slot ever took, across every occurrence.
+    BOOST_CHECK(include.rawValues(0) == std::vector<std::string_view>({"a", "b"}));
+    BOOST_CHECK(include.rawValues(1) == std::vector<std::string_view>({"x", "y"}));
+
+    // Both of a pair are required, so half of one is a diagnostic.
+    bad(parser, {"src", "dst", "-i", "a"}, ParseResult::MissingOptionArgument);
+
+    // Unless the option says its own missing arguments are no matter.
+    Parser lenient(Command("prog").addOption(Option({"-c"}, "A pair")
+                                                 .arg("src")
+                                                 .arg("dir")
+                                                 .multi()
+                                                 .prior(Option::IgnoreMissingArguments)));
+    BOOST_CHECK(ok(lenient, {"-c"}).isOptionSet("-c"));
+    BOOST_CHECK_EQUAL(ok(lenient, {"-c", "a", "b"}).option("-c").rawValue(1), "b");
+}
+
+BOOST_AUTO_TEST_CASE(test_the_two_options_every_program_has) {
+    // Written out by hand these need the right prior level to work at all, which is a thing to
+    // know rather than a thing to guess.
+    Parser parser(Command("prog")
+                      .addArgument(Argument("required one"))
+                      .addVersionOption("1.2.3")
+                      .addHelpOption(true, true)
+                      .addCommand(Command("copy").addArgument(Argument("src"))));
+
+    // A bare program name prints help rather than complaining about what is missing.
+    auto bare = ok(parser, {});
+    BOOST_CHECK(bare.isRoleSet(Option::Help));
+
+    // Asked for on a line that is missing everything, it is still answered.
+    BOOST_CHECK(ok(parser, {"--help"}).isRoleSet(Option::Help));
+    BOOST_CHECK(ok(parser, {"--version"}).isRoleSet(Option::Version));
+
+    // Global, so the subcommands have it too.
+    BOOST_CHECK(ok(parser, {"copy", "--help"}).isRoleSet(Option::Help));
+
+    // The version is kept on the command, which is what the option is there to print.
+    BOOST_CHECK_EQUAL(parser.rootCommand().version(), "1.2.3");
+
+    // Spellings and descriptions can still be the caller's.
+    Parser renamed(Command("prog").addHelpOption(false, false, {"-?"}, "How to use this"));
+    BOOST_CHECK(ok(renamed, {"-?"}).isRoleSet(Option::Help));
+    BOOST_CHECK(has(renamed.parse(argv({})).helpText(), "How to use this"));
+}
+
+BOOST_AUTO_TEST_CASE(test_a_tree_of_several_commands_reads_as_one_page) {
+    CommandCatalogue catalogue;
+    catalogue.addCommands("Filesystem Commands", {"copy", "rmdir", "touch"})
+        .addCommands("Buildsystem Commands", {"configure", "incsync", "deploy"});
+
+    Command root("tool", "Utility commands");
+    for (auto [name, desc] : {
+             std::pair{"copy",      "Copy files"          },
+             {"rmdir",     "Remove directories"  },
+             {"touch",     "Update timestamps"   },
+             {"configure", "Generate a header"   },
+             {"incsync",   "Reorganize headers"  },
+             {"deploy",    "Resolve dependencies"}
+    }) {
+        root.addCommand(Command(name, desc).addArgument(Argument("path").multi()));
+    }
+    root.addVersionOption("1.0").addHelpOption(true, true).setCatalogue(catalogue);
+
+    Parser parser(std::move(root));
+    parser.setDisplayOptions(Parser::AlignAllCatalogues);
+    auto text = parser.parse(argv({})).helpText();
+
+    BOOST_CHECK(at(text, "Filesystem Commands:") < at(text, "Buildsystem Commands:"));
+    for (auto name : {"copy", "rmdir", "touch", "configure", "incsync", "deploy"}) {
+        BOOST_CHECK_MESSAGE(has(text, name), name);
+    }
+    // Six commands over two headings still line up as one table.
+    BOOST_CHECK_EQUAL(descriptionColumn(text, "copy"), descriptionColumn(text, "configure"));
+
+    // And the tree still parses, which a help text alone would not say.
+    BOOST_CHECK_EQUAL(ok(parser, {"deploy", "a", "b"}).command()->name(), "deploy");
 }
 
 BOOST_AUTO_TEST_SUITE_END()
