@@ -36,11 +36,20 @@ SORT_MEMBER_DOCS       = NO
 ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = YES
 EXPAND_ONLY_PREDEF     = YES
-PREDEFINED             = STDC_EXPORT= STDC_DECL_EXPORT= STDC_DECL_IMPORT= STDC_EXCEPTIONS=1 _WIN32=1 DOXYGEN=1
+#
+# STDC_ALLOCA is one Doxygen cannot work out for itself: vla.h defines it from _MSC_VER or
+# __GNUC__, neither of which is set here, so everything the #ifdef below it guards went missing
+# from the output with no complaint from anybody.
+PREDEFINED             = STDC_EXPORT= STDC_DECL_EXPORT= STDC_DECL_IMPORT= STDC_EXCEPTIONS=1 STDC_ALLOCA(size)= _WIN32=1 DOXYGEN=1
 
 # Undocumented is a choice here rather than an oversight, so it is not worth hearing about each
 # time. The rest stay on: a \\param naming an argument that is gone is worth a warning.
 WARN_IF_UNDOCUMENTED   = NO
+
+# The pages are still written, and then the run reports failure. What Doxygen complains about is
+# markup that does not say what it was meant to say, which is a defect in the only copy of the
+# documentation anybody reads.
+WARN_AS_ERROR          = FAIL_ON_WARNINGS
 
 GENERATE_TREEVIEW      = YES
 DISABLE_INDEX          = NO

@@ -132,6 +132,29 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure --no-tests=error
 
+  # Doxygen is a check here as much as an output. The comments carry markup, and markup that does
+  # not say what it meant to say has nowhere else to be caught: WARN_AS_ERROR in the Doxyfile is
+  # what makes this step fail rather than quietly produce a wrong page. Its first run found three,
+  # including a \param naming an argument the function never had.
+  #
+  # One platform, because what it reads is the headers, and the Doxyfile predefines the platform
+  # switches itself rather than taking them from whoever is running.
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja and Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build doxygen
+
+      - name: Build
+        run: |
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTDC_BUILD_DOCS=ON
+          cmake --build build --target stdcorelib_docs
+
   # MinGW builds the library but does not run the tests: Boost.Test for MinGW is its own
   # undertaking, and what is worth knowing here is that the Windows sources compile and link
   # against something other than the Microsoft toolchain.
