@@ -59,12 +59,12 @@
 #  define STDCORELIB_NOINLINE __declspec(noinline)
 #  define STDCORELIB_INLINE   __forceinline
 #  define STDCORELIB_USED
-#  define SYSCMDLINE_DEPRECATED __declspec(deprecated)
+#  define STDCORELIB_DEPRECATED __declspec(deprecated)
 #else
 #  define STDCORELIB_NOINLINE   __attribute__((noinline))
 #  define STDCORELIB_INLINE     __attribute__((always_inline))
 #  define STDCORELIB_USED       __attribute__((used))
-#  define SYSCMDLINE_DEPRECATED __attribute__((__deprecated__))
+#  define STDCORELIB_DEPRECATED __attribute__((__deprecated__))
 #endif
 
 #if __has_builtin(__builtin_expect) || defined(__GNUC__)
@@ -91,11 +91,11 @@
 #  define STDCORELIB_EXCEPTIONS 1
 #endif
 
-#ifndef STDC_TSTR
+#ifndef STDCORELIB_TSTR
 #  ifdef _WIN32
-#    define STDC_TSTR(T) L##T
+#    define STDCORELIB_TSTR(T) L##T
 #  else
-#    define STDC_TSTR(T) T
+#    define STDCORELIB_TSTR(T) T
 #  endif
 #endif
 

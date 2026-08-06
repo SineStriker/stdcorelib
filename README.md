@@ -210,7 +210,7 @@ Every operation comes in two forms: one taking an `std::error_code` and `noexcep
 | `flags.h` | Type-safe bit flags over an enum, in the shape of `QFlags` |
 | `scope_guard.h` | Run something on the way out, unless `dismiss()` says otherwise |
 | `support/versionnumber.h` | A four-part version that parses, prints, compares and hashes |
-| `vla.h` | `VLA_ALLOC` and `VLA_NEW`, stack arrays sized at run time |
+| `vla.h` | `STDCORELIB_VLA_ALLOC` and `STDCORELIB_VLA_NEW`, stack arrays sized at run time |
 | `pimpl.h` | The `stdc_impl_t` boilerplate used across the library |
 
 ```cpp

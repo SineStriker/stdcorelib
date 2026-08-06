@@ -21,7 +21,8 @@
 /// \warning The storage dies with the enclosing function, not the enclosing scope, so a loop
 ///          that allocates on every pass keeps growing the frame. Nothing frees it either, which
 ///          is why the size has to be bounded by something the caller controls.
-#  define VLA_ALLOC(TYPE, NAME, SIZE) TYPE *NAME = (TYPE *) STDCORELIB_ALLOCA((SIZE) * sizeof(TYPE))
+#  define STDCORELIB_VLA_ALLOC(TYPE, NAME, SIZE)                                                   \
+      TYPE *NAME = (TYPE *) STDCORELIB_ALLOCA((SIZE) * sizeof(TYPE))
 
 namespace stdc::vla::detail {
 
@@ -47,13 +48,13 @@ namespace stdc::vla::detail {
 
 }
 
-/// Like VLA_ALLOC(), for a type that needs constructing. A guard in the same scope default
-/// constructs the elements and destroys them on the way out.
+/// Like STDCORELIB_VLA_ALLOC(), for a type that needs constructing. A guard in the same scope
+/// default constructs the elements and destroys them on the way out.
 ///
-/// \sa VLA_ALLOC()
-#  define VLA_NEW(TYPE, NAME, SIZE)                                                                \
+/// \sa STDCORELIB_VLA_ALLOC()
+#  define STDCORELIB_VLA_NEW(TYPE, NAME, SIZE)                                                     \
       const size_t NAME##_vla_size_ = (SIZE);                                                      \
-      VLA_ALLOC(TYPE, NAME, NAME##_vla_size_);                                                     \
+      STDCORELIB_VLA_ALLOC(TYPE, NAME, NAME##_vla_size_);                                          \
       ::stdc::vla::detail::ScopeGuard<TYPE> NAME##_vla_guard_(NAME, NAME##_vla_size_);
 
 #endif
