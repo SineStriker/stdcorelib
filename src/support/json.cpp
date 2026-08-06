@@ -10,7 +10,7 @@
 #include <string>
 #include <utility>
 
-#include <stdcorelib/utf.h>
+#include "utf.h"
 
 namespace {
 
