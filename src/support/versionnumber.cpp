@@ -4,7 +4,6 @@
 
 #include <cstdlib>
 #include <charconv>
-#include <typeinfo>
 #include <tuple>
 
 #include "algorithms.h"
@@ -117,7 +116,11 @@ namespace stdc {
 namespace std {
 
     size_t hash<stdc::VersionNumber>::operator()(const stdc::VersionNumber &key) const {
-        size_t seed = typeid(key).hash_code();
+        // An arbitrary starting value, so that a version of all zeroes does not hash to zero.
+        // It used to be typeid(key).hash_code(), which for a type with no virtual functions is a
+        // constant the compiler already knows, so it bought nothing and cost the whole library
+        // the ability to be built without RTTI.
+        size_t seed = 0x9E3779B9u; // fits a 32 bit size_t too
         seed = stdc::hash(key.major(), seed);
         seed = stdc::hash(key.minor(), seed);
         seed = stdc::hash(key.patch(), seed);

@@ -5,10 +5,13 @@ project(stdcorelib VERSION 0.0.2.0 LANGUAGES CXX)
 # ----------------------------------
 # Build Options
 # ----------------------------------
+# With neither STDC_BUILD_STATIC nor STDC_BUILD_SHARED set, the library follows
+# BUILD_SHARED_LIBS, which leaves it static when that is not set either.
 option(STDC_BUILD_STATIC "Build static library" OFF)
 option(STDC_BUILD_SHARED "Build shared library" OFF)
 option(STDC_BUILD_TESTS "Build test cases" OFF)
 option(STDC_ENABLE_EXCEPTIONS "Build the library with exceptions" ON)
+option(STDC_ENABLE_RTTI "Build the library with RTTI" ON)
 option(STDC_INSTALL "Install library" ON)
 
 # ----------------------------------
@@ -133,6 +136,16 @@ if(NOT STDC_ENABLE_EXCEPTIONS)
         target_compile_options(${PROJECT_NAME} PRIVATE /EHs-c- /wd4530)
     else()
         target_compile_options(${PROJECT_NAME} PRIVATE -fno-exceptions)
+    endif()
+endif()
+
+# The library does not use typeid or dynamic_cast. any and type_id exist so that a type can be
+# named without them, which is only worth anything if the rest of the library holds to it too.
+if(NOT STDC_ENABLE_RTTI)
+    if(MSVC)
+        target_compile_options(${PROJECT_NAME} PRIVATE /GR-)
+    else()
+        target_compile_options(${PROJECT_NAME} PRIVATE -fno-rtti)
     endif()
 endif()
 

@@ -24,16 +24,6 @@ cmake --build build --config Release
 cmake --install build --config Release
 ```
 
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `STDC_BUILD_STATIC` | `OFF` | Force a static library |
-| `STDC_BUILD_SHARED` | `OFF` | Force a shared library |
-| `STDC_BUILD_TESTS` | `OFF` | Build the test suite, which needs Boost.Test |
-| `STDC_ENABLE_EXCEPTIONS` | `ON` | Off compiles the library with exceptions disabled |
-| `STDC_INSTALL` | `ON` | Generate the install and package config targets |
-
-With neither `STDC_BUILD_STATIC` nor `STDC_BUILD_SHARED` set, it follows `BUILD_SHARED_LIBS`, defaulting to static.
-
 ## Integration with CMake Projects
 
 ```cmake
