@@ -15,7 +15,7 @@ Header-only where it can be, compiled where it has to be. No dependencies beyond
 ## Building
 
 ```bash
-git clone https://github.com/SineStriker/stdcorelib.git
+git clone https://github.com/stdware/stdcorelib.git
 cd stdcorelib
 cmake -B build -S . \
     -DCMAKE_BUILD_TYPE=Release \

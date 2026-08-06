@@ -187,7 +187,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # Add platform specific
 if(WIN32)
     set(RC_DESCRIPTION "C++ Auxiliary Core Library")
-    set(RC_COPYRIGHT "Copyright (C) 2022-present SineStriker")
+    set(RC_COPYRIGHT "Copyright (C) 2022-present Stdware Collections")
     include("cmake/winrc.cmake")
 endif()
 
