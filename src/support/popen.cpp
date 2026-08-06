@@ -353,39 +353,44 @@ namespace stdc {
         stdin_stream.close();
     }
 
-    /// Blocks SIGPIPE for its lifetime. Writing to a pipe whose reader has gone raises it, and its
-    /// default action ends the process. Nothing to do on Windows.
+    /// Ignores SIGPIPE for its lifetime, so that a write to a pipe whose reader has gone returns
+    /// EPIPE instead of ending the process. Nothing to do on Windows.
+    ///
+    /// This used to block the signal rather than ignore it, and put it back afterwards. Blocking
+    /// does not generate the signal any less, it only holds it, so the queue has to be emptied
+    /// before the mask goes back, and there is no portable way to do that: sigtimedwait is absent
+    /// on macOS, and sigpending there does not report a SIGPIPE the calling thread just caused.
+    /// Measured on both, with the write on a worker thread the way communicate() does it:
+    ///
+    ///   \li block, then unblock: dies on macOS, survives on Linux
+    ///   \li block, then sigpending and sigwait: dies on macOS, survives on Linux
+    ///   \li ignore: survives on both
+    ///
+    /// \note The disposition belongs to the process, not to this thread, so a program that wanted
+    ///       SIGPIPE to end it will not get that during the window a write is in flight. The
+    ///       alternative was ending the process, which is worse. Children are unaffected either
+    ///       way, since this is only ever entered after the fork.
     class sigpipe_guard {
     public:
 #ifdef _WIN32
         sigpipe_guard() = default;
 #else
         sigpipe_guard() {
-            sigset_t block;
-            sigemptyset(&block);
-            sigaddset(&block, SIGPIPE);
-            pthread_sigmask(SIG_BLOCK, &block, &_old);
-            _was_blocked = sigismember(&_old, SIGPIPE) == 1;
+            struct sigaction ignore{};
+            ignore.sa_handler = SIG_IGN;
+            sigemptyset(&ignore.sa_mask);
+            _installed = sigaction(SIGPIPE, &ignore, &_old) == 0;
         }
 
         ~sigpipe_guard() {
-            if (!_was_blocked) {
-                // Take the signal we caused off the queue, or unblocking would deliver it.
-#  ifndef __APPLE__
-                sigset_t pending;
-                sigemptyset(&pending);
-                sigaddset(&pending, SIGPIPE);
-                struct timespec zero = {0, 0};
-                while (sigtimedwait(&pending, nullptr, &zero) >= 0) {
-                }
-#  endif
+            if (_installed) {
+                sigaction(SIGPIPE, &_old, nullptr);
             }
-            pthread_sigmask(SIG_SETMASK, &_old, nullptr);
         }
 
     private:
-        sigset_t _old{};
-        bool _was_blocked = false;
+        struct sigaction _old{};
+        bool _installed = false;
 #endif
         STDC_DISABLE_COPY_MOVE(sigpipe_guard)
     };
