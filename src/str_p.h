@@ -3,9 +3,9 @@
 #ifndef STDCORELIB_STR_P_H
 #define STDCORELIB_STR_P_H
 
-#include <stdcorelib/str.h>
+#include "str.h"
 
-#include <stdcorelib/adt/vlarray.h>
+#include "vlarray.h"
 
 namespace stdc::str {
 

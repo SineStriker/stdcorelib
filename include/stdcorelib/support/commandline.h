@@ -892,6 +892,17 @@ namespace stdc::cli {
         void setDisplayOptions(int options);
         int displayOptions() const;
 
+        /// How many columns the help text may use, which is what its descriptions are wrapped
+        /// to.
+        ///
+        /// \param width the column count, or 0 to ask the terminal each time the text is made
+        /// \note 0 is the default. Where there is no terminal to ask, as when the output is a
+        ///       pipe, that comes out as 80 columns, so a program's help reads the same however
+        ///       it is captured.
+        /// \sa console::width()
+        void setTextWidth(int width);
+        int textWidth() const;
+
         ParseResult parse(const std::vector<std::string> &args, int parseOptions = Standard) const;
         /// Parses and runs the handler that was reached, which is what a \c main wants.
         inline int invoke(const std::vector<std::string> &args, int errorCode = -1,

@@ -8,7 +8,7 @@
 #include <set>
 #include <shared_mutex>
 
-#include <stdcorelib/support/popen.h>
+#include "popen.h"
 
 namespace stdc {
 

@@ -11,7 +11,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include <stdcorelib/console.h>
+#include "console.h"
 
 #ifdef _WIN32
 #  include "stdc_windows.h"

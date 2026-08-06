@@ -3,9 +3,18 @@
 #include <stdcorelib/console.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
+
+#ifndef _WIN32
+// For the case that asks a real terminal, which means making one.
+#  include <fcntl.h>
+#  include <sys/ioctl.h>
+#  include <termios.h>
+#  include <unistd.h>
+#endif
 
 #include <boost/test/unit_test.hpp>
 
@@ -392,5 +401,134 @@ BOOST_AUTO_TEST_CASE(test_attributes_compare) {
     BOOST_CHECK(attributes({bold, red, blue}) != attributes({italic, red, blue}));
     BOOST_CHECK(attributes({bold, red, blue}) != attributes({bold, green, blue}));
 }
+
+// How much room a piece of text takes on a terminal, which is not how long it is in bytes and
+// not how long it is in characters either.
+BOOST_AUTO_TEST_CASE(test_display_width_counts_columns) {
+    BOOST_CHECK_EQUAL(display_width(""), 0);
+    BOOST_CHECK_EQUAL(display_width("hello"), 5);
+
+    // Two columns each, three bytes each.
+    BOOST_CHECK_EQUAL(display_width("\xe4\xb8\xad\xe6\x96\x87"), 4); // CJK
+    BOOST_CHECK_EQUAL(display_width("\xef\xbc\xa1"), 2);             // fullwidth A
+    BOOST_CHECK_EQUAL(display_width("\xf0\x9f\x98\x80"), 2);         // an emoji, four bytes
+
+    // Mixed, so the sum is not a multiple of anything.
+    BOOST_CHECK_EQUAL(display_width("a\xe4\xb8\xad"
+                                    "b"),
+                      4);
+
+    // A combining mark hangs on the character before it and takes no room of its own.
+    BOOST_CHECK_EQUAL(display_width("e\xcc\x81"), 1);
+
+    // Per code point, for callers walking text rather than measuring it whole. Spelled as
+    // escapes so the answers do not rest on how a compiler read this file.
+    BOOST_CHECK_EQUAL(display_width(U'a'), 1);
+    BOOST_CHECK_EQUAL(display_width(U'中'), 2); // a CJK ideograph
+    BOOST_CHECK_EQUAL(display_width(U'́'), 0); // a combining acute
+    BOOST_CHECK_EQUAL(display_width(U'\U0001F600'), 2);
+}
+
+// A file is not a terminal, so there is nothing to ask and the fallback is the answer.
+BOOST_AUTO_TEST_CASE(test_width_falls_back_off_a_terminal) {
+    TempFile file;
+    BOOST_REQUIRE(file.get() != nullptr);
+
+    // COLUMNS would win if it were set, and this case is about what happens without it.
+    const char *saved = std::getenv("COLUMNS");
+    std::string keep = saved ? saved : std::string();
+#ifdef _WIN32
+    _putenv_s("COLUMNS", "");
+#else
+    unsetenv("COLUMNS");
+#endif
+
+    BOOST_CHECK_EQUAL(width(file.get()), 80);
+    BOOST_CHECK_EQUAL(width(file.get(), 42), 42);
+
+    // COLUMNS is the override every terminal-aware program honors, and the only say a caller
+    // has when the target is not a terminal at all.
+#ifdef _WIN32
+    _putenv_s("COLUMNS", "123");
+#else
+    setenv("COLUMNS", "123", 1);
+#endif
+    BOOST_CHECK_EQUAL(width(file.get()), 123);
+    BOOST_CHECK_EQUAL(width(file.get(), 42), 123);
+
+    // Something that is not a positive number is not an answer, so the fallback stands.
+    for (const char *bad : {"", "0", "-5", "wide"}) {
+#ifdef _WIN32
+        _putenv_s("COLUMNS", bad);
+#else
+        setenv("COLUMNS", bad, 1);
+#endif
+        BOOST_CHECK_MESSAGE(width(file.get(), 42) == 42, std::string("COLUMNS=") + bad);
+    }
+
+#ifdef _WIN32
+    _putenv_s("COLUMNS", keep.c_str());
+#else
+    if (saved) {
+        setenv("COLUMNS", keep.c_str(), 1);
+    } else {
+        unsetenv("COLUMNS");
+    }
+#endif
+}
+
+#ifndef _WIN32
+
+// What a real terminal says, which is the whole point of the function and the one thing a file
+// cannot stand in for. A pty is a terminal, and its size is ours to set.
+//
+// POSIX only. Windows reads the same answer out of GetConsoleScreenBufferInfo, and standing up a
+// console to ask is a pseudoconsole and a second process.
+BOOST_AUTO_TEST_CASE(test_width_asks_a_real_terminal) {
+    int master = ::posix_openpt(O_RDWR | O_NOCTTY);
+    BOOST_REQUIRE(master >= 0);
+    BOOST_REQUIRE_EQUAL(::grantpt(master), 0);
+    BOOST_REQUIRE_EQUAL(::unlockpt(master), 0);
+    const char *name = ::ptsname(master);
+    BOOST_REQUIRE(name != nullptr);
+    int slave = ::open(name, O_RDWR | O_NOCTTY);
+    BOOST_REQUIRE(slave >= 0);
+    FILE *file = ::fdopen(slave, "w");
+    BOOST_REQUIRE(file != nullptr);
+
+    // COLUMNS would win over the terminal, and this case is about the terminal.
+    const char *saved = std::getenv("COLUMNS");
+    std::string keep = saved ? saved : std::string();
+    ::unsetenv("COLUMNS");
+
+    const auto &resize = [&](unsigned short columns) {
+        struct winsize ws {};
+        ws.ws_col = columns;
+        ws.ws_row = 40;
+        BOOST_REQUIRE_EQUAL(::ioctl(slave, TIOCSWINSZ, &ws), 0);
+    };
+
+    resize(137);
+    BOOST_CHECK_EQUAL(width(file), 137);
+    // The fallback is not consulted when there is a real answer.
+    BOOST_CHECK_EQUAL(width(file, 42), 137);
+
+    // Asked afresh every call, so a terminal resized under a running program is followed.
+    resize(37);
+    BOOST_CHECK_EQUAL(width(file), 37);
+
+    // A terminal that answers zero has told us nothing, which happens under some multiplexers.
+    resize(0);
+    BOOST_CHECK_EQUAL(width(file), 80);
+    BOOST_CHECK_EQUAL(width(file, 42), 42);
+
+    if (saved) {
+        ::setenv("COLUMNS", keep.c_str(), 1);
+    }
+    std::fclose(file);
+    ::close(master);
+}
+
+#endif // !_WIN32
 
 BOOST_AUTO_TEST_SUITE_END()

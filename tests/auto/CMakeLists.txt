@@ -32,8 +32,14 @@ target_link_libraries(${PROJECT_NAME} PRIVATE Boost::unit_test_framework)
 target_link_libraries(${PROJECT_NAME} PRIVATE stdcorelib)
 
 # Some tests reach into private headers (src/*_p.h) to cover internals that the public API
-# cannot get at on its own.
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../src)
+# cannot get at on its own. Those headers include the library's own by file name, the way the
+# library's sources do, so they need the same directories on the path to be included from here.
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/stdcorelib
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/stdcorelib/adt
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/stdcorelib/support
+)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_EXTENSIONS OFF

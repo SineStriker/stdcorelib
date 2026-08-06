@@ -6,14 +6,18 @@
 #  include "stdc_windows.h"
 #  include <io.h>
 #else
+#  include <sys/ioctl.h>
 #  include <unistd.h>
 #endif
 
 #include <atomic>
 #include <mutex>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
+
+#include "utf.h"
 
 #include "console_p.h"
 #include "str_p.h"
@@ -500,6 +504,85 @@ namespace stdc {
                 return "\033[0m";
             }
 
+        }
+
+        int width(FILE *file, int fallback) {
+            // COLUMNS first, which is the convention every terminal-aware program follows, and
+            // is also the only say anyone has when the output is not a terminal to begin with.
+            if (const char *columns = std::getenv("COLUMNS")) {
+                int value = std::atoi(columns);
+                if (value > 0) {
+                    return value;
+                }
+            }
+
+            target_id id = target_id_of(file);
+            if (id == invalid_target_id) {
+                return fallback;
+            }
+#ifdef _WIN32
+            CONSOLE_SCREEN_BUFFER_INFO info{};
+            if (!::GetConsoleScreenBufferInfo(id, &info)) {
+                return fallback;
+            }
+            // The visible window, not dwSize, which is the scrollback buffer. The buffer is
+            // routinely much wider, and text laid out to it would run off the side of the screen.
+            int value = int(info.srWindow.Right) - int(info.srWindow.Left) + 1;
+#else
+            struct winsize ws {};
+            if (::ioctl(id, TIOCGWINSZ, &ws) != 0) {
+                return fallback;
+            }
+            int value = int(ws.ws_col);
+#endif
+            // A terminal that answers zero has told us nothing, which happens under some
+            // multiplexers and in a few CI runners.
+            return value > 0 ? value : fallback;
+        }
+
+        namespace {
+
+            /// The code point ranges that take two columns, from Unicode's East Asian Width
+            /// property. The Wide and Fullwidth blocks a program prints in practice, rather than
+            /// the whole table, which would be several hundred ranges and a generator to keep it.
+            bool is_wide(char32_t c) {
+                return (c >= 0x1100 && c <= 0x115F) ||   // Hangul Jamo, initial consonants
+                       (c >= 0x2E80 && c <= 0x303E) ||   // CJK radicals, Kangxi, CJK symbols
+                       (c >= 0x3041 && c <= 0x33FF) ||   // kana through CJK compatibility
+                       (c >= 0x3400 && c <= 0x4DBF) ||   // CJK extension A
+                       (c >= 0x4E00 && c <= 0x9FFF) ||   // CJK unified ideographs
+                       (c >= 0xA000 && c <= 0xA4CF) ||   // Yi
+                       (c >= 0xAC00 && c <= 0xD7A3) ||   // Hangul syllables
+                       (c >= 0xF900 && c <= 0xFAFF) ||   // CJK compatibility ideographs
+                       (c >= 0xFE30 && c <= 0xFE6F) ||   // CJK compatibility forms
+                       (c >= 0xFF00 && c <= 0xFF60) ||   // fullwidth forms
+                       (c >= 0xFFE0 && c <= 0xFFE6) ||   // fullwidth signs
+                       (c >= 0x1F300 && c <= 0x1F64F) || // pictographs and emoticons
+                       (c >= 0x1F900 && c <= 0x1F9FF) || // supplemental symbols
+                       (c >= 0x20000 && c <= 0x3FFFD);   // CJK extension B and later
+            }
+
+            /// Marks that attach to the character before them, taking no column of their own.
+            bool is_combining(char32_t c) {
+                return (c >= 0x0300 && c <= 0x036F) || (c >= 0x1AB0 && c <= 0x1AFF) ||
+                       (c >= 0x20D0 && c <= 0x20FF) || (c >= 0xFE20 && c <= 0xFE2F);
+            }
+
+        }
+
+        int display_width(char32_t c) {
+            if (is_combining(c)) {
+                return 0;
+            }
+            return is_wide(c) ? 2 : 1;
+        }
+
+        int display_width(const std::string_view &utf8) {
+            int columns = 0;
+            for (char32_t c : utf::utf8_to_utf32(utf8)) {
+                columns += display_width(c);
+            }
+            return columns;
         }
 
         static std::atomic<color_mode> g_color_mode{color_mode::automatic};

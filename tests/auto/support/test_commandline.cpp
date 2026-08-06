@@ -2,10 +2,13 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
+#include <stdcorelib/console.h>
 #include <stdcorelib/support/commandline.h>
 
 #include <boost/test/unit_test.hpp>
@@ -1105,6 +1108,9 @@ namespace {
                           .setCatalogue(catalogue));
         parser.setPrologue("A prologue line");
         parser.setEpilogue("An epilogue line");
+        // Fixed, so that what these cases assert does not depend on the terminal the suite
+        // happens to run under, nor on whether COLUMNS is set in the environment.
+        parser.setTextWidth(80);
         return parser;
     }
 
@@ -1676,6 +1682,249 @@ BOOST_AUTO_TEST_CASE(test_parsing_from_argc_and_argv) {
         BOOST_CHECK_EQUAL(parser.invoke(3, args), 7);
         BOOST_CHECK_EQUAL(seen, "file.txt");
     }
+}
+
+namespace {
+
+    // The lines of the help text that carry \a needle's description, the first one and every
+    // continuation under it, with the leading blanks kept so alignment can be checked.
+    std::vector<std::string> entryLines(const std::string &text, const std::string &needle) {
+        std::vector<std::string> all;
+        for (size_t start = 0; start <= text.size();) {
+            auto end = text.find('\n', start);
+            all.push_back(text.substr(start, end == std::string::npos ? end : end - start));
+            if (end == std::string::npos) {
+                break;
+            }
+            start = end + 1;
+        }
+
+        std::vector<std::string> res;
+        for (size_t i = 0; i < all.size(); ++i) {
+            if (all[i].find(needle) == std::string::npos) {
+                continue;
+            }
+            res.push_back(all[i]);
+            // A continuation is a line that is nothing but the description, so it starts past
+            // where the left column ends.
+            for (size_t j = i + 1; j < all.size(); ++j) {
+                auto first = all[j].find_first_not_of(' ');
+                if (first == std::string::npos || first <= all[i].find_first_not_of(' ')) {
+                    break;
+                }
+                res.push_back(all[j]);
+            }
+            break;
+        }
+        return res;
+    }
+
+}
+
+// A description longer than the terminal is wrapped rather than run off the side, and what it
+// wraps to is measured in columns.
+BOOST_AUTO_TEST_CASE(test_a_long_description_is_wrapped) {
+    const std::string sentence = "Overwrite whatever is already there, without asking first, "
+                                 "which is what a script wants and a person rarely does";
+
+    const auto &help = [&sentence](int width) {
+        Parser parser(Command("prog").addOption(Option({"-f", "--force"}, sentence)));
+        parser.setTextWidth(width);
+        return parser.parse({"prog"}).helpText();
+    };
+
+    // Wide enough for the whole thing, so there is nothing to break.
+    {
+        auto lines = entryLines(help(200), "--force");
+        BOOST_REQUIRE_EQUAL(lines.size(), 1u);
+        BOOST_CHECK(has(lines[0], sentence));
+    }
+
+    // Narrow enough that it has to break, and no line may exceed the width.
+    {
+        auto lines = entryLines(help(60), "--force");
+        BOOST_REQUIRE_GT(lines.size(), 1u);
+        for (const auto &line : lines) {
+            BOOST_CHECK_MESSAGE(stdc::console::display_width(line) <= 60,
+                                "line runs past the width: [" + line + "]");
+        }
+    }
+
+    // Narrower still gives more lines, which is the property that says the width is being read
+    // rather than a constant standing in for it.
+    BOOST_CHECK_GT(entryLines(help(40), "--force").size(), entryLines(help(60), "--force").size());
+
+    // The continuation lines start under the description, not under the option.
+    {
+        auto lines = entryLines(help(60), "--force");
+        BOOST_REQUIRE_GT(lines.size(), 1u);
+        auto column = lines[0].find("Overwrite");
+        BOOST_REQUIRE(column != std::string::npos);
+        for (size_t i = 1; i < lines.size(); ++i) {
+            BOOST_CHECK_EQUAL(lines[i].find_first_not_of(' '), column);
+        }
+    }
+
+    // Words are kept whole, so no line ends mid-word where a space was available.
+    {
+        auto lines = entryLines(help(60), "--force");
+        std::string rejoined;
+        for (const auto &line : lines) {
+            auto first = line.find_first_not_of(' ');
+            rejoined += (rejoined.empty() ? "" : " ") + line.substr(first);
+        }
+        BOOST_CHECK(has(rejoined, sentence));
+    }
+}
+
+// What wrapping has to get right beyond the ordinary case.
+BOOST_AUTO_TEST_CASE(test_wrapping_edges) {
+    const auto &help = [](const std::string &description, int width) {
+        Parser parser(Command("prog").addOption(Option({"-x"}, description)));
+        parser.setTextWidth(width);
+        return parser.parse({"prog"}).helpText();
+    };
+
+    // A single word wider than the column has no space to break at, so it is broken where it
+    // reached the edge rather than left to run over.
+    {
+        std::string word(120, 'w');
+        auto lines = entryLines(help(word, 50), "-x");
+        BOOST_REQUIRE_GT(lines.size(), 1u);
+        for (const auto &line : lines) {
+            BOOST_CHECK(stdc::console::display_width(line) <= 50);
+        }
+    }
+
+    // Newlines a caller wrote are theirs, and are kept.
+    {
+        auto lines = entryLines(help("first\nsecond\nthird", 200), "-x");
+        BOOST_REQUIRE_EQUAL(lines.size(), 3u);
+        BOOST_CHECK(has(lines[0], "first"));
+        BOOST_CHECK(has(lines[1], "second"));
+        BOOST_CHECK(has(lines[2], "third"));
+    }
+
+    // A width narrower than the left column leaves nothing to subtract, and the answer is a
+    // readable column anyway rather than one character per line. It still wraps: giving up and
+    // writing one long line would be the other way to survive this, and is not what is wanted.
+    {
+        auto lines = entryLines(help("a description of some length here that will not fit", 4),
+                                "-x");
+        BOOST_REQUIRE_GT(lines.size(), 1u);
+        for (const auto &line : lines) {
+            auto first = line.find_first_not_of(' ');
+            BOOST_CHECK_GT(line.size() - first, 1u);
+        }
+    }
+
+    // Nothing to wrap.
+    {
+        auto lines = entryLines(help("", 60), "-x");
+        BOOST_REQUIRE_EQUAL(lines.size(), 1u);
+    }
+}
+
+// Text that is not ASCII is measured in the columns it occupies, not in the bytes it takes.
+BOOST_AUTO_TEST_CASE(test_wrapping_counts_columns_not_bytes) {
+    // Twenty CJK characters: sixty bytes, forty columns.
+    std::string cjk;
+    for (int i = 0; i < 20; i++) {
+        cjk += "\xe4\xb8\xad";
+    }
+    BOOST_REQUIRE_EQUAL(cjk.size(), 60u);
+    BOOST_REQUIRE_EQUAL(stdc::console::display_width(cjk), 40);
+
+    Parser parser(Command("prog").addOption(Option({"-x"}, cjk)));
+    parser.setTextWidth(40);
+    auto lines = entryLines(parser.parse({"prog"}).helpText(), "-x");
+
+    BOOST_REQUIRE_GT(lines.size(), 1u);
+    for (const auto &line : lines) {
+        // Measured by column. Counting bytes would have let each line hold three times as much
+        // as it can show.
+        BOOST_CHECK_MESSAGE(stdc::console::display_width(line) <= 40,
+                            "line is " + std::to_string(stdc::console::display_width(line)) +
+                                " columns wide");
+        // And never split through the middle of a character, which would leave a broken byte
+        // sequence in the output.
+        BOOST_CHECK_EQUAL((line.size() - line.find_first_not_of(' ')) % 3, 0u);
+    }
+}
+
+// The left column is measured in columns too. A metavar written in a script that is not ASCII
+// is longer in bytes than it is wide, and counting bytes pushes every description in the block
+// further right than it belongs.
+BOOST_AUTO_TEST_CASE(test_alignment_counts_columns_not_bytes) {
+    // <模式>: eight bytes, six columns. <path> is six of each.
+    const std::string metavar = "\xe6\xa8\xa1\xe5\xbc\x8f";
+    BOOST_REQUIRE_EQUAL(stdc::console::display_width("<" + metavar + ">"), 6);
+    BOOST_REQUIRE_EQUAL(("<" + metavar + ">").size(), 8u);
+
+    Parser parser(Command("prog")
+                      .addArgument(Argument("path", "Where to write"))
+                      .addArgument(Argument("mode", "How to write it").metavar(metavar)));
+    parser.setTextWidth(80);
+    auto text = parser.parse({"prog", "a", "b"}).helpText();
+
+    // The widest entry in the block is followed by exactly the gap, and here both are as wide
+    // as each other, so both are. Counting bytes gives the wider-in-bytes one a padding it does
+    // not need and moves the whole column.
+    // Found by description, since the usage line above holds the metavars too.
+    for (const auto &pair :
+         {std::make_pair(std::string("<path>"), std::string("Where to write")),
+          std::make_pair("<" + metavar + ">", std::string("How to write it"))}) {
+        auto lines = entryLines(text, pair.second);
+        BOOST_REQUIRE_MESSAGE(!lines.empty(), "no row for " + pair.second);
+        auto at = lines[0].find(pair.second);
+        BOOST_REQUIRE(at != std::string::npos);
+
+        auto left = lines[0].substr(0, at);
+        BOOST_CHECK_MESSAGE(has(left, pair.first), "[" + left + "] is not the row for " +
+                                                       pair.first);
+        auto spaces = left.size() - left.find_last_not_of(' ') - 1;
+        BOOST_CHECK_MESSAGE(spaces == 4, pair.first + " is followed by " +
+                                             std::to_string(spaces) + " spaces, not 4");
+    }
+}
+
+// A width of zero, the default, means ask rather than assume. Off a terminal that answer comes
+// from COLUMNS, and from 80 columns when even that is unset.
+BOOST_AUTO_TEST_CASE(test_the_default_width_is_asked_for) {
+    Parser parser(Command("prog").addOption(
+        Option({"-x"}, "A description long enough that it has to be broken somewhere along the "
+                       "way, wherever that turns out to be")));
+    BOOST_CHECK_EQUAL(parser.textWidth(), 0);
+
+    const char *saved = std::getenv("COLUMNS");
+    std::string keep = saved ? saved : std::string();
+    const auto &setColumns = [](const char *value) {
+#ifdef _WIN32
+        _putenv_s("COLUMNS", value ? value : "");
+#else
+        if (value) {
+            setenv("COLUMNS", value, 1);
+        } else {
+            unsetenv("COLUMNS");
+        }
+#endif
+    };
+
+    setColumns(nullptr);
+    auto wide = entryLines(parser.parse({"prog"}).helpText(), "-x");
+
+    setColumns("40");
+    auto narrow = entryLines(parser.parse({"prog"}).helpText(), "-x");
+
+    setColumns(saved ? keep.c_str() : nullptr);
+
+    BOOST_CHECK_GT(narrow.size(), wide.size());
+
+    // And an explicit width ignores the environment entirely.
+    setColumns("40");
+    parser.setTextWidth(200);
+    BOOST_CHECK_EQUAL(entryLines(parser.parse({"prog"}).helpText(), "-x").size(), 1u);
+    setColumns(saved ? keep.c_str() : nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(test_reading_a_result_that_failed) {

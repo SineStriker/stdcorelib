@@ -80,6 +80,34 @@ namespace stdc {
 
         /// @}
 
+        /// \name Geometry
+        /// @{
+
+        /// How many columns wide the terminal behind \a file is.
+        ///
+        /// \param file the target to ask about
+        /// \param fallback what to answer when there is no terminal there to ask, which is what
+        ///        a pipe and a file get
+        /// \note Asked afresh every call rather than remembered, since a terminal is resized
+        ///       while the program using it runs.
+        /// \note \c COLUMNS wins where it is set, which is how a shell says so and the only say
+        ///       a caller has when the output is not going to a terminal at all.
+        STDC_EXPORT int width(FILE *file = stdout, int fallback = 80);
+
+        /// How many columns \a utf8 takes up when written to a terminal.
+        ///
+        /// Neither its length in bytes nor its length in characters: one CJK ideograph occupies
+        /// two columns, and a combining mark occupies none.
+        STDC_EXPORT int display_width(const std::string_view &utf8);
+
+        // @overload: display_width
+        //
+        // For one code point, so that text can be measured while it is being walked rather than
+        // a character at a time through the string form.
+        STDC_EXPORT int display_width(char32_t c);
+
+        /// @}
+
         /// \name General output
         /// @{
 

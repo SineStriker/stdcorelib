@@ -11,7 +11,8 @@
 #include <fstream>
 #include <unordered_map>
 
-#include <stdcorelib/console.h>
+#include "console.h"
+#include "utf.h"
 
 namespace stdc::cli {
 
@@ -177,6 +178,7 @@ namespace stdc::cli {
         std::string prologue;
         std::string epilogue;
         int display_options = Parser::Normal;
+        int text_width = 0;
 
         ParseResult::Error error = ParseResult::NoError;
         std::string error_text;
@@ -205,7 +207,8 @@ namespace stdc::cli {
         /// Defined further down, beside the rest of the layout. Named here because the result's
         /// accessors come first and one of them prints.
         std::string helpFor(const Command &command, const std::vector<std::string> &path,
-                            const std::string &prologue, const std::string &epilogue, int flags);
+                            const std::string &prologue, const std::string &epilogue, int flags,
+                            int text_width);
 
     }
 
@@ -379,8 +382,11 @@ namespace stdc::cli {
         if (!_impl->target) {
             return {};
         }
+        // Zero means ask, and the answer is whatever stdout is: a terminal's width, or 80
+        // columns for a pipe or a file, so help captured into one reads the same everywhere.
+        int width = _impl->text_width > 0 ? _impl->text_width : console::width(stdout);
         return helpFor(*_impl->target, _impl->path, _impl->prologue, _impl->epilogue,
-                       _impl->display_options);
+                       _impl->display_options, width);
     }
 
     void ParseResult::showHelp() const {
@@ -436,6 +442,72 @@ namespace stdc::cli {
 
         constexpr int indent = 2;
         constexpr int gap = 4;
+
+        /// However narrow the terminal, a description gets at least this much. Below it the text
+        /// is broken into a column too thin to read, which is worse than running over.
+        constexpr int min_description = 20;
+
+        /// Breaks \a text into lines of at most \a columns columns.
+        ///
+        /// At spaces where there are any, and between characters where there are none, which is
+        /// what a language that writes without spaces needs. Newlines already in \a text are
+        /// kept, so a caller who laid out their own paragraphs keeps them.
+        ///
+        /// Measured in columns rather than in bytes or characters, so a CJK description breaks
+        /// where it looks like it should. \sa console::display_width()
+        std::vector<std::string> wrapped(const std::string &text, int columns) {
+            std::vector<std::string> lines;
+            if (columns < 1) {
+                lines.push_back(text);
+                return lines;
+            }
+
+            auto points = utf::utf8_to_utf32(text);
+            std::u32string line;
+            int width = 0;
+            const auto emit = [&lines](std::u32string piece) {
+                while (!piece.empty() && piece.back() == U' ') {
+                    piece.pop_back();
+                }
+                lines.push_back(utf::utf32_to_utf8(piece));
+            };
+            const auto measure = [](const std::u32string &piece) {
+                int res = 0;
+                for (char32_t c : piece) {
+                    res += console::display_width(c);
+                }
+                return res;
+            };
+
+            for (char32_t c : points) {
+                if (c == U'\n') {
+                    emit(std::move(line));
+                    line.clear();
+                    width = 0;
+                    continue;
+                }
+                int w = console::display_width(c);
+                if (width + w > columns && !line.empty()) {
+                    // Back up to the last space, so a word is not cut in half. A word longer
+                    // than the whole column has no space to back up to and is broken where it
+                    // reached the edge.
+                    auto space = line.find_last_of(U' ');
+                    if (space == std::u32string::npos) {
+                        emit(line);
+                        line.clear();
+                    } else {
+                        auto tail = line.substr(space + 1);
+                        emit(line.substr(0, space));
+                        line = tail;
+                    }
+                    width = measure(line);
+                }
+                line.push_back(c);
+                width += w;
+            }
+            emit(std::move(line));
+            return lines;
+        }
 
         /// <name>, or [name] where it may be left out, with an ellipsis where it repeats.
         std::string displayed(const Argument &argument) {
@@ -499,13 +571,25 @@ namespace stdc::cli {
             return res;
         }
 
-        void writeSections(std::string &out, const std::vector<Section> &sections, size_t width) {
+        void writeSections(std::string &out, const std::vector<Section> &sections, size_t width,
+                           int text_width) {
+            // Where a description starts, and therefore where the lines under the first one are
+            // indented to, so a wrapped entry stays one block instead of drifting left.
+            size_t column = size_t(indent) + width + size_t(gap);
+            int room = (std::max) (text_width - int(column), min_description);
+
             for (const auto &section : sections) {
                 out += "\n" + section.title + ":\n";
                 for (const auto &entry : section.entries) {
                     out += std::string(indent, ' ') + entry.left;
                     if (!entry.right.empty()) {
-                        out += std::string(width - entry.left.size() + gap, ' ') + entry.right;
+                        auto lines = wrapped(entry.right, room);
+                        out += std::string(width - size_t(console::display_width(entry.left)) + gap,
+                                           ' ') +
+                               lines.front();
+                        for (size_t i = 1; i < lines.size(); ++i) {
+                            out += "\n" + std::string(column, ' ') + lines[i];
+                        }
                     }
                     out += "\n";
                 }
@@ -516,14 +600,17 @@ namespace stdc::cli {
             size_t width = 0;
             for (const auto &section : sections) {
                 for (const auto &entry : section.entries) {
-                    width = (std::max) (width, entry.left.size());
+                    // In columns rather than in bytes, or a metavar written in a script that is
+                    // not ASCII pushes its own row out of line with every other.
+                    width = (std::max) (width, size_t(console::display_width(entry.left)));
                 }
             }
             return width;
         }
 
         std::string helpFor(const Command &command, const std::vector<std::string> &path,
-                            const std::string &prologue, const std::string &epilogue, int flags) {
+                            const std::string &prologue, const std::string &epilogue, int flags,
+                            int text_width) {
             const auto &catalogue = command.catalogue();
             bool align_all = (flags & Parser::AlignAllCatalogues) != 0;
 
@@ -618,13 +705,13 @@ namespace stdc::cli {
             if (align_all) {
                 size_t width =
                     (std::max) ({widestOf(arguments), widestOf(options), widestOf(commands)});
-                writeSections(out, arguments, width);
-                writeSections(out, options, width);
-                writeSections(out, commands, width);
+                writeSections(out, arguments, width, text_width);
+                writeSections(out, options, width, text_width);
+                writeSections(out, commands, width, text_width);
             } else {
                 for (const auto *list : {&arguments, &options, &commands}) {
                     for (const auto &section : *list) {
-                        writeSections(out, {section}, widestOf({section}));
+                        writeSections(out, {section}, widestOf({section}), text_width);
                     }
                 }
             }
@@ -1231,6 +1318,7 @@ namespace stdc::cli {
         std::string prologue;
         std::string epilogue;
         int display_options = Parser::Normal;
+        int text_width = 0;
     };
 
     Parser::Parser() : _impl(std::make_unique<Impl>()) {
@@ -1281,6 +1369,14 @@ namespace stdc::cli {
         return _impl->display_options;
     }
 
+    void Parser::setTextWidth(int width) {
+        _impl->text_width = width;
+    }
+
+    int Parser::textWidth() const {
+        return _impl->text_width;
+    }
+
     ParseResult Parser::parse(const std::vector<std::string> &args, int parseOptions) const {
         ParseResult result;
         result._impl->root = _impl->root;
@@ -1288,6 +1384,7 @@ namespace stdc::cli {
         result._impl->prologue = _impl->prologue;
         result._impl->epilogue = _impl->epilogue;
         result._impl->display_options = _impl->display_options;
+        result._impl->text_width = _impl->text_width;
         ParserCore(result._impl.get(), parseOptions).run(args);
         return result;
     }

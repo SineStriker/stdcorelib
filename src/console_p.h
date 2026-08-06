@@ -5,7 +5,7 @@
 
 #include <string>
 
-#include <stdcorelib/console.h>
+#include "console.h"
 
 namespace stdc::console::detail {
 
