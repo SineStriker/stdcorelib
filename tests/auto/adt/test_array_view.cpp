@@ -179,6 +179,10 @@ BOOST_AUTO_TEST_CASE(test_compare) {
     BOOST_CHECK(a == vb);
     BOOST_CHECK(c != vb);
 
+    // and on the right, which had no overload at all until the ambiguity above was sorted out
+    BOOST_CHECK(va == b);
+    BOOST_CHECK(va != c);
+
     // two empty views are equal
     array_view<int> e1;
     array_view<int> e2;

@@ -5,6 +5,7 @@
 
 #include <array>
 #include <optional>
+#include <type_traits>
 #include <vector>
 #include <cassert>
 
@@ -201,14 +202,33 @@ namespace stdc {
     };
 
 
+    namespace detail {
+
+        // The comparisons against a container are constrained to leave out array_view itself.
+        // Since C++17 relaxed how a template template parameter matches, V binds to array_view
+        // with the pack empty, so an array_view on both sides matched the container overload as
+        // exactly as the one written for it and partial ordering had nothing to separate them.
+        // MSVC picked one and clang called it ambiguous.
+        template <class V, class T>
+        using enable_if_not_array_view = std::enable_if_t<!std::is_same_v<V, array_view<T>>, int>;
+
+    }
+
     template <typename T>
     inline bool operator==(array_view<T> LHS, array_view<T> RHS) {
         return LHS.equals(RHS);
     }
 
-    template <template <class, class...> class V, typename T, class... A>
+    template <template <class, class...> class V, typename T, class... A,
+              detail::enable_if_not_array_view<V<T, A...>, T> = 0>
     inline bool operator==(const V<T, A...> &LHS, array_view<T> RHS) {
         return array_view<T>(LHS).equals(RHS);
+    }
+
+    template <template <class, class...> class V, typename T, class... A,
+              detail::enable_if_not_array_view<V<T, A...>, T> = 0>
+    inline bool operator==(array_view<T> LHS, const V<T, A...> &RHS) {
+        return LHS.equals(array_view<T>(RHS));
     }
 
     template <typename T>
@@ -216,8 +236,15 @@ namespace stdc {
         return !(LHS == RHS);
     }
 
-    template <template <class, class...> class V, typename T, class... A>
+    template <template <class, class...> class V, typename T, class... A,
+              detail::enable_if_not_array_view<V<T, A...>, T> = 0>
     inline bool operator!=(const V<T, A...> &LHS, array_view<T> RHS) {
+        return !(LHS == RHS);
+    }
+
+    template <template <class, class...> class V, typename T, class... A,
+              detail::enable_if_not_array_view<V<T, A...>, T> = 0>
+    inline bool operator!=(array_view<T> LHS, const V<T, A...> &RHS) {
         return !(LHS == RHS);
     }
 
