@@ -1,8 +1,23 @@
 // SPDX-License-Identifier: MIT
 
+/// \file commandline.h
+///
+/// Declaring what a program takes on its command line, and reading back what it was given.
+///
+/// The shape of the API comes from SysCmdLine, https://github.com/SineStriker/syscmdline, which
+/// this replaces. A program moving across is renaming rather than rewriting.
+///
+/// What is not carried over is the machinery underneath. Values are text until something reads
+/// them, so there is no variant type. The declarations are plain values built once at startup,
+/// so there is no implicit sharing and no pimpl. The help text has one layout rather than one
+/// assembled item by item.
+///
+/// Where the two part on what a command line means, this says so beside Parser.
+
 #ifndef STDCORELIB_COMMANDLINE_H
 #define STDCORELIB_COMMANDLINE_H
 
+#include <cassert>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -47,7 +62,9 @@ namespace stdc::cli {
         struct value_type_info {
             /// Whether the token is a \c T. Null means anything goes, which is the default.
             bool (*check)(std::string_view) = nullptr;
-            /// What to call it when a diagnostic or the help text has to name it.
+            /// What to call it when a diagnostic or the help text has to name it. Held rather
+            /// than copied, so a value_traits returning the c_str of something it built on the
+            /// spot leaves this pointing at freed bytes. A literal is what belongs here.
             const char *name = nullptr;
         };
 
@@ -203,8 +220,13 @@ namespace stdc::cli {
         }
         /// The complete set of tokens this will accept, for the arguments that are really a
         /// choice between a few words.
+        ///
+        /// \pre Every one of them is a \c T, where type<T>() said what \c T is. An argument that
+        ///      expects words its own type cannot read accepts nothing at all, which is a
+        ///      declaration contradicting itself rather than a command line to complain about.
         inline Argument &expect(std::vector<std::string> values) {
             _expected = std::move(values);
+            assertExpectedMatchType();
             return *this;
         }
         inline Argument &validate(Validator validator) {
@@ -221,9 +243,12 @@ namespace stdc::cli {
         }
         /// Declares what the tokens mean, which is both a check made while parsing and a word for
         /// the help text. Without it anything is acceptable and the type shows up as a string.
+        ///
+        /// \pre Whatever expect() was given, if anything, is readable as a \c T. See there.
         template <class T>
         inline Argument &type() {
             _type = detail::type_info_for<T>();
+            assertExpectedMatchType();
             return *this;
         }
 
@@ -260,6 +285,21 @@ namespace stdc::cli {
         }
 
     private:
+        /// Both halves of the declaration have to agree, and either may be written first, so it
+        /// is checked from both. Nothing can catch this while parsing: an argument expecting
+        /// words its own type refuses accepts every command line, and reads as one that is
+        /// merely never satisfied.
+        inline void assertExpectedMatchType() const {
+            if (!_type.check) {
+                return;
+            }
+            for (const auto &item : _expected) {
+                assert(_type.check(item) &&
+                       "an expected value of this argument is not of the type it declared");
+                (void) item;
+            }
+        }
+
         std::string _name;
         std::string _desc;
         std::string _display_name;
@@ -648,9 +688,17 @@ namespace stdc::cli {
         /// repeatable option is for.
         std::vector<std::string_view> rawValues(int index = 0) const;
 
-        /// The same, converted. A \c T the token cannot be read as gives a value initialized
-        /// \c T, which is why declaring the type on the Argument is worth doing: that turns a
-        /// mismatch into a parse error instead of a zero.
+        /// The same, converted, saying whether it could be. False for a token that is not a
+        /// \c T and for one that is not there, leaving \a out alone.
+        template <class T>
+        bool tryValue(T *out, int index = 0, int occurrence = 0) const {
+            auto raw = rawValue(index, occurrence);
+            return !raw.empty() && value_traits<T>::parse(raw, out);
+        }
+
+        /// The same again, for when the caller would rather read than check. A token that is not
+        /// a \c T gives a value initialized \c T, which is why declaring the type on the
+        /// Argument is worth doing: that turns a mismatch into a parse error instead of a zero.
         template <class T = std::string_view>
         T value(int index = 0, int occurrence = 0) const {
             T out{};
@@ -729,6 +777,19 @@ namespace stdc::cli {
         /// Every token the \a index'th positional argument took.
         std::vector<std::string_view> rawValues(int index) const;
 
+        /// Converted, saying whether it could be. False for a token that is not a \c T and for
+        /// one that is not there, leaving \a out alone.
+        ///
+        /// The conversion is the check: what an Argument declared through type<T>() was already
+        /// enforced while parsing, so what this catches is a caller reading with a different
+        /// \c T than was declared, which nothing can catch at compile time while the declared
+        /// type lives in the Argument rather than in the caller's template argument.
+        template <class T>
+        bool tryValue(T *out, int index) const {
+            auto raw = rawValue(index);
+            return !raw.empty() && value_traits<T>::parse(raw, out);
+        }
+
         template <class T = std::string_view>
         T value(int index) const {
             T out{};
@@ -768,17 +829,17 @@ namespace stdc::cli {
 
     /// Turns arguments into a ParseResult against a command tree.
     ///
-    /// \note Written to be spelled the way syscmdline is spelled, and it parses the same lines
-    ///       the same way but for three places, each of them a case syscmdline accepts and this
-    ///       refuses. They were measured against it rather than read out of it.
+    /// \note Three rules that a reader coming from the library named in \ref commandline.h will
+    ///       find are not the ones there. Each is a line that one accepts and this refuses, and
+    ///       each was measured rather than assumed.
     ///
-    ///       \li A subcommand is still found after an option that the root declared, so
-    ///           \c prog \c -V \c copy \c x reaches \c copy. syscmdline stops looking at the
-    ///           first option, which leaves a global option unusable in the place every program
-    ///           with one puts it. An option belonging to the subcommand rather than the root is
-    ///           still unknown in front of it, which is the case that ought to be refused.
-    ///       \li Positional tokens a command cannot take are TooManyArguments. syscmdline drops
-    ///           them without a word, so a mistyped subcommand is a silent success.
+    ///       \li A subcommand is still looked for after an option the root declared, so
+    ///           \c prog \c -V \c copy \c x reaches \c copy. Stopping at the first option would
+    ///           leave a global option unusable in the place every program with one puts it. An
+    ///           option belonging to the subcommand rather than to the root is still unknown in
+    ///           front of it, which is the case that ought to be refused.
+    ///       \li Positional tokens a command cannot take are an error rather than dropped. Where
+    ///           they are dropped, a mistyped subcommand is a silent success.
     ///       \li An option that needs a value will not take a token that is a declared option of
     ///           the same command, and says so instead. Anything else starting with a dash, a
     ///           negative number or a name nobody declared, is a value as it is there.
@@ -801,10 +862,9 @@ namespace stdc::cli {
             EnableResponseFile = 0x20,
         };
 
-        /// What the help text says beyond the necessary. The layout itself is fixed: prologue,
-        /// description, usage, arguments, options, commands, epilogue. syscmdline lets the order
-        /// be built up item by item, and the one program doing so uses it to restate the default
-        /// order and add an epilogue.
+        /// What the help text says beyond the necessary. The layout itself is fixed, being
+        /// prologue, description, usage, arguments, options, commands and epilogue in that order.
+        /// Building the order up item by item is what the prologue and epilogue are for.
         enum DisplayOption {
             Normal = 0,
             /// Say what an argument falls back to when it is not given.
@@ -831,6 +891,13 @@ namespace stdc::cli {
         Parser(Parser &&other) noexcept;
         Parser &operator=(Parser &&other) noexcept;
 
+        /// Replaces the tree, which a program normally does once by handing it to the
+        /// constructor instead.
+        ///
+        /// \note A ParseResult reads the tree it was parsed against, so this puts a new tree
+        ///       beside the old one rather than over it: results already handed out keep theirs
+        ///       alive and stay readable. What it does not do is change them. A result is an
+        ///       answer about the tree that was there when it was made.
         void setRootCommand(Command root);
         const Command &rootCommand() const;
 

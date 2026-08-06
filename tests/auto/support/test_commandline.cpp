@@ -1320,4 +1320,158 @@ BOOST_AUTO_TEST_CASE(test_a_tree_of_several_commands_reads_as_one_page) {
     BOOST_CHECK_EQUAL(ok(parser, {"deploy", "a", "b"}).command()->name(), "deploy");
 }
 
+// ---------------------------------------------------------------------------------------------
+// Degenerate trees and misuse
+//
+// Everything above describes a program using the library correctly, which is why none of it
+// noticed the defects this section is written for. Breaking a line on purpose says whether the
+// tests watch that line. It says nothing about a shape no test builds, and the mutations all
+// passed while these went unseen.
+// ---------------------------------------------------------------------------------------------
+
+BOOST_AUTO_TEST_CASE(test_an_option_with_no_spelling_is_ignored_rather_than_fatal) {
+    // token() is front() on a vector that a default constructed Option leaves empty, and the
+    // help text used to call it on every option there was.
+    //
+    // The catalogue is what makes this bite: the name of an option is asked for only while
+    // matching it against a group, so a tree without one never calls token() at all. That is
+    // also why a first attempt at this test passed with the defect still in.
+    CommandCatalogue catalogue;
+    catalogue.addOptions("Common Options", {"-f"});
+
+    Parser parser(Command("prog", "Something")
+                      .addOption(Option())
+                      .addOption(Option(Option::NoRole))
+                      .addOption(Option({"-f"}, "Force"))
+                      .setCatalogue(catalogue));
+
+    auto text = parser.parse(argv({})).helpText();
+    BOOST_CHECK(has(text, "Common Options:"));
+    BOOST_CHECK(has(text, "-f"));
+    BOOST_CHECK(has(text, "Force"));
+
+    // It parses too, and is simply not something that can be written.
+    BOOST_CHECK(ok(parser, {"-f"}).isOptionSet("-f"));
+    BOOST_CHECK(!ok(parser, {}).isOptionSet(""));
+}
+
+BOOST_AUTO_TEST_CASE(test_a_result_outlives_the_parse_and_the_tree_it_read) {
+    // The result holds pointers into the command tree, kept alive by sharing it. Handing the
+    // parser a new tree used to write over the old one, and every result already out was reading
+    // freed vectors.
+    Parser parser(Command("first").addCommand(
+        Command("copy").addArgument(Argument("src")).addOption(Option({"-f"}, "Force"))));
+
+    auto result = parser.parse(argv({"copy", "-f", "x"}));
+    BOOST_REQUIRE(result.isValid());
+    BOOST_CHECK_EQUAL(result.command()->name(), "copy");
+
+    Command replacement("second");
+    for (int i = 0; i < 64; ++i) {
+        replacement.addCommand(
+            Command("filler" + std::to_string(i)).addOption(Option({"-x" + std::to_string(i)})));
+    }
+    parser.setRootCommand(std::move(replacement));
+
+    // The old answer is still the old answer, about the tree it was an answer to.
+    BOOST_CHECK_EQUAL(result.command()->name(), "copy");
+    BOOST_CHECK_EQUAL(result.value(0), "x");
+    BOOST_CHECK(result.isOptionSet("-f"));
+    BOOST_CHECK(has(result.helpText(), "Force"));
+
+    // And the parser answers about the new one.
+    BOOST_CHECK_EQUAL(parser.rootCommand().name(), "second");
+    BOOST_CHECK(parser.parse(argv({"filler3"})).isValid());
+}
+
+BOOST_AUTO_TEST_CASE(test_a_result_outlives_the_parser) {
+    ParseResult result;
+    {
+        Parser parser(Command("prog").addArgument(Argument("path")));
+        result = parser.parse(argv({"x"}));
+    }
+    BOOST_REQUIRE(result.isValid());
+    BOOST_CHECK_EQUAL(result.command()->name(), "prog");
+    BOOST_CHECK_EQUAL(result.value(0), "x");
+}
+
+BOOST_AUTO_TEST_CASE(test_reading_with_a_type_the_argument_never_declared) {
+    // Nothing can catch this while compiling, because the declared type lives in the Argument
+    // and not in the caller's template argument. The conversion is the check.
+    Parser parser(Command("prog").addArgument(Argument("name")));
+    auto result = ok(parser, {"not-a-number"});
+
+    int number = 12345;
+    BOOST_CHECK(!result.tryValue(&number, 0));
+    // The out stays as it was, so a caller can keep whatever it had.
+    BOOST_CHECK_EQUAL(number, 12345);
+    // The reading form gives a value initialized one instead, which is why the checking form
+    // exists at all.
+    BOOST_CHECK_EQUAL(result.value<int>(0), 0);
+
+    // What is there and does convert answers true.
+    auto number_result = ok(Parser(Command("prog").addArgument(Argument("n"))), {"42"});
+    BOOST_CHECK(number_result.tryValue(&number, 0));
+    BOOST_CHECK_EQUAL(number, 42);
+
+    // An argument that was never given is false rather than zero, which the reading form cannot
+    // tell apart from a zero that was given.
+    Parser optional(Command("prog").addArgument(Argument("n").optional()));
+    BOOST_CHECK(!ok(optional, {}).tryValue(&number, 0));
+    BOOST_CHECK(ok(optional, {"0"}).tryValue(&number, 0));
+    BOOST_CHECK_EQUAL(number, 0);
+}
+
+BOOST_AUTO_TEST_CASE(test_the_checking_read_on_an_option) {
+    Parser parser(Command("prog").addOption(Option({"-n"}, "How many").arg("count")));
+
+    int number = 0;
+    BOOST_CHECK(!ok(parser, {}).option("-n").tryValue(&number));
+    BOOST_CHECK(!ok(parser, {"-n", "many"}).option("-n").tryValue(&number));
+    BOOST_CHECK(ok(parser, {"-n", "7"}).option("-n").tryValue(&number));
+    BOOST_CHECK_EQUAL(number, 7);
+}
+
+BOOST_AUTO_TEST_CASE(test_a_tree_with_nothing_in_it) {
+    // Every accessor answering something rather than walking off an end.
+    Parser parser;
+    BOOST_CHECK_EQUAL(parser.rootCommand().name(), "");
+
+    auto result = parser.parse({});
+    BOOST_CHECK(result.isValid());
+    BOOST_REQUIRE(result.command() != nullptr);
+    BOOST_CHECK(result.rawValue(0).empty());
+    BOOST_CHECK(result.rawValues(0).empty());
+    BOOST_CHECK(!result.isOptionSet("-f"));
+    BOOST_CHECK_EQUAL(result.option("-f").count(), 0);
+    BOOST_CHECK(result.option("-f").rawValues().empty());
+    BOOST_CHECK(!result.isRoleSet(Option::Help));
+    // NoRole is never set, whatever is in the tree, or every option would answer to it.
+    BOOST_CHECK(!result.isRoleSet(Option::NoRole));
+    BOOST_CHECK_EQUAL(result.invoke(-1), -1);
+    BOOST_CHECK(!result.helpText().empty());
+}
+
+BOOST_AUTO_TEST_CASE(test_a_command_with_no_name) {
+    // Nothing forbids it, so it has to come out the other side.
+    Parser parser(Command("").addArgument(Argument("path")));
+    auto result = ok(parser, {"x"});
+    BOOST_CHECK_EQUAL(result.value(0), "x");
+    BOOST_CHECK(has(result.helpText(), "Usage:"));
+}
+
+BOOST_AUTO_TEST_CASE(test_reading_a_result_that_failed) {
+    // A caller that forgets to check isValid still gets answers rather than a walk off an end.
+    Parser parser(Command("prog").addArgument(Argument("needed")));
+    auto result = parser.parse(argv({}));
+    BOOST_REQUIRE(!result.isValid());
+
+    BOOST_CHECK(result.rawValue(0).empty());
+    BOOST_CHECK(result.command() != nullptr);
+    BOOST_CHECK_EQUAL(result.invoke(-3), -3);
+    BOOST_CHECK(!result.errorText().empty());
+    // Help still renders, which is what a program prints when it says what went wrong.
+    BOOST_CHECK(has(result.helpText(), "Usage:"));
+}
+
 BOOST_AUTO_TEST_SUITE_END()

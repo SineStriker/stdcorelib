@@ -11,6 +11,8 @@
 #include <fstream>
 #include <unordered_map>
 
+#include <stdcorelib/console.h>
+
 namespace stdc::cli {
 
     namespace detail {
@@ -183,6 +185,13 @@ namespace stdc::cli {
             auto it = by_token.find(std::string(token));
             return it == by_token.end() ? nullptr : &options[it->second];
         }
+
+        /// The same, for the parser, which fills these in. Writing it out beats a const_cast
+        /// admitting the const above was never true of this data.
+        OptionData *findForWriting(std::string_view token) {
+            auto it = by_token.find(std::string(token));
+            return it == by_token.end() ? nullptr : &options[it->second];
+        }
     };
 
     namespace {
@@ -322,25 +331,28 @@ namespace stdc::cli {
     }
 
     void ParseResult::showHelp() const {
-        auto text = helpText();
-        std::fwrite(text.data(), 1, text.size(), stdout);
-        std::fflush(stdout);
+        // Through the library's own console rather than fwrite, so that one program does not
+        // talk to the terminal two different ways, and so a Windows console gets the transcoding
+        // it needs.
+        console::fputs(console::nostyle, console::nocolor, console::nocolor, helpText(), stdout);
     }
 
     void ParseResult::showError() const {
         if (isValid()) {
             return;
         }
-        std::string text = _impl->error_text + "\n";
+        // What went wrong is worth a color where there is one to be had, and console works out
+        // for itself whether stderr is somewhere escapes belong.
+        console::fputs(console::bold, console::red, console::nocolor, _impl->error_text + "\n",
+                       stderr);
         if (_impl->target) {
             std::string name;
             for (size_t i = 0; i < _impl->path.size(); ++i) {
                 name += (i ? " " : "") + _impl->path[i];
             }
-            text += "Try \"" + name + " --help\" for more information.\n";
+            console::fputs(console::nostyle, console::nocolor, console::nocolor,
+                           "Try \"" + name + " --help\" for more information.\n", stderr);
         }
-        std::fwrite(text.data(), 1, text.size(), stderr);
-        std::fflush(stderr);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -493,8 +505,17 @@ namespace stdc::cli {
             auto arguments = grouped(
                 command.arguments(), catalogue.argumentGroups(), "Arguments",
                 [](const Argument &item) { return item.name(); }, argument_line);
+            // An option with no spelling at all has nothing to print and nothing to be looked up
+            // by, and token() is front() on an empty vector. A default constructed Option is one,
+            // so a tree can hold one and the help text is not the place to find that out.
+            std::vector<Option> named;
+            for (const auto &item : command.options()) {
+                if (!item.tokens().empty()) {
+                    named.push_back(item);
+                }
+            }
             auto options = grouped(
-                command.options(), catalogue.optionGroups(), "Options",
+                named, catalogue.optionGroups(), "Options",
                 [](const Option &item) { return item.token(); }, option_line);
             auto commands = grouped(
                 command.commands(), catalogue.commandGroups(), "Commands",
@@ -597,8 +618,8 @@ namespace stdc::cli {
             void collectOptions();
             void readTokens();
             bool readOption(const std::string &token);
-            bool readOneOption(const OptionData *data, std::string_view inline_value);
-            const OptionData *lookup(std::string_view token) const;
+            bool readOneOption(OptionData *data, std::string_view inline_value);
+            OptionData *lookup(std::string_view token) const;
             bool readGroupedFlags(const std::string &token);
             void assignPositional();
             void applyDefaults();
@@ -708,11 +729,11 @@ namespace stdc::cli {
             }
         }
 
-        const OptionData *ParserCore::lookup(std::string_view token) const {
+        OptionData *ParserCore::lookup(std::string_view token) const {
             if (!on(Parser::IgnoreOptionCase)) {
-                return r->find(token);
+                return r->findForWriting(token);
             }
-            for (const auto &item : r->options) {
+            for (auto &item : r->options) {
                 for (const auto &spelling : item.option->tokens()) {
                     if (detail::equals_ignoring_case(spelling, token)) {
                         return &item;
@@ -752,8 +773,7 @@ namespace stdc::cli {
         /// Reads the arguments of one option occurrence, starting at \c pos. \a inline_value is
         /// what came after an equals sign or was joined to a short token, and stands in for the
         /// first argument when there is one.
-        bool ParserCore::readOneOption(const OptionData *data, std::string_view inline_value) {
-            auto mutable_data = const_cast<OptionData *>(data);
+        bool ParserCore::readOneOption(OptionData *data, std::string_view inline_value) {
             const Option *option = data->option;
 
             int limit = option->maxOccurrence();
@@ -814,7 +834,7 @@ namespace stdc::cli {
                 }
             }
 
-            mutable_data->occurrences.push_back(std::move(slots));
+            data->occurrences.push_back(std::move(slots));
             notePrior(option);
             return true;
         }
@@ -826,7 +846,7 @@ namespace stdc::cli {
             }
             // Every letter has to be an option of its own that wants no value, or the whole
             // token is something else and is left alone.
-            std::vector<const OptionData *> found;
+            std::vector<OptionData *> found;
             for (size_t i = 1; i < token.size(); ++i) {
                 auto data = lookup(std::string("-") + token[i]);
                 if (!data || !data->option->arguments().empty()) {
@@ -863,7 +883,7 @@ namespace stdc::cli {
 
             // A short option with its value stuck to it, which only an option with exactly one
             // required argument can be.
-            for (const auto &item : r->options) {
+            for (auto &item : r->options) {
                 const Option *option = item.option;
                 if (option->shortMatch() == Option::NoShortMatch ||
                     option->arguments().size() != 1 || !option->arguments().front().isRequired()) {
@@ -1070,10 +1090,9 @@ namespace stdc::cli {
             // An option that stands in for an empty command line, which is what makes a bare
             // command print its help rather than complain.
             if (!prior_option && tokens.empty()) {
-                for (const auto &item : r->options) {
+                for (auto &item : r->options) {
                     if (item.option->prior() == Option::AutoSetWhenNoSymbols) {
-                        const_cast<OptionData &>(item).occurrences.emplace_back(
-                            item.option->arguments().size());
+                        item.occurrences.emplace_back(item.option->arguments().size());
                         prior_option = item.option;
                         break;
                     }
@@ -1106,7 +1125,7 @@ namespace stdc::cli {
     }
 
     Parser::Parser(Command root) : _impl(std::make_unique<Impl>()) {
-        *_impl->root = std::move(root);
+        _impl->root = std::make_shared<Command>(std::move(root));
     }
 
     Parser::~Parser() = default;
@@ -1116,7 +1135,10 @@ namespace stdc::cli {
     Parser &Parser::operator=(Parser &&other) noexcept = default;
 
     void Parser::setRootCommand(Command root) {
-        *_impl->root = std::move(root);
+        // A new tree rather than new contents for the old one. Every ParseResult already handed
+        // out shares this pointer and holds raw pointers into what it addresses, so assigning
+        // through it leaves them all reading freed vectors.
+        _impl->root = std::make_shared<Command>(std::move(root));
     }
 
     const Command &Parser::rootCommand() const {
