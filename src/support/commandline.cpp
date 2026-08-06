@@ -325,6 +325,8 @@ namespace stdc::cli {
             /// The highest priority option given, which is what decides whether the checks at
             /// the end are worth making.
             const Option *prior_option = nullptr;
+            /// The globals of every command walked through, which stay in scope below.
+            std::vector<const Option *> inherited;
             bool saw_terminator = false;
 
             bool on(int flag) const {
@@ -341,7 +343,8 @@ namespace stdc::cli {
             }
 
             void expandResponseFiles();
-            void descend();
+            const Command *subcommandFor(const std::string &token) const;
+            void enter(const Command *next);
             void collectOptions();
             void readTokens();
             bool readOption(const std::string &token);
@@ -402,43 +405,57 @@ namespace stdc::cli {
             tokens = std::move(out);
         }
 
-        void ParserCore::descend() {
-            r->path.push_back(r->target->name());
-            while (pos < tokens.size()) {
-                const auto &token = tokens[pos];
-                if (looksLikeOption(token)) {
-                    break;
+        /// The subcommand \a token names, or null. Only worth asking before the first positional
+        /// token, since after that a name is a value.
+        const Command *ParserCore::subcommandFor(const std::string &token) const {
+            if (!positional.empty() || saw_terminator) {
+                return nullptr;
+            }
+            for (const auto &candidate : r->target->commands()) {
+                if (same_token(candidate.name(), token, on(Parser::IgnoreCommandCase))) {
+                    return &candidate;
                 }
-                const Command *next = nullptr;
-                for (const auto &candidate : r->target->commands()) {
-                    if (same_token(candidate.name(), token, on(Parser::IgnoreCommandCase))) {
-                        next = &candidate;
+            }
+            return nullptr;
+        }
+
+        /// Moves into \a next, keeping whatever the command being left declared global.
+        void ParserCore::enter(const Command *next) {
+            for (const auto &option : r->target->options()) {
+                if (option.isGlobal()) {
+                    inherited.push_back(&option);
+                }
+            }
+            r->target = next;
+            r->path.push_back(next->name());
+            collectOptions();
+        }
+
+        /// What can be written from here: this command's own options, plus the globals of every
+        /// command above it. An option of a command already left behind is not matched again,
+        /// though whatever it collected on the way stays readable.
+        void ParserCore::collectOptions() {
+            r->by_token.clear();
+            auto add = [this](const Option *option) {
+                size_t index = r->options.size();
+                for (size_t i = 0; i < r->options.size(); ++i) {
+                    if (r->options[i].option == option) {
+                        index = i;
                         break;
                     }
                 }
-                if (!next) {
-                    break;
+                if (index == r->options.size()) {
+                    r->options.push_back({option, {}});
                 }
-                // Whatever the command being left declared as global stays in scope.
-                for (const auto &option : r->target->options()) {
-                    if (option.isGlobal()) {
-                        r->options.push_back({&option, {}});
-                    }
+                for (const auto &spelling : option->tokens()) {
+                    r->by_token[spelling] = index;
                 }
-                r->target = next;
-                r->path.push_back(next->name());
-                ++pos;
-            }
-        }
-
-        void ParserCore::collectOptions() {
+            };
             for (const auto &option : r->target->options()) {
-                r->options.push_back({&option, {}});
+                add(&option);
             }
-            for (size_t i = 0; i < r->options.size(); ++i) {
-                for (const auto &spelling : r->options[i].option->tokens()) {
-                    r->by_token.emplace(spelling, i);
-                }
+            for (auto option : inherited) {
+                add(option);
             }
         }
 
@@ -518,13 +535,14 @@ namespace stdc::cli {
                 bool took_any = false;
                 while (pos < tokens.size()) {
                     const auto &token = tokens[pos];
-                    bool is_option = looksLikeOption(token) && lookup(token) != nullptr;
-                    // A required argument takes whatever is next. An optional one keeps its
-                    // hands off anything that is somebody else's option.
-                    if (is_option && (took_any || !argument.isRequired())) {
-                        break;
-                    }
-                    if (is_option && argument.isRequired() && !took_any) {
+                    // A token that is somebody's option is never quietly eaten as a value, not
+                    // even by an argument that has to have one. Saying "-o needs a value" is
+                    // worth more than taking --force and leaving the reader to work out where
+                    // it went. Writing -o=--force or putting -- first is how it is forced.
+                    //
+                    // Only a declared option counts, so a negative number is a value like any
+                    // other rather than an option nobody has heard of.
+                    if (looksLikeOption(token) && lookup(token) != nullptr) {
                         break;
                     }
                     if (!accepts(argument, token, where)) {
@@ -644,6 +662,14 @@ namespace stdc::cli {
                 if (looksLikeOption(token)) {
                     ++pos;
                     readOption(token);
+                    continue;
+                }
+                // A subcommand is looked for here rather than in a pass of its own, so that the
+                // global options a command line puts in front of one are read against the
+                // command that declared them.
+                if (auto next = subcommandFor(token)) {
+                    ++pos;
+                    enter(next);
                     continue;
                 }
                 positional.push_back(token);
@@ -776,7 +802,7 @@ namespace stdc::cli {
                 }
             }
 
-            descend();
+            r->path.push_back(r->target->name());
             collectOptions();
             readTokens();
             if (failed()) {

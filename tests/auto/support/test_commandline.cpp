@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 #include <stdcorelib/support/commandline.h>
@@ -800,6 +802,232 @@ BOOST_AUTO_TEST_CASE(test_typed_reads) {
     BOOST_CHECK_EQUAL(result.valueForOption<int>("-n"), 9);
     // The untyped read is the text, which is what everything is stored as.
     BOOST_CHECK_EQUAL(result.value(0), "1");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Edges, taken from what CLI11, argparse and argtable3 test their own parsers with. Their
+// semantics are not ours, so what is borrowed is the question each case asks rather than the
+// answer it expects.
+// ---------------------------------------------------------------------------------------------
+
+// CLI11's DashedOptions and FlagLikeOption ask what happens to a value that looks like a switch.
+BOOST_AUTO_TEST_CASE(test_a_value_that_looks_like_an_option) {
+    Parser parser(Command("prog")
+                      .addOption(Option({"-o"}, "Out").arg("dir"))
+                      .addOption(Option({"-f"}, "Force")));
+
+    // A declared option is never quietly taken as somebody else's value. The complaint names
+    // the option that went without, which beats swallowing -f and saying nothing.
+    bad(parser, {"-o", "-f"}, ParseResult::MissingOptionArgument);
+
+    // Joined to it, it is a value like any other.
+    BOOST_CHECK_EQUAL(ok(parser, {"-o=-f"}).valueForOption("-o"), "-f");
+
+    // So is anything that merely looks like an option without being one. A negative number is
+    // the case this matters for.
+    BOOST_CHECK_EQUAL(ok(parser, {"-o", "-5"}).valueForOption("-o"), "-5");
+    BOOST_CHECK_EQUAL(ok(parser, {"-o", "-nonsense"}).valueForOption("-o"), "-nonsense");
+}
+
+// CLI11's ForcedPositional, pushed further than the first case in this file does.
+BOOST_AUTO_TEST_CASE(test_what_survives_the_terminator) {
+    Parser parser(Command("prog")
+                      .addArgument(Argument("rest").multi().optional())
+                      .addOption(Option({"-f"}, "Force")));
+
+    // A second one is no longer special.
+    auto twice = ok(parser, {"--", "--", "-f"});
+    BOOST_CHECK(twice.values(0) == std::vector<std::string_view>({"--", "-f"}));
+    BOOST_CHECK(!twice.isOptionSet("-f"));
+
+    // On its own it leaves nothing behind.
+    auto alone = ok(parser, {"--"});
+    BOOST_CHECK(alone.values(0).empty());
+}
+
+// argparse asks this one about equals signs inside values.
+BOOST_AUTO_TEST_CASE(test_only_the_first_equals_sign_splits) {
+    Parser parser(Command("prog").addOption(Option({"-D", "--define"}, "Define").arg("expr")));
+
+    BOOST_CHECK_EQUAL(ok(parser, {"--define=KEY=VALUE"}).valueForOption("-D"), "KEY=VALUE");
+    BOOST_CHECK_EQUAL(ok(parser, {"--define="}).valueForOption("-D"), "");
+    // A whole token with nothing before the sign is not an option anybody declared.
+    bad(parser, {"=value"}, ParseResult::TooManyArguments);
+}
+
+// CLI11 has several tests about one option name being the start of another.
+BOOST_AUTO_TEST_CASE(test_one_option_being_a_prefix_of_another) {
+    Parser parser(Command("prog").addOptions({
+        Option({"--out"}, "Out").arg("dir"),
+        Option({"--output"}, "Output").arg("file"),
+    }));
+
+    // The whole token is tried before anything is taken apart, so the longer name is reachable.
+    BOOST_CHECK_EQUAL(ok(parser, {"--output", "a"}).valueForOption("--output"), "a");
+    BOOST_CHECK_EQUAL(ok(parser, {"--out", "b"}).valueForOption("--out"), "b");
+    BOOST_CHECK(!ok(parser, {"--output", "a"}).isOptionSet("--out"));
+}
+
+// argtable3 tests the count of a repeatable flag rather than its values.
+BOOST_AUTO_TEST_CASE(test_counting_a_flag_that_carries_nothing) {
+    Parser parser(Command("prog").addOption(Option({"-v"}, "More talk").multi()));
+
+    BOOST_CHECK_EQUAL(ok(parser, {}).option("-v").count(), 0);
+    BOOST_CHECK_EQUAL(ok(parser, {"-v"}).option("-v").count(), 1);
+    BOOST_CHECK_EQUAL(ok(parser, {"-v", "-v", "-v"}).option("-v").count(), 3);
+    // Asking about one that was never declared is empty rather than a crash.
+    BOOST_CHECK_EQUAL(ok(parser, {}).option("-q").count(), 0);
+    BOOST_CHECK(ok(parser, {}).option("-q").option() == nullptr);
+}
+
+// CLI11's ExpectedRange cases, in the shape our arities give them.
+BOOST_AUTO_TEST_CASE(test_how_few_and_how_many_a_multi_argument_takes) {
+    Parser parser(Command("prog").addArgument(Argument("files").multi()));
+
+    bad(parser, {}, ParseResult::MissingCommandArgument);
+    BOOST_CHECK_EQUAL(ok(parser, {"one"}).values(0).size(), 1u);
+    BOOST_CHECK_EQUAL(ok(parser, {"a", "b", "c", "d", "e"}).values(0).size(), 5u);
+
+    // An optional one is content with nothing.
+    Parser lenient(Command("prog").addArgument(Argument("files").multi().optional()));
+    BOOST_CHECK(ok(lenient, {}).values(0).empty());
+}
+
+// Two multi arguments in a row, which is the case that shows the reservation rule is counting
+// required arguments rather than arguments.
+BOOST_AUTO_TEST_CASE(test_two_greedy_arguments_in_a_row) {
+    Parser parser(Command("prog").addArguments({
+        Argument("first").multi(),
+        Argument("second").multi().optional(),
+    }));
+
+    // The first is greedy and the second is not required, so the first takes the lot.
+    auto result = ok(parser, {"a", "b", "c"});
+    BOOST_CHECK_EQUAL(result.values(0).size(), 3u);
+    BOOST_CHECK(result.values(1).empty());
+}
+
+// Options and positionals interleaved, which every one of the three suites checks somewhere.
+BOOST_AUTO_TEST_CASE(test_options_may_come_anywhere) {
+    Parser parser(Command("prog")
+                      .addArguments({Argument("a"), Argument("b")})
+                      .addOption(Option({"-f"}, "Force"))
+                      .addOption(Option({"-o"}, "Out").arg("dir")));
+
+    for (auto args : {
+             std::vector<std::string>{"-f",  "one", "two"},
+             std::vector<std::string>{"one", "-f",  "two"},
+             std::vector<std::string>{"one", "two", "-f" }
+    }) {
+        auto full = argv({});
+        full.insert(full.end(), args.begin(), args.end());
+        auto result = parser.parse(full);
+        BOOST_REQUIRE_MESSAGE(result.isValid(), result.errorText());
+        BOOST_CHECK(result.isOptionSet("-f"));
+        BOOST_CHECK_EQUAL(result.value(0), "one");
+        BOOST_CHECK_EQUAL(result.value(1), "two");
+    }
+
+    // An option's value is its own and is not counted as a positional.
+    auto result = ok(parser, {"one", "-o", "dir", "two"});
+    BOOST_CHECK_EQUAL(result.value(1), "two");
+    BOOST_CHECK_EQUAL(result.valueForOption("-o"), "dir");
+}
+
+// A subcommand name that is also a value, which CLI11 tests as a fallthrough question.
+BOOST_AUTO_TEST_CASE(test_a_subcommand_name_used_as_a_value) {
+    Parser parser(Command("prog")
+                      .addOption(Option({"-o"}, "Out").arg("dir"))
+                      .addCommand(Command("copy").addArgument(Argument("src"))));
+
+    // A command is only looked for where a command can be, which is before anything else.
+    auto result = ok(parser, {"copy", "copy"});
+    BOOST_CHECK_EQUAL(result.command()->name(), "copy");
+    BOOST_CHECK_EQUAL(result.value(0), "copy");
+
+    // An option in front of it does not stop the descent. The global is read against the root,
+    // which declared it, and the subcommand is still reached.
+    Parser global(Command("prog")
+                      .addOption(Option({"-V"}, "Verbose").global())
+                      .addCommand(Command("copy").addArgument(Argument("src"))));
+    auto after = ok(global, {"-V", "copy", "x"});
+    BOOST_CHECK_EQUAL(after.command()->name(), "copy");
+    BOOST_CHECK(after.isOptionSet("-V"));
+    BOOST_CHECK_EQUAL(after.value(0), "x");
+
+    // Once a value has been taken, a name is a value and not a command any more. Without that
+    // rule a program could never be given a file that happens to share a subcommand's name.
+    Parser positional(
+        Command("prog").addArguments({Argument("a"), Argument("b")}).addCommand(Command("copy")));
+    auto late = ok(positional, {"x", "copy"});
+    BOOST_CHECK_EQUAL(late.command()->name(), "prog");
+    BOOST_CHECK_EQUAL(late.value(1), "copy");
+
+    // Nor after a terminator, where nothing is a command.
+    auto forced = ok(positional, {"--", "copy", "x"});
+    BOOST_CHECK_EQUAL(forced.command()->name(), "prog");
+    BOOST_CHECK_EQUAL(forced.value(0), "copy");
+}
+
+// Short matching carries exactly one value, so it is offered only to an option that wants
+// exactly one and has to have it. Anything else would set half an option and leave the rest to
+// be discovered as a missing argument somewhere further on.
+BOOST_AUTO_TEST_CASE(test_short_matching_needs_one_required_argument) {
+    Parser two(Command("prog").addOption(
+        Option({"-o"}, "Two values").arg("a").arg("b").short_match(Option::ShortMatchAll)));
+    bad(two, {"-oX"}, ParseResult::UnknownOption);
+    // Written out it is fine.
+    BOOST_CHECK(ok(two, {"-o", "X", "Y"}).isOptionSet("-o"));
+
+    Parser optional(Command("prog").addOption(
+        Option({"-p"}, "Maybe a value").arg("v", false).short_match(Option::ShortMatchAll)));
+    bad(optional, {"-pX"}, ParseResult::UnknownOption);
+
+    Parser none(Command("prog").addOption(
+        Option({"-f"}, "No value at all").short_match(Option::ShortMatchAll)));
+    bad(none, {"-fX"}, ParseResult::UnknownOption);
+}
+
+BOOST_AUTO_TEST_CASE(test_response_files) {
+    auto path = std::filesystem::temp_directory_path() / "stdc_cli_response.txt";
+    {
+        std::ofstream file(path);
+        file << "-f\n"
+             << "one\n"
+             << "\n"          // blank lines are nothing
+             << "--out=dir\n" // and a joined value survives the trip
+             << "two\n";
+    }
+
+    Parser parser(Command("prog")
+                      .addArguments({Argument("a"), Argument("b")})
+                      .addOption(Option({"-f"}, "Force"))
+                      .addOption(Option({"--out"}, "Out").arg("dir")));
+
+    auto result = ok(parser, {"@" + path.string()}, Parser::EnableResponseFile);
+    BOOST_CHECK(result.isOptionSet("-f"));
+    BOOST_CHECK_EQUAL(result.value(0), "one");
+    BOOST_CHECK_EQUAL(result.value(1), "two");
+    BOOST_CHECK_EQUAL(result.valueForOption("--out"), "dir");
+
+    // Off by default, where the token is taken at face value instead of read as a file name.
+    auto literal = ok(parser, {"@" + path.string(), "x"});
+    BOOST_CHECK_EQUAL(literal.value(0), "@" + path.string());
+    BOOST_CHECK_EQUAL(literal.value(1), "x");
+
+    // A file that is not there is said so rather than passed along.
+    bad(parser, {"@no_such_response_file.txt"}, ParseResult::ErrorReadingResponseFile,
+        Parser::EnableResponseFile);
+
+    std::filesystem::remove(path);
+}
+
+BOOST_AUTO_TEST_CASE(test_an_empty_command_line_is_not_an_error_by_itself) {
+    // Nothing declared, nothing given, nothing wrong. argparse tests this one because it is easy
+    // to write a parser that trips over it.
+    Parser parser(Command("prog"));
+    BOOST_CHECK(parser.parse({}).isValid());
+    BOOST_CHECK(parser.parse({"prog"}).isValid());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
