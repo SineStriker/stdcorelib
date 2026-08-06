@@ -872,8 +872,10 @@ namespace stdc::cli {
 
         ParseResult parse(const std::vector<std::string> &args, int parseOptions = Standard) const;
         /// Parses and runs the handler that was reached, which is what a \c main wants.
-        int invoke(const std::vector<std::string> &args, int errorCode = -1,
-                   int parseOptions = Standard) const;
+        inline int invoke(const std::vector<std::string> &args, int errorCode = -1,
+                          int parseOptions = Standard) const {
+            return parse(args, parseOptions).invoke(errorCode);
+        }
 
     private:
         class Impl;

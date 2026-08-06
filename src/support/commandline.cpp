@@ -1198,9 +1198,4 @@ namespace stdc::cli {
         return result;
     }
 
-    int Parser::invoke(const std::vector<std::string> &args, int errorCode,
-                       int parseOptions) const {
-        return parse(args, parseOptions).invoke(errorCode);
-    }
-
 }
