@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -60,6 +61,10 @@ namespace stdc::cli {
         value_type_info type_info_for() {
             return {&check_value<T>, value_traits<T>::type_name()};
         }
+
+        /// Everything a ParseResult holds, which is only ever touched by the parser and by the
+        /// result's own accessors.
+        class parse_data;
 
         STDC_EXPORT bool parse_signed(std::string_view token, int64_t *out, int64_t min,
                                       int64_t max);
@@ -583,6 +588,181 @@ namespace stdc::cli {
         std::vector<Command> _commands;
         Handler _handler;
         CommandCatalogue _catalogue;
+    };
+
+    /// What one option's occurrences came to. Handed out by ParseResult rather than built.
+    class STDC_EXPORT OptionResult {
+    public:
+        /// How many times the option was given.
+        int count() const;
+        inline bool isSet() const {
+            return count() > 0;
+        }
+        /// The option itself, or null when it was never declared.
+        const Option *option() const;
+
+        /// The \a index'th argument of the \a occurrence'th appearance, as text. Empty when
+        /// there is no such thing, which a default value has already been substituted into.
+        std::string_view rawValue(int index = 0, int occurrence = 0) const;
+
+        /// Every value the \a index'th argument took, across every occurrence. This is what a
+        /// repeatable option is for.
+        std::vector<std::string_view> rawValues(int index = 0) const;
+
+        /// The same, converted. A \c T the token cannot be read as gives a value initialized
+        /// \c T, which is why declaring the type on the Argument is worth doing: that turns a
+        /// mismatch into a parse error instead of a zero.
+        template <class T = std::string_view>
+        T value(int index = 0, int occurrence = 0) const {
+            T out{};
+            value_traits<T>::parse(rawValue(index, occurrence), &out);
+            return out;
+        }
+        template <class T = std::string_view>
+        std::vector<T> values(int index = 0) const {
+            std::vector<T> out;
+            for (auto raw : rawValues(index)) {
+                T item{};
+                value_traits<T>::parse(raw, &item);
+                out.push_back(std::move(item));
+            }
+            return out;
+        }
+
+    private:
+        friend class ParseResult;
+        inline OptionResult(const void *data) : _data(data) {
+        }
+        const void *_data;
+    };
+
+    /// What a command line turned out to mean, or why it did not.
+    class STDC_EXPORT ParseResult {
+    public:
+        enum Error {
+            NoError,
+            UnknownOption,
+            UnknownCommand,
+            MissingOptionArgument,
+            MissingCommandArgument,
+            TooManyArguments,
+            InvalidArgumentValue,
+            MissingRequiredOption,
+            OptionOccurTooMuch,
+            ArgumentTypeMismatch,
+            ArgumentValidateFailed,
+            PriorOptionWithArguments,
+            PriorOptionWithOptions,
+            ErrorReadingResponseFile,
+        };
+
+        ParseResult();
+        ParseResult(const ParseResult &other);
+        ParseResult(ParseResult &&other) noexcept;
+        ParseResult &operator=(const ParseResult &other);
+        ParseResult &operator=(ParseResult &&other) noexcept;
+        ~ParseResult();
+
+        inline bool isValid() const {
+            return error() == NoError;
+        }
+        Error error() const;
+        /// A sentence naming what went wrong and where, ready to be printed.
+        const std::string &errorText() const;
+
+        /// The command the tokens led to, which is the root when no subcommand was named.
+        const Command *command() const;
+        /// The names walked through to reach it, the root's first.
+        const std::vector<std::string> &commandPath() const;
+
+        /// Runs the handler of the command that was reached. \a errorCode is returned instead
+        /// when the parse failed or the command has no handler.
+        int invoke(int errorCode = -1) const;
+
+        bool isOptionSet(std::string_view token) const;
+        /// Whether an option carrying \a role was given. What \c --help was spelled as is then
+        /// no concern of the caller's.
+        bool isRoleSet(Option::Role role) const;
+        OptionResult option(std::string_view token) const;
+
+        /// The \a index'th positional argument of the command that was reached, as text.
+        std::string_view rawValue(int index) const;
+        /// Every token the \a index'th positional argument took.
+        std::vector<std::string_view> rawValues(int index) const;
+
+        template <class T = std::string_view>
+        T value(int index) const {
+            T out{};
+            value_traits<T>::parse(rawValue(index), &out);
+            return out;
+        }
+        template <class T = std::string_view>
+        std::vector<T> values(int index) const {
+            std::vector<T> out;
+            for (auto raw : rawValues(index)) {
+                T item{};
+                value_traits<T>::parse(raw, &item);
+                out.push_back(std::move(item));
+            }
+            return out;
+        }
+
+        /// The first argument of \a token's first occurrence, which is what an option carrying
+        /// one value is usually asked for.
+        template <class T = std::string_view>
+        T valueForOption(std::string_view token) const {
+            return option(token).value<T>();
+        }
+
+    private:
+        friend class Parser;
+        std::shared_ptr<detail::parse_data> _impl;
+    };
+
+    /// Turns arguments into a ParseResult against a command tree.
+    class STDC_EXPORT Parser {
+    public:
+        /// What the tokenizer will accept beyond the usual.
+        enum ParseOption {
+            Standard = 0,
+            /// Subcommand names match without regard to case.
+            IgnoreCommandCase = 0x1,
+            /// Option tokens match without regard to case.
+            IgnoreOptionCase = 0x2,
+            /// \c -abc means \c -a \c -b \c -c.
+            AllowUnixGroupFlags = 0x4,
+            /// \c /f is another way of writing \c -f.
+            AllowDosShortOptions = 0x8,
+            /// A single dash starts nothing.
+            DontAllowUnixShortOptions = 0x10,
+            /// \c @file is replaced by the lines of that file.
+            EnableResponseFile = 0x20,
+        };
+
+        Parser();
+        explicit Parser(Command root);
+        ~Parser();
+
+        Parser(const Parser &other) = delete;
+        Parser &operator=(const Parser &other) = delete;
+
+        void setRootCommand(Command root);
+        const Command &rootCommand() const;
+
+        /// Printed above and below the help text.
+        void setPrologue(std::string text);
+        const std::string &prologue() const;
+        void setEpilogue(std::string text);
+        const std::string &epilogue() const;
+
+        ParseResult parse(const std::vector<std::string> &args, int parseOptions = Standard) const;
+        /// Parses and runs the handler that was reached, which is what a \c main wants.
+        int invoke(const std::vector<std::string> &args, int errorCode = -1,
+                   int parseOptions = Standard) const;
+
+    private:
+        class Impl;
+        std::unique_ptr<Impl> _impl;
     };
 
 }

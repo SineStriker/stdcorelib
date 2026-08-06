@@ -402,4 +402,404 @@ BOOST_AUTO_TEST_CASE(test_a_command_tree_copies_whole) {
     BOOST_CHECK_EQUAL(copy.options().size(), 2u);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Parsing
+// ---------------------------------------------------------------------------------------------
+
+namespace {
+
+    /// The program name the shell puts in front, which the parser is expected to step over.
+    std::vector<std::string> argv(std::initializer_list<std::string> rest) {
+        std::vector<std::string> res{"prog"};
+        res.insert(res.end(), rest.begin(), rest.end());
+        return res;
+    }
+
+    /// A parse that is expected to succeed, so that a failing one says why rather than blowing
+    /// up somewhere further down.
+    ParseResult ok(const Parser &parser, std::initializer_list<std::string> args,
+                   int flags = Parser::Standard) {
+        auto result = parser.parse(argv(args), flags);
+        BOOST_REQUIRE_MESSAGE(result.isValid(), result.errorText());
+        return result;
+    }
+
+    ParseResult bad(const Parser &parser, std::initializer_list<std::string> args,
+                    ParseResult::Error expected, int flags = Parser::Standard) {
+        auto result = parser.parse(argv(args), flags);
+        BOOST_REQUIRE_MESSAGE(!result.isValid(), "expected a failure, got a clean parse");
+        BOOST_CHECK_EQUAL(int(result.error()), int(expected));
+        // Whatever went wrong, it has to be sayable.
+        BOOST_CHECK_MESSAGE(!result.errorText().empty(), "the failure came with nothing to print");
+        return result;
+    }
+
+}
+
+BOOST_AUTO_TEST_CASE(test_parse_bare_command) {
+    Parser parser(Command("prog", "A program"));
+    auto result = ok(parser, {});
+    BOOST_REQUIRE(result.command() != nullptr);
+    BOOST_CHECK_EQUAL(result.command()->name(), "prog");
+    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog"}));
+}
+
+BOOST_AUTO_TEST_CASE(test_positional_arguments) {
+    Parser parser(Command("prog").addArguments({Argument("src"), Argument("dest")}));
+
+    auto result = ok(parser, {"a", "b"});
+    BOOST_CHECK_EQUAL(result.value(0), "a");
+    BOOST_CHECK_EQUAL(result.value(1), "b");
+
+    // Reading past the end is empty rather than a crash, which is what lets a caller read an
+    // optional argument without asking first.
+    BOOST_CHECK_EQUAL(result.value(2), "");
+    BOOST_CHECK_EQUAL(result.value(-1), "");
+
+    bad(parser, {"a"}, ParseResult::MissingCommandArgument);
+    bad(parser, {"a", "b", "c"}, ParseResult::TooManyArguments);
+}
+
+BOOST_AUTO_TEST_CASE(test_a_multi_argument_leaves_room_for_what_follows) {
+    // copy <src>... <dest>, which only works if the greedy one stops one short.
+    Parser parser(
+        Parser(Command("prog").addArguments({Argument("src").multi(), Argument("dest")})));
+
+    auto result = ok(parser, {"one", "two", "three", "out"});
+    BOOST_CHECK(result.values(0) == std::vector<std::string_view>({"one", "two", "three"}));
+    BOOST_CHECK_EQUAL(result.value(1), "out");
+
+    // Two tokens is one each.
+    auto pair = ok(parser, {"one", "out"});
+    BOOST_CHECK(pair.values(0) == std::vector<std::string_view>({"one"}));
+    BOOST_CHECK_EQUAL(pair.value(1), "out");
+
+    bad(parser, {"only"}, ParseResult::MissingCommandArgument);
+}
+
+BOOST_AUTO_TEST_CASE(test_remainder_takes_everything_left) {
+    Parser parser(Command("prog").addArguments(
+        {Argument("script"), Argument("args").nargs(Argument::Remainder).optional()}));
+
+    auto result = ok(parser, {"run.sh", "one", "two"});
+    BOOST_CHECK_EQUAL(result.value(0), "run.sh");
+    BOOST_CHECK(result.values(1) == std::vector<std::string_view>({"one", "two"}));
+}
+
+BOOST_AUTO_TEST_CASE(test_default_value_stands_in) {
+    Parser parser(Command("prog").addArgument(
+        Argument("level", "How loud", false).default_value("3").type<int>()));
+
+    BOOST_CHECK_EQUAL(ok(parser, {}).value<int>(0), 3);
+    BOOST_CHECK_EQUAL(ok(parser, {"7"}).value<int>(0), 7);
+}
+
+BOOST_AUTO_TEST_CASE(test_options_in_their_several_spellings) {
+    Parser parser(
+        Command("prog").addOptions({Option({"-f", "--force"}, "Force"),
+                                    Option({"-o", "--out"}, "Where to write").arg("dir")}));
+
+    BOOST_CHECK(ok(parser, {"-f"}).isOptionSet("-f"));
+    // Any spelling is the same option, whichever was typed and whichever is asked for.
+    BOOST_CHECK(ok(parser, {"--force"}).isOptionSet("-f"));
+    BOOST_CHECK(ok(parser, {"-f"}).isOptionSet("--force"));
+    BOOST_CHECK(!ok(parser, {}).isOptionSet("-f"));
+
+    BOOST_CHECK_EQUAL(ok(parser, {"-o", "build"}).valueForOption("-o"), "build");
+    BOOST_CHECK_EQUAL(ok(parser, {"--out=build"}).valueForOption("--out"), "build");
+
+    bad(parser, {"-x"}, ParseResult::UnknownOption);
+    bad(parser, {"-o"}, ParseResult::MissingOptionArgument);
+    // An option that takes nothing cannot be given something.
+    bad(parser, {"--force=yes"}, ParseResult::UnknownOption);
+}
+
+BOOST_AUTO_TEST_CASE(test_repeated_options) {
+    Parser parser(Command("prog").addOptions({
+        Option({"-e", "--exclude"}, "Exclude").arg("pattern").multi(),
+        Option({"-f"}, "Force"),
+    }));
+
+    auto result = ok(parser, {"-e", "a", "-e", "b", "-e", "c"});
+    BOOST_CHECK_EQUAL(result.option("-e").count(), 3);
+    BOOST_CHECK(result.option("-e").rawValues() == std::vector<std::string_view>({"a", "b", "c"}));
+    // Each occurrence is still reachable on its own.
+    BOOST_CHECK_EQUAL(result.option("-e").rawValue(0, 1), "b");
+
+    // One that did not say it repeats does not.
+    bad(parser, {"-f", "-f"}, ParseResult::OptionOccurTooMuch);
+}
+
+BOOST_AUTO_TEST_CASE(test_short_match_joins_a_value_to_its_option) {
+    Parser parser(Command("prog").addOptions({
+        Option({"-D", "--define"}, "Define")
+            .arg("expr")
+            .multi()
+            .short_match(Option::ShortMatchSingleChar),
+        Option({"-p"}, "Plain").arg("value"),
+    }));
+
+    auto result = ok(parser, {"-DKEY=VALUE"});
+    BOOST_CHECK_EQUAL(result.valueForOption("-D"), "KEY=VALUE");
+
+    // Separately still works, and both forms mix.
+    auto mixed = ok(parser, {"-D", "A=1", "-DB=2"});
+    BOOST_CHECK(mixed.option("-D").rawValues() == std::vector<std::string_view>({"A=1", "B=2"}));
+
+    // An option that did not ask for short matching does not get it.
+    bad(parser, {"-pvalue"}, ParseResult::UnknownOption);
+}
+
+BOOST_AUTO_TEST_CASE(test_short_match_rules_differ) {
+    auto build = [](Option::ShortMatch rule) {
+        return Parser(Command("prog").addOption(
+            Option({"-1", "--one"}, "Numeric token").arg("value").short_match(rule)));
+    };
+
+    // A single letter means a letter, so an option spelled with a digit is not matched.
+    BOOST_CHECK(!build(Option::ShortMatchSingleLetter).parse(argv({"-1x"})).isValid());
+    // A single character does not care what the character is.
+    BOOST_CHECK(build(Option::ShortMatchSingleChar).parse(argv({"-1x"})).isValid());
+
+    // A longer token only matches under the rule that allows any length.
+    Parser strict(Command("prog").addOption(
+        Option({"--jobs"}, "How many").arg("n").short_match(Option::ShortMatchSingleChar)));
+    BOOST_CHECK(!strict.parse(argv({"--jobs8"})).isValid());
+
+    Parser loose(Command("prog").addOption(
+        Option({"--jobs"}, "How many").arg("n").short_match(Option::ShortMatchAll)));
+    BOOST_CHECK_EQUAL(ok(loose, {"--jobs8"}).valueForOption("--jobs"), "8");
+}
+
+BOOST_AUTO_TEST_CASE(test_grouped_short_flags) {
+    Parser parser(Command("prog").addOptions({
+        Option({"-a"}, "A"),
+        Option({"-b"}, "B"),
+        Option({"-c"}, "C").arg("value"),
+    }));
+
+    auto result = ok(parser, {"-ab"}, Parser::AllowUnixGroupFlags);
+    BOOST_CHECK(result.isOptionSet("-a"));
+    BOOST_CHECK(result.isOptionSet("-b"));
+
+    // Off by default, so the same line is one unknown option.
+    bad(parser, {"-ab"}, ParseResult::UnknownOption);
+
+    // A letter that wants a value cannot be in the middle of a group, so the group is refused
+    // whole rather than half taken.
+    bad(parser, {"-abc"}, ParseResult::UnknownOption, Parser::AllowUnixGroupFlags);
+}
+
+BOOST_AUTO_TEST_CASE(test_double_dash_ends_the_options) {
+    Parser parser(
+        Command("prog").addArgument(Argument("files").multi()).addOption(Option({"-f"}, "Force")));
+
+    auto result = ok(parser, {"-f", "--", "-f", "--not-an-option"});
+    BOOST_CHECK(result.isOptionSet("-f"));
+    BOOST_CHECK_EQUAL(result.option("-f").count(), 1);
+    BOOST_CHECK(result.values(0) == std::vector<std::string_view>({"-f", "--not-an-option"}));
+}
+
+BOOST_AUTO_TEST_CASE(test_subcommands) {
+    Parser parser(Command("prog").addCommands({
+        Command("copy", "Copy").addArgument(Argument("src")),
+        Command("remove", "Remove").addArgument(Argument("path")),
+    }));
+
+    auto result = ok(parser, {"copy", "a"});
+    BOOST_REQUIRE(result.command() != nullptr);
+    BOOST_CHECK_EQUAL(result.command()->name(), "copy");
+    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "copy"}));
+    BOOST_CHECK_EQUAL(result.value(0), "a");
+
+    // A name that is no subcommand is a positional of the root, which has none.
+    bad(parser, {"nonsense"}, ParseResult::TooManyArguments);
+}
+
+BOOST_AUTO_TEST_CASE(test_nested_subcommands) {
+    Parser parser(Command("prog").addCommand(
+        Command("remote").addCommand(Command("add").addArgument(Argument("name")))));
+
+    auto result = ok(parser, {"remote", "add", "origin"});
+    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "remote", "add"}));
+    BOOST_CHECK_EQUAL(result.value(0), "origin");
+}
+
+BOOST_AUTO_TEST_CASE(test_global_options_reach_subcommands) {
+    Parser parser(Command("prog")
+                      .addOption(Option({"-V", "--verbose"}, "Talk more").global())
+                      .addOption(Option({"-q"}, "Local to the root"))
+                      .addCommand(Command("copy")));
+
+    auto result = ok(parser, {"copy", "-V"});
+    BOOST_CHECK(result.isOptionSet("-V"));
+
+    // One that is not global stays where it was declared.
+    bad(parser, {"copy", "-q"}, ParseResult::UnknownOption);
+}
+
+BOOST_AUTO_TEST_CASE(test_required_option) {
+    Parser parser(Command("prog").addOption(Option({"-o"}, "Out").arg("dir").required()));
+
+    BOOST_CHECK(ok(parser, {"-o", "x"}).isOptionSet("-o"));
+    bad(parser, {}, ParseResult::MissingRequiredOption);
+}
+
+BOOST_AUTO_TEST_CASE(test_a_declared_type_is_checked_while_parsing) {
+    Parser parser(Command("prog")
+                      .addArgument(Argument("count").type<int>())
+                      .addOption(Option({"-r"}, "Ratio").arg(Argument("value").type<double>())));
+
+    BOOST_CHECK_EQUAL(ok(parser, {"12"}).value<int>(0), 12);
+    BOOST_CHECK_CLOSE(ok(parser, {"1", "-r", "0.5"}).valueForOption<double>("-r"), 0.5, 1e-9);
+
+    // The point of declaring the type: a bad token is a diagnostic, not a zero read later.
+    auto failure = bad(parser, {"twelve"}, ParseResult::ArgumentTypeMismatch);
+    BOOST_CHECK(failure.errorText().find("int") != std::string::npos);
+    bad(parser, {"1", "-r", "half"}, ParseResult::ArgumentTypeMismatch);
+}
+
+BOOST_AUTO_TEST_CASE(test_expected_values_and_validators) {
+    Parser parser(Command("prog")
+                      .addArgument(Argument("mode").expect({"fast", "slow"}))
+                      .addOption(Option({"-n"}, "Name")
+                                     .arg(Argument("value").validate(
+                                         [](std::string_view token, std::string *error) {
+                                             if (token.empty()) {
+                                                 *error = "a name cannot be empty";
+                                                 return false;
+                                             }
+                                             return true;
+                                         }))));
+
+    BOOST_CHECK_EQUAL(ok(parser, {"fast"}).value(0), "fast");
+    bad(parser, {"medium"}, ParseResult::InvalidArgumentValue);
+
+    auto failure = bad(parser, {"fast", "-n", ""}, ParseResult::ArgumentValidateFailed);
+    // What the validator said is what gets printed, rather than a generic complaint.
+    BOOST_CHECK_EQUAL(failure.errorText(), "a name cannot be empty");
+}
+
+BOOST_AUTO_TEST_CASE(test_prior_lets_help_answer_an_incomplete_line) {
+    Parser parser(Command("prog")
+                      .addArgument(Argument("required one"))
+                      .addOption(Option(Option::Help).prior(Option::IgnoreMissingSymbols)));
+
+    // Without the prior level this is a missing argument.
+    BOOST_CHECK(!parser.parse(argv({})).isValid());
+    auto result = ok(parser, {"--help"});
+    BOOST_CHECK(result.isRoleSet(Option::Help));
+    // The role is what a caller asks about, not the spelling.
+    BOOST_CHECK(!result.isRoleSet(Option::Version));
+}
+
+BOOST_AUTO_TEST_CASE(test_prior_can_set_itself_on_an_empty_line) {
+    Parser parser(Command("prog")
+                      .addArgument(Argument("required one"))
+                      .addOption(Option(Option::Help).prior(Option::AutoSetWhenNoSymbols)));
+
+    auto result = ok(parser, {});
+    BOOST_CHECK(result.isOptionSet("--help"));
+
+    // Given anything at all it stays out of the way.
+    BOOST_CHECK(!ok(parser, {"value"}).isOptionSet("--help"));
+}
+
+BOOST_AUTO_TEST_CASE(test_exclusive_prior_levels) {
+    auto build = [](Option::Prior level) {
+        return Parser(Command("prog")
+                          .addArgument(Argument("path").optional())
+                          .addOption(Option({"-f"}, "Force"))
+                          .addOption(Option(Option::Version).prior(level)));
+    };
+
+    // Alone it is fine either way.
+    BOOST_CHECK(build(Option::ExclusiveToAll).parse(argv({"--version"})).isValid());
+
+    // With an argument beside it, only the levels that forbid arguments complain.
+    BOOST_CHECK(build(Option::ExclusiveToOptions).parse(argv({"--version", "x"})).isValid());
+    auto with_argument = build(Option::ExclusiveToArguments).parse(argv({"--version", "x"}));
+    BOOST_CHECK_EQUAL(int(with_argument.error()), int(ParseResult::PriorOptionWithArguments));
+
+    // With another option beside it, likewise.
+    BOOST_CHECK(build(Option::ExclusiveToArguments).parse(argv({"--version", "-f"})).isValid());
+    auto with_option = build(Option::ExclusiveToAll).parse(argv({"--version", "-f"}));
+    BOOST_CHECK_EQUAL(int(with_option.error()), int(ParseResult::PriorOptionWithOptions));
+}
+
+BOOST_AUTO_TEST_CASE(test_an_option_may_ignore_its_own_missing_arguments) {
+    Parser parser(Command("prog").addOption(
+        Option({"-l"}, "List").arg("what").prior(Option::IgnoreMissingArguments)));
+
+    auto result = ok(parser, {"-l"});
+    BOOST_CHECK(result.isOptionSet("-l"));
+    BOOST_CHECK_EQUAL(result.valueForOption("-l"), "");
+}
+
+BOOST_AUTO_TEST_CASE(test_case_insensitivity_is_asked_for) {
+    Parser parser(
+        Command("prog").addOption(Option({"--force"}, "Force")).addCommand(Command("copy")));
+
+    BOOST_CHECK(ok(parser, {"--FORCE"}, Parser::IgnoreOptionCase).isOptionSet("--force"));
+    BOOST_CHECK(!parser.parse(argv({"--FORCE"})).isValid());
+
+    BOOST_CHECK_EQUAL(ok(parser, {"COPY"}, Parser::IgnoreCommandCase).command()->name(), "copy");
+    // Without the flag it is not a command, so it falls through to being an argument.
+    BOOST_CHECK(!parser.parse(argv({"COPY"})).isValid());
+}
+
+BOOST_AUTO_TEST_CASE(test_dos_short_options) {
+    Parser parser(Command("prog").addOption(Option({"-f"}, "Force")));
+
+    BOOST_CHECK(ok(parser, {"/f"}, Parser::AllowDosShortOptions).isOptionSet("-f"));
+    // Off by default, where it is a positional and the command takes none.
+    bad(parser, {"/f"}, ParseResult::TooManyArguments);
+}
+
+BOOST_AUTO_TEST_CASE(test_unix_short_options_can_be_turned_off) {
+    Parser parser(Command("prog")
+                      .addArgument(Argument("path").optional())
+                      .addOption(Option({"-f", "--force"}, "Force")));
+
+    BOOST_CHECK(ok(parser, {"-f"}).isOptionSet("-f"));
+    // With them off a single dash is just a token, which lands in the argument.
+    auto result = ok(parser, {"-f"}, Parser::DontAllowUnixShortOptions);
+    BOOST_CHECK(!result.isOptionSet("-f"));
+    BOOST_CHECK_EQUAL(result.value(0), "-f");
+    // The long spelling is untouched.
+    BOOST_CHECK(ok(parser, {"--force"}, Parser::DontAllowUnixShortOptions).isOptionSet("-f"));
+}
+
+BOOST_AUTO_TEST_CASE(test_invoke_runs_the_command_that_was_reached) {
+    std::string seen;
+    Parser parser(Command("prog")
+                      .addCommand(Command("copy")
+                                      .addArgument(Argument("src"))
+                                      .setHandler([&seen](const ParseResult &result) {
+                                          seen = result.value(0);
+                                          return 3;
+                                      }))
+                      .addCommand(Command("bare")));
+
+    BOOST_CHECK_EQUAL(parser.invoke(argv({"copy", "file"})), 3);
+    BOOST_CHECK_EQUAL(seen, "file");
+
+    // No handler, and a parse that failed, both hand back what the caller asked for.
+    BOOST_CHECK_EQUAL(parser.invoke(argv({"bare"}), -9), -9);
+    BOOST_CHECK_EQUAL(parser.invoke(argv({"copy"}), -9), -9);
+}
+
+BOOST_AUTO_TEST_CASE(test_typed_reads) {
+    Parser parser(Command("prog")
+                      .addArgument(Argument("numbers").multi().type<int>())
+                      .addOption(Option({"-n"}, "How many").arg(Argument("n").type<int>())));
+
+    auto result = ok(parser, {"1", "2", "3", "-n", "9"});
+    BOOST_CHECK(result.values<int>(0) == std::vector<int>({1, 2, 3}));
+    BOOST_CHECK_EQUAL(result.value<int>(0), 1);
+    BOOST_CHECK_EQUAL(result.valueForOption<int>("-n"), 9);
+    // The untyped read is the text, which is what everything is stored as.
+    BOOST_CHECK_EQUAL(result.value(0), "1");
+}
+
 BOOST_AUTO_TEST_SUITE_END()
