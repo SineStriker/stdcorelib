@@ -5,8 +5,6 @@ Usable, and used, but the version number is honest: interfaces still move.
 ## Known gaps
 
 - The registry code assumes a little-endian host
-- `cli::OptionResult` holds a raw pointer into the result it came from, with nothing tying their
-  lifetimes together, so `parser.parse(args).option("-f")` dangles at the semicolon
 - `cli::ParseResult::value<T>()` answers with a value initialized `T` when the conversion fails.
   `tryValue()` is beside it for callers who need to tell that apart from a real zero.
 - `support/commandline.h` is 900 lines of inline code, paid for by every translation unit that

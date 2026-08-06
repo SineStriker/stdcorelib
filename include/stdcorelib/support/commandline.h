@@ -667,7 +667,14 @@ namespace stdc::cli {
         CommandCatalogue _catalogue;
     };
 
-    /// What one option was given. Obtained from ParseResult::option().
+    /// What one option was given.
+    ///
+    /// A view onto the ParseResult it came from, the way \c std::string_view is a view onto a
+    /// string. It owns nothing and keeps nothing alive.
+    ///
+    /// \warning Do not outlive that result. \c parser.parse(args).option("-f") reads freed
+    ///          storage at the semicolon, since the result it was taken from was a temporary.
+    /// \sa ParseResult::option()
     class STDC_EXPORT OptionResult {
     public:
         /// How many times the option was given.
@@ -680,9 +687,14 @@ namespace stdc::cli {
 
         /// The \a index'th argument of the \a occurrence'th appearance, as text, or the
         /// default value where there is one. Empty when there is neither.
+        ///
+        /// \warning Points into the ParseResult and lasts exactly as long as it does. Ask
+        ///          value<T>() for something that owns what it holds.
         std::string_view rawValue(int index = 0, int occurrence = 0) const;
 
         /// Every value the \a index'th argument took, across every occurrence.
+        ///
+        /// \warning The same. These point into the ParseResult.
         std::vector<std::string_view> rawValues(int index = 0) const;
 
         /// Converted, saying whether it could be. False for a token that is not a \c T and
@@ -695,14 +707,14 @@ namespace stdc::cli {
 
         /// The same without the check. A token that is not a \c T gives a value initialized
         /// \c T. Declare the type on the Argument to have that rejected while parsing instead.
-        template <class T = std::string_view>
+        template <class T = std::string>
         T value(int index = 0, int occurrence = 0) const {
             T out{};
             value_traits<T>::parse(rawValue(index, occurrence), &out);
             return out;
         }
 
-        template <class T = std::string_view>
+        template <class T = std::string>
         std::vector<T> values(int index = 0) const {
             std::vector<T> out;
             for (auto raw : rawValues(index)) {
@@ -772,8 +784,13 @@ namespace stdc::cli {
         OptionResult option(std::string_view token) const;
 
         /// The \a index'th positional argument of the command that was reached, as text.
+        ///
+        /// \warning Points into this result and lasts exactly as long as it does. Ask value<T>()
+        ///          for something that owns what it holds.
         std::string_view rawValue(int index) const;
         /// Every token the \a index'th positional argument took.
+        ///
+        /// \warning The same. These point into this result.
         std::vector<std::string_view> rawValues(int index) const;
 
         /// Converted, saying whether it could be. False for a token that is not a \c T and
@@ -784,13 +801,13 @@ namespace stdc::cli {
             return !raw.empty() && value_traits<T>::parse(raw, out);
         }
 
-        template <class T = std::string_view>
+        template <class T = std::string>
         T value(int index) const {
             T out{};
             value_traits<T>::parse(rawValue(index), &out);
             return out;
         }
-        template <class T = std::string_view>
+        template <class T = std::string>
         std::vector<T> values(int index) const {
             std::vector<T> out;
             for (auto raw : rawValues(index)) {
@@ -802,7 +819,7 @@ namespace stdc::cli {
         }
 
         /// The first argument of \a token's first occurrence.
-        template <class T = std::string_view>
+        template <class T = std::string>
         T valueForOption(std::string_view token) const {
             return option(token).value<T>();
         }

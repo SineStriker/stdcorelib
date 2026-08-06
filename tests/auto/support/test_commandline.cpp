@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <stdcorelib/console.h>
@@ -487,12 +488,12 @@ BOOST_AUTO_TEST_CASE(test_a_multi_argument_leaves_room_for_what_follows) {
         Parser(Command("prog").addArguments({Argument("src").multi(), Argument("dest")})));
 
     auto result = ok(parser, {"one", "two", "three", "out"});
-    BOOST_CHECK(result.values(0) == std::vector<std::string_view>({"one", "two", "three"}));
+    BOOST_CHECK(result.values(0) == std::vector<std::string>({"one", "two", "three"}));
     BOOST_CHECK_EQUAL(result.value(1), "out");
 
     // Two tokens is one each.
     auto pair = ok(parser, {"one", "out"});
-    BOOST_CHECK(pair.values(0) == std::vector<std::string_view>({"one"}));
+    BOOST_CHECK(pair.values(0) == std::vector<std::string>({"one"}));
     BOOST_CHECK_EQUAL(pair.value(1), "out");
 
     bad(parser, {"only"}, ParseResult::MissingCommandArgument);
@@ -504,7 +505,7 @@ BOOST_AUTO_TEST_CASE(test_remainder_takes_everything_left) {
 
     auto result = ok(parser, {"run.sh", "one", "two"});
     BOOST_CHECK_EQUAL(result.value(0), "run.sh");
-    BOOST_CHECK(result.values(1) == std::vector<std::string_view>({"one", "two"}));
+    BOOST_CHECK(result.values(1) == std::vector<std::string>({"one", "two"}));
 }
 
 BOOST_AUTO_TEST_CASE(test_default_value_stands_in) {
@@ -618,7 +619,7 @@ BOOST_AUTO_TEST_CASE(test_double_dash_ends_the_options) {
     auto result = ok(parser, {"-f", "--", "-f", "--not-an-option"});
     BOOST_CHECK(result.isOptionSet("-f"));
     BOOST_CHECK_EQUAL(result.option("-f").count(), 1);
-    BOOST_CHECK(result.values(0) == std::vector<std::string_view>({"-f", "--not-an-option"}));
+    BOOST_CHECK(result.values(0) == std::vector<std::string>({"-f", "--not-an-option"}));
 }
 
 BOOST_AUTO_TEST_CASE(test_subcommands) {
@@ -864,7 +865,7 @@ BOOST_AUTO_TEST_CASE(test_what_survives_the_terminator) {
 
     // A second one is no longer special.
     auto twice = ok(parser, {"--", "--", "-f"});
-    BOOST_CHECK(twice.values(0) == std::vector<std::string_view>({"--", "-f"}));
+    BOOST_CHECK(twice.values(0) == std::vector<std::string>({"--", "-f"}));
     BOOST_CHECK(!twice.isOptionSet("-f"));
 
     // On its own it leaves nothing behind.
@@ -2082,6 +2083,41 @@ BOOST_AUTO_TEST_CASE(test_the_default_width_is_asked_for) {
     parser.setTextWidth(200);
     BOOST_CHECK_EQUAL(entryLines(parser.parse({"prog"}).helpText(), "-x").size(), 1u);
     setColumns(saved ? keep.c_str() : nullptr);
+}
+
+// Reading gives back something that owns what it holds, so it survives the result it came from.
+//
+// A view is the cheaper default and the wrong one. Everything a result hands back as a view
+// points into the result's own storage, and the shape below is what a caller writes without
+// thinking about it. With a view for a default it read freed storage, which the address
+// sanitizer says outright and an ordinary build says by printing whatever was there.
+BOOST_AUTO_TEST_CASE(test_a_read_outlives_the_result_it_came_from) {
+    Parser parser(Command("prog")
+                      .addArgument(Argument("source"))
+                      .addOption(Option({"-f"}, "File").arg("path")));
+
+    auto positional = parser.parse(argv({"-f", "some/path.txt", "the-source"})).value(0);
+    auto from_option = parser.parse(argv({"-f", "some/path.txt", "the-source"})).valueForOption("-f");
+    auto several = parser.parse(argv({"-f", "some/path.txt", "the-source"})).values(0);
+
+    static_assert(std::is_same_v<decltype(positional), std::string>,
+                  "the default read has to own what it holds");
+    static_assert(std::is_same_v<decltype(from_option), std::string>,
+                  "the default read has to own what it holds");
+    static_assert(std::is_same_v<decltype(several), std::vector<std::string>>,
+                  "the default read has to own what it holds");
+
+    BOOST_CHECK_EQUAL(positional, "the-source");
+    BOOST_CHECK_EQUAL(from_option, "some/path.txt");
+    BOOST_REQUIRE_EQUAL(several.size(), 1u);
+    BOOST_CHECK_EQUAL(several[0], "the-source");
+
+    // A view is still there for a caller who asks for one, and is still theirs to keep alive.
+    auto result = parser.parse(argv({"-f", "some/path.txt", "the-source"}));
+    static_assert(std::is_same_v<decltype(result.value<std::string_view>(0)), std::string_view>,
+                  "asking for a view still gives a view");
+    BOOST_CHECK_EQUAL(result.value<std::string_view>(0), "the-source");
+    BOOST_CHECK_EQUAL(result.rawValue(0), "the-source");
 }
 
 BOOST_AUTO_TEST_CASE(test_reading_a_result_that_failed) {
