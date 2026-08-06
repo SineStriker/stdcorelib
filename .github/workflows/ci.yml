@@ -71,10 +71,13 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja boost
 
-      # Ninja is not on the Windows image, and there are two vcpkgs: the one Visual Studio bundles,
-      # which is what VCPKG_INSTALLATION_ROOT points at, and the one on PATH. Deriving the root
-      # from the executable that will actually run the install is what keeps those from being
-      # different directories.
+      # Ninja is not on the Windows image, and there are two vcpkgs: the one Visual Studio bundles
+      # and the one on PATH. Deriving the root from the executable that will actually run the
+      # install is what keeps those from being different directories.
+      #
+      # It is carried under our own name, not VCPKG_ROOT. vcvars sets VCPKG_ROOT to the copy
+      # Visual Studio bundles, so the msvc-dev-cmd step below silently repoints it between the
+      # install and the configure: Boost lands in one vcpkg and CMake is aimed at the other.
       - name: Install Ninja and locate vcpkg (Windows)
         id: vcpkg
         if: runner.os == 'Windows'
@@ -83,7 +86,7 @@ jobs:
           choco install ninja -y --no-progress
           root=$(cygpath -m "$(dirname "$(command -v vcpkg)")")
           echo "vcpkg root: $root"
-          echo "VCPKG_ROOT=$root" >> "$GITHUB_ENV"
+          echo "STDC_VCPKG_ROOT=$root" >> "$GITHUB_ENV"
           echo "VCPKG_DEFAULT_BINARY_CACHE=$RUNNER_TEMP\\vcpkg-archives" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/vcpkg-archives"
           # The port versions come from whichever vcpkg the image shipped, so its commit is what
@@ -112,8 +115,8 @@ jobs:
           # find_package(Boost CONFIG) turns on exactly one file, which the boost-cmake port
           # brings in as a dependency of boost-test. Saying whether it arrived makes a failure
           # downstream one question rather than two.
-          config="$VCPKG_ROOT/installed/x64-windows/share/boost/BoostConfig.cmake"
-          ls -l "$config" || { echo "missing: $config"; ls "$VCPKG_ROOT/installed" || true; }
+          config="$STDC_VCPKG_ROOT/installed/x64-windows/share/boost/BoostConfig.cmake"
+          ls -l "$config" || { echo "missing: $config"; ls "$STDC_VCPKG_ROOT/installed" || true; }
 
       # Ninja everywhere, which needs the MSVC environment on Windows since there is no generator
       # to set it up.
@@ -134,9 +137,9 @@ jobs:
           if [ "${{ runner.os }}" = "Windows" ]; then
             # The prefix path as well as the toolchain file. The toolchain works out the triplet
             # for itself, and naming the directory outright is one fewer thing to be wrong.
-            extra=(-DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+            extra=(-DCMAKE_TOOLCHAIN_FILE="$STDC_VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
                    -DVCPKG_TARGET_TRIPLET=x64-windows
-                   -DCMAKE_PREFIX_PATH="$VCPKG_ROOT/installed/x64-windows")
+                   -DCMAKE_PREFIX_PATH="$STDC_VCPKG_ROOT/installed/x64-windows")
           fi
           cmake -G Ninja -S . -B build \
             -DCMAKE_BUILD_TYPE=${{ steps.cfg.outputs.type }} \
