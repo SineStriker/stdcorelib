@@ -899,6 +899,20 @@ namespace stdc::cli {
             return parse(args, parseOptions).invoke(errorCode);
         }
 
+        /// The same, taking what \c main was handed.
+        ///
+        /// \warning Not on Windows. What \c main is given there is in the system code page,
+        ///          while everything here is UTF-8, so a non-ASCII argument arrives wrong.
+        ///          system::command_line_arguments() gives the same list already converted, on
+        ///          every platform.
+        inline ParseResult parse(int argc, char **argv, int parseOptions = Standard) const {
+            return parse(std::vector<std::string>(argv, argv + argc), parseOptions);
+        }
+        inline int invoke(int argc, char **argv, int errorCode = -1,
+                          int parseOptions = Standard) const {
+            return parse(argc, argv, parseOptions).invoke(errorCode);
+        }
+
     private:
         class Impl;
         std::unique_ptr<Impl> _impl;

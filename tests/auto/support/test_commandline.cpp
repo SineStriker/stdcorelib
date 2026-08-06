@@ -1591,6 +1591,38 @@ BOOST_AUTO_TEST_CASE(test_show_error_offers_the_correction) {
     BOOST_CHECK(has(printed_quiet, "--help"));
 }
 
+// The overload that takes what main was handed, rather than making every caller build the
+// vector for itself.
+BOOST_AUTO_TEST_CASE(test_parsing_from_argc_and_argv) {
+    char arg0[] = "prog";
+    char arg1[] = "-f";
+    char arg2[] = "file.txt";
+    char *args[] = {arg0, arg1, arg2};
+
+    {
+        Parser parser(
+            Command("prog").addArgument(Argument("path")).addOption(Option({"-f"}, "Force")));
+        auto result = parser.parse(3, args);
+        BOOST_REQUIRE_MESSAGE(result.isValid(), result.errorText());
+        BOOST_CHECK(result.isOptionSet("-f"));
+        BOOST_CHECK_EQUAL(result.value(0), "file.txt");
+    }
+
+    // And through invoke, which is the one a main actually writes.
+    {
+        std::string seen;
+        Parser parser(Command("prog")
+                          .addArgument(Argument("path"))
+                          .addOption(Option({"-f"}, "Force"))
+                          .setHandler([&seen](const ParseResult &result) {
+                              seen = result.value(0);
+                              return 7;
+                          }));
+        BOOST_CHECK_EQUAL(parser.invoke(3, args), 7);
+        BOOST_CHECK_EQUAL(seen, "file.txt");
+    }
+}
+
 BOOST_AUTO_TEST_CASE(test_reading_a_result_that_failed) {
     // A caller that forgets to check isValid still gets answers rather than a walk off an end.
     Parser parser(Command("prog").addArgument(Argument("needed")));
