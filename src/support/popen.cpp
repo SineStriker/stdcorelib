@@ -164,6 +164,15 @@ namespace stdc {
         returncode.reset();
         _closed_child_pipe_fds = false;
 
+        // Nothing downstream can make an argv out of nothing, and both platforms only found out
+        // about it inside the child, where the answer was an assertion in a debug build and an
+        // out of range read in a release one.
+        if (args.empty()) {
+            error_code = std::make_error_code(std::errc::invalid_argument);
+            error_msg = "no program to run: args is empty";
+            return false;
+        }
+
         const auto is_pipe = [](const IODev &dev) {
             return dev.kind == IODev::Builtin && dev.data.builtin == IOType::PIPE;
         };
