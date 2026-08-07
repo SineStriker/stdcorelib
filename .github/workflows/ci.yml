@@ -94,7 +94,7 @@ jobs:
   #
   # The flag is private to the library target, so the tests are built the ordinary way and run
   # against a library that was not. A consumer gets the same split. This is also the only thing
-  # here that runs the library's exception-free branches: STDC_EXCEPTIONS is worked out per
+  # here that runs the library's exception-free branches: STDC_HAS_EXCEPTIONS is worked out per
   # translation unit from __cpp_exceptions, so the code under those #ifdefs is compiled by this
   # job and by nothing else.
   no-exceptions:

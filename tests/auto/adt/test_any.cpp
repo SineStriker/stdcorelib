@@ -354,7 +354,7 @@ BOOST_AUTO_TEST_CASE(test_size_is_a_buffer_plus_a_pointer) {
     BOOST_CHECK_EQUAL(sizeof(any), 2 * sizeof(void *) + sizeof(void *));
 }
 
-#ifdef STDC_EXCEPTIONS
+#ifdef STDC_HAS_EXCEPTIONS
 BOOST_AUTO_TEST_CASE(test_value_cast_throws_on_the_wrong_type) {
     any value = 42;
     BOOST_CHECK_EQUAL(any_cast<int>(value), 42);

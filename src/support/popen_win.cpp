@@ -25,7 +25,7 @@ namespace stdc {
     /// that joins it, since an exception crossing a thread boundary would call std::terminate.
     template <class F>
     void run_capturing(std::exception_ptr &error, F &&body) {
-#ifdef STDC_EXCEPTIONS
+#ifdef STDC_HAS_EXCEPTIONS
         try {
             body();
         } catch (...) {
@@ -100,7 +100,7 @@ namespace stdc {
             }
         };
 
-#ifdef STDC_EXCEPTIONS
+#ifdef STDC_HAS_EXCEPTIONS
         try {
             start_workers();
         } catch (...) {

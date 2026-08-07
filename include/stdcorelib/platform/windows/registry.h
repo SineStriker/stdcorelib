@@ -667,7 +667,7 @@ namespace stdc::windows {
     // function that is not a template is compiled in every translation unit that includes it,
     // called or not, so leaving these here without exceptions does not merely make them
     // unusable, it stops the header compiling at all.
-#ifdef STDC_EXCEPTIONS
+#ifdef STDC_HAS_EXCEPTIONS
 
     inline RegKey RegKey::open(const std::wstring &path, int access) {
         std::error_code ec;

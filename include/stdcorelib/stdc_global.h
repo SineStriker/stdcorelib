@@ -87,8 +87,11 @@
 #  define STDC_NO_UNIQUE_ADDRESS
 #endif
 
+// STDC_HAS_EXCEPTIONS is about the translation unit being compiled right now, whoever is
+// compiling it. It is what header code has to ask, since a header is compiled by its caller: an
+// inline function that throws may only exist where the caller can throw.
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
-#  define STDC_EXCEPTIONS 1
+#  define STDC_HAS_EXCEPTIONS 1
 #endif
 
 #ifndef STDC_TSTR

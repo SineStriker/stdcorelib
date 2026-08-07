@@ -100,7 +100,7 @@ EXPAND_ONLY_PREDEF     = YES
 # STDC_ALLOCA is not one Doxygen can work out. vla.h defines it from _MSC_VER or __GNUC__,
 # neither of which is set here, so everything under the #ifdef below it was missing from the
 # output and nothing said so.
-PREDEFINED             = STDC_EXPORT= STDC_DECL_EXPORT= STDC_DECL_IMPORT= STDC_EXCEPTIONS=1 STDC_ALLOCA(size)= _WIN32=1 DOXYGEN=1
+PREDEFINED             = STDC_EXPORT= STDC_DECL_EXPORT= STDC_DECL_IMPORT= STDC_HAS_EXCEPTIONS=1 STDC_ALLOCA(size)= _WIN32=1 DOXYGEN=1
 
 # Undocumented is deliberate here, so it is not worth a warning each time. The rest stay on. A
 # \\param naming an argument that no longer exists is worth hearing about.

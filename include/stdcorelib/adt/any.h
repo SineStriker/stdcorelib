@@ -269,7 +269,7 @@ namespace stdc {
         return detail::any_handler<U>::value(value->_storage);
     }
 
-#ifdef STDC_EXCEPTIONS
+#ifdef STDC_HAS_EXCEPTIONS
 
     class bad_any_cast : public std::exception {
     public:

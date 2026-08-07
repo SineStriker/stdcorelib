@@ -128,7 +128,12 @@ add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 target_sources(${PROJECT_NAME} PRIVATE ${_src})
 target_compile_definitions(${PROJECT_NAME} PRIVATE STDC_LIBRARY)
 
-if(NOT STDC_ENABLE_EXCEPTIONS)
+if(STDC_ENABLE_EXCEPTIONS)
+    # PUBLIC, and the only definition here that is: it tells whoever links this binary whether it
+    # can throw at them. Not the same question as STDC_HAS_EXCEPTIONS, which every translation
+    # unit works out about itself.
+    target_compile_definitions(${PROJECT_NAME} PUBLIC STDC_EXCEPTIONS=1)
+else()
     if(MSVC)
         target_compile_options(${PROJECT_NAME} PRIVATE /EHs-c- /wd4530)
     else()
