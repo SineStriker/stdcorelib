@@ -8,7 +8,12 @@
 #include <string>
 #include <vector>
 
-#ifndef _WIN32
+#ifdef _WIN32
+// For the case that asks the console this process is attached to.
+#  include <io.h>
+
+#  include <stdcorelib/platform/windows/stdc_windows.h>
+#else
 // For the case that asks a real terminal, which means making one.
 #  include <fcntl.h>
 #  include <sys/ioctl.h>
@@ -477,13 +482,62 @@ BOOST_AUTO_TEST_CASE(test_width_falls_back_off_a_terminal) {
 #endif
 }
 
+#ifdef _WIN32
+
+// The console this process is attached to, asked directly. Its own stdout is very often a pipe,
+// which is what CONOUT$ is for: it names the console rather than whatever the standard handles
+// were redirected to.
+//
+// Read only. Setting the size would be resizing the window somebody is watching the suite in.
+BOOST_AUTO_TEST_CASE(test_width_asks_a_real_console) {
+    FILE *console = nullptr;
+    // Read as well as write. GetConsoleScreenBufferInfo wants GENERIC_READ on the handle, and
+    // a write only "w" does not carry it, which comes back as the fallback and looks like the
+    // branch was taken and answered 80.
+    fopen_s(&console, "CONOUT$", "r+");
+    if (!console) {
+        // No console attached, which is how a service or some CI runners start a process. There
+        // is nothing to ask, and inventing one means a pseudoconsole and a second process.
+        BOOST_TEST_MESSAGE("no console attached, so the console branch is not exercised here");
+        return;
+    }
+
+    const char *saved = std::getenv("COLUMNS");
+    std::string keep = saved ? saved : std::string();
+    _putenv_s("COLUMNS", "");
+
+    // Whatever it says, it has to be the console's own answer rather than the fallback. Two
+    // different fallbacks, so a branch that ignored the console entirely cannot pass both.
+    int first = width(console, 4242);
+    int second = width(console, 909);
+    BOOST_CHECK_GT(first, 0);
+    BOOST_CHECK_EQUAL(first, second);
+    BOOST_CHECK_MESSAGE(first != 4242 && first != 909,
+                        "the console branch fell back rather than answering");
+
+    // And it is the visible window rather than the scrollback buffer.
+    //
+    // This does not discriminate on every console. Windows Terminal gives the buffer the same
+    // width as the window, so measuring dwSize.X instead passes here and was measured doing so.
+    // It would fail on a console where somebody widened the buffer, which is the case the code
+    // is written for.
+    CONSOLE_SCREEN_BUFFER_INFO info{};
+    HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(console)));
+    BOOST_REQUIRE(::GetConsoleScreenBufferInfo(handle, &info));
+    BOOST_CHECK_EQUAL(first, int(info.srWindow.Right) - int(info.srWindow.Left) + 1);
+
+    if (saved) {
+        _putenv_s("COLUMNS", keep.c_str());
+    }
+    std::fclose(console);
+}
+
+#endif // _WIN32
+
 #ifndef _WIN32
 
 // What a real terminal says, which is the whole point of the function and the one thing a file
 // cannot stand in for. A pty is a terminal, and its size is ours to set.
-//
-// POSIX only. Windows reads the same answer out of GetConsoleScreenBufferInfo, and standing up a
-// console to ask is a pseudoconsole and a second process.
 BOOST_AUTO_TEST_CASE(test_width_asks_a_real_terminal) {
     int master = ::posix_openpt(O_RDWR | O_NOCTTY);
     BOOST_REQUIRE(master >= 0);

@@ -16,13 +16,14 @@ Usable, and used, but the version number is honest: interfaces still move.
 
 ## Unverified
 
-- The `sigpipe_guard` in `popen_unix.cpp` covers the gap between `poll()` saying a descriptor is
-  writable and the write happening, and no test reaches it. The poll loop answers every broken
-  pipe a test can arrange by not writing at all, so taking the guard away leaves the suite green,
-  measured on Linux and macOS, and 900 rounds of a child exiting at once against a megabyte of
-  input never hit the gap either. It is kept on the argument that a library should not end the
-  process it is embedded in, however rarely, and it costs two system calls per `communicate()`.
-- `console::width()` reads a Windows console through `GetConsoleScreenBufferInfo`. That branch
-  was measured by hand against a real console and reported 120 columns, but no test covers it:
-  the POSIX side makes a pty to ask, and the Windows equivalent is a pseudoconsole and a second
-  process.
+- The gap the `sigpipe_guard` in `popen_unix.cpp` covers, between `poll()` saying a descriptor is
+  writable and the write happening, cannot be arranged from a test. That the guard is installed
+  for the length of a `communicate()` and puts back what it found is checked, by sampling the
+  disposition from another thread while one runs. What is not checked is that the gap itself is
+  survivable, and 900 rounds of a child exiting at once against a megabyte of input never
+  produced one.
+- `console::width()` reading a Windows console is checked against the console the suite is
+  attached to, and skipped where there is none. That it reads the visible window rather than the
+  scrollback buffer is not: Windows Terminal gives the buffer the same width as the window, so
+  reading `dwSize.X` instead passes, measured. It would fail on a console whose buffer somebody
+  widened, which is the case the code is written for.

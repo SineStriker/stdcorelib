@@ -756,6 +756,59 @@ BOOST_AUTO_TEST_CASE(test_restore_signals) {
     }
 }
 
+// The guard communicate() holds over its poll loop, watched from outside.
+//
+// What the guard is for is the gap between poll saying a descriptor is writable and the write
+// happening: the child can exit in there, and then the write raises SIGPIPE and ends the
+// process. A test cannot arrange that gap. What it can do is watch the disposition while a
+// communicate runs, so the guard is known to be installed rather than to have quietly become a
+// no-op, and known to put back what it found.
+BOOST_AUTO_TEST_CASE(test_sigpipe_is_ignored_for_the_length_of_a_communicate) {
+    const auto &disposition = [] {
+        struct sigaction current{};
+        BOOST_REQUIRE_EQUAL(sigaction(SIGPIPE, nullptr, &current), 0);
+        return current.sa_handler;
+    };
+
+    // Whatever this process had, which is what has to come back afterwards.
+    auto before = disposition();
+
+    Popen p;
+    std::string err;
+    // Enough output that the loop is running for long enough to be caught at it.
+    p.args(child_args({"fill", "8000000", "out"})).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+    std::atomic<bool> running{true};
+    std::atomic<int> seen_ignored{0};
+    std::atomic<int> samples{0};
+    std::thread watcher([&] {
+        while (running.load()) {
+            struct sigaction current{};
+            if (sigaction(SIGPIPE, nullptr, &current) == 0) {
+                samples++;
+                if (current.sa_handler == SIG_IGN) {
+                    seen_ignored++;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    });
+
+    auto [out, errout] = p.communicate({}, Timeout);
+    running = false;
+    watcher.join();
+
+    BOOST_CHECK_EQUAL(out.size(), 8000000u);
+    BOOST_REQUIRE_GT(samples.load(), 0);
+    BOOST_CHECK_MESSAGE(seen_ignored.load() > 0,
+                        "SIGPIPE was never ignored across " + std::to_string(samples.load()) +
+                            " samples of a communicate that read 8 MB");
+
+    // And put back, so a program that wanted SIGPIPE to end it still gets that afterwards.
+    BOOST_CHECK(disposition() == before);
+}
+
 // A name that no passwd entry matches fails before anything is forked.
 BOOST_AUTO_TEST_CASE(test_unknown_user_name) {
     Popen p;
