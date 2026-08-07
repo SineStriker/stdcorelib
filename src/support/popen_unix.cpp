@@ -867,6 +867,42 @@ namespace stdc {
         return dirs;
     }
 
+    bool Popen::commandLineFits(const std::vector<std::string> &args) {
+        static const long arg_max = sysconf(_SC_ARG_MAX);
+        if (arg_max == -1) {
+            // The system declines to name a limit, so there is nothing here to check against.
+            return true;
+        }
+
+        // The baseline xargs uses, brought down to what this system says where that is smaller
+        // and up to what POSIX guarantees where it is not.
+        long effective = 128 * 1024;
+        if (effective > arg_max) {
+            effective = arg_max;
+        } else if (effective < _POSIX_ARG_MAX) {
+            effective = _POSIX_ARG_MAX;
+        }
+
+        // Half of it. The environment is counted against the same limit and is not this
+        // function's to see.
+        const size_t room = size_t(effective / 2);
+
+        size_t length = 0;
+        for (const auto &arg : args) {
+            // Linux refuses any single argument of this length whatever the total is, and names
+            // the limit nowhere a program can read it. Checked everywhere rather than only
+            // there, since it is high enough that nothing legitimate reaches it.
+            if (arg.size() >= 32 * 4096) {
+                return false;
+            }
+            length += arg.size() + 1;
+            if (length > room) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1827
     bool Popen::Impl::_execute_child(int p2cread, int p2cwrite, int c2pread, int c2pwrite,
                                      int errread, int errwrite, int gid,

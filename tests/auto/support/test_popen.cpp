@@ -882,6 +882,88 @@ BOOST_AUTO_TEST_CASE(test_user_and_groups) {
 //
 // A start that succeeds proves nothing here, which is what the first version of this test
 // checked. The child has to say what it received.
+// A command line long enough for the system to refuse it, answered before the system is asked
+// rather than as a start() failure with nothing useful in it. \sa llvm's
+// commandLineFitsWithinSystemLimits
+BOOST_AUTO_TEST_CASE(test_a_command_line_can_be_too_long) {
+    BOOST_CHECK(Popen::commandLineFits({}));
+    BOOST_CHECK(Popen::commandLineFits(child_args({"argv", "short"})));
+
+    // One argument past what either platform takes. Windows counts the whole line against
+    // 32767 characters and Linux refuses any single argument of 128 KiB whatever the total is.
+    BOOST_CHECK(!Popen::commandLineFits({TEST_CHILD_PATH, std::string(1 << 20, 'a')}));
+
+    // Or many that add up to it.
+    {
+        std::vector<std::string> args = child_args({"argv"});
+        args.insert(args.end(), 8000, std::string(64, 'a'));
+        BOOST_CHECK(!Popen::commandLineFits(args));
+    }
+
+    // Quoting is what makes an argument long, so what is measured is the line that would be
+    // built rather than the arguments as they came in. A quote doubles on Windows.
+    BOOST_CHECK(Popen::commandLineFits({TEST_CHILD_PATH, std::string(4000, 'a')}));
+
+    // The answer is not merely conservative: the longest line it accepts really does start, and
+    // the child really does receive the last argument whole.
+    {
+        std::vector<std::string> args = child_args({"argv"});
+        while (Popen::commandLineFits(args)) {
+            args.push_back(std::string(200, 'x'));
+        }
+        args.pop_back();
+        BOOST_REQUIRE_GT(args.size(), 3u);
+        args.back() = std::string(199, 'x') + "z";
+
+        Popen p;
+        std::string err;
+        p.args(args).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), "the longest accepted line did not start: " + err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(p.returncode().value_or(-1), 0);
+        BOOST_CHECK_MESSAGE(out.find(std::string(199, 'x') + "z\n") != std::string::npos,
+                            "the last argument of the longest accepted line did not arrive");
+    }
+}
+
+// Asking whether a child has exited must not disturb it, and asking often must not miss the
+// moment it does. llvm has this one because a wait with a timeout used to kill what it was
+// waiting for. \sa llvm's TestExecuteNoWaitTimeoutPolling
+BOOST_AUTO_TEST_CASE(test_polling_neither_kills_the_child_nor_misses_its_exit) {
+    Popen p;
+    std::string err;
+    p.args(child_args({"cat"})).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+    // It is reading its input and has been given none, so it is still there however often it
+    // is asked, and asking is what could have killed it.
+    for (int i = 0; i < 100; ++i) {
+        BOOST_CHECK(!p.poll());
+        BOOST_CHECK(!p.returncode().has_value());
+        BOOST_CHECK(!p.error_code());
+    }
+
+    p.stdin_() << "still here\n";
+    p.stdin_().flush();
+    p.stdin_().close();
+
+    // The same asking sees it go, rather than the exit being lost to whoever asked before it.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(Timeout);
+    int rounds = 0;
+    while (!p.poll() && std::chrono::steady_clock::now() < deadline) {
+        rounds++;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    BOOST_REQUIRE_MESSAGE(p.returncode().has_value(), "it never exited, after " +
+                                                          std::to_string(rounds) + " rounds");
+    BOOST_CHECK_EQUAL(*p.returncode(), 0);
+    BOOST_CHECK(!p.error_code());
+
+    // And keeps saying so, rather than the status being readable once.
+    BOOST_CHECK(p.poll());
+    BOOST_CHECK_EQUAL(p.returncode().value_or(-1), 0);
+}
+
 BOOST_AUTO_TEST_CASE(test_argument_quoting) {
     const std::vector<std::string> tricky = {
         "plain",     "a b",   "  ",         "a\"b",   "\"lead",   "trail\"",

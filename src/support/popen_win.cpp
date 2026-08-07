@@ -686,6 +686,17 @@ namespace stdc {
         return {{}, {}};
     }
 
+    bool Popen::commandLineFits(const std::vector<std::string> &args) {
+        // CreateProcessW documents 32767 characters as the most lpCommandLine may be, counting
+        // the terminator. Below that rather than at it, because a few things about the line
+        // this function cannot see are still counted there.
+        //
+        // The line is built rather than estimated, since quoting is what makes an argument long:
+        // one full of quotes and backslashes comes out at twice its length.
+        static constexpr size_t limit = 32000;
+        return qt_create_commandline({}, args).size() + 1 <= limit;
+    }
+
     // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1452
     bool Popen::Impl::_execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                                      int errread, Handle errwrite) {

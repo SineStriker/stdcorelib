@@ -38,6 +38,12 @@ namespace stdc {
     ///   int code = proc.returncode().value_or(-1);
     /// \endcode
     ///
+    /// Every \c std::string here is UTF-8, as everywhere else in this library: args(), env(),
+    /// what communicate() is given and what it hands back. On Windows they are converted to
+    /// UTF-16 on the way to \c CreateProcess, so an argument written in any script arrives as it
+    /// was meant rather than in the system code page. What executable() and cwd() take is a
+    /// \c std::filesystem::path, which carries its own encoding and is passed on as it is.
+    ///
     /// \warning Reading a pipe by hand rather than through communicate() works for one pipe,
     ///          not for two. A pipe blocks its writer once full, so a child filling stderr while
     ///          the parent is still draining stdout waits forever. communicate() exists to get
@@ -181,6 +187,27 @@ namespace stdc {
         ///       arrives at the program as one argument on either platform.
         /// \sa executable()
         Popen &args(const std::vector<std::string> &args);
+
+        /// Whether \a args is short enough for the system to start a program with.
+        ///
+        /// Windows builds one string for \c CreateProcess and refuses it past 32767 characters,
+        /// so this quotes \a args the way start() would and measures what comes out rather than
+        /// guessing at it. POSIX counts the arguments and the environment together against
+        /// \c ARG_MAX, so half of it is left for the environment, and no single argument may
+        /// reach the 128 KiB one of its own that Linux imposes.
+        ///
+        /// This is what a response file is for. A build system generating one long command line
+        /// asks this first, and writes the arguments to a file and passes \c \@file instead when
+        /// the answer is no.
+        ///
+        /// \note What Windows counts is the UTF-16 these become, and UTF-8 is never shorter
+        ///       than the UTF-16 of the same text, so counting bytes here can only refuse a
+        ///       line the system would have taken. It never accepts one the system would
+        ///       refuse, which is the direction that matters.
+        /// \note A yes is not a promise that start() will succeed, only that it will not fail
+        ///       for this reason. Both limits are approached conservatively.
+        /// \sa cli::Parser::EnableResponseFile, which is the other end of the same problem
+        static bool commandLineFits(const std::vector<std::string> &args);
 
         /// Hands the command to the system shell rather than executing it directly, so its
         /// redirections and expansions apply.
