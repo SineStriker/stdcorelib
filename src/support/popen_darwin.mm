@@ -7,6 +7,7 @@
 #import <Foundation/Foundation.h>
 
 #include "str.h"
+#include "system.h"
 #include "utf.h"
 
 namespace stdc {
