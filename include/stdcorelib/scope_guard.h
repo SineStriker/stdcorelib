@@ -46,7 +46,16 @@ namespace stdc {
     template <class F>
     scope_guard(F (&)()) -> scope_guard<F (*)()>;
 
-    //! [make_scope_guard]
+    /// A scope_guard over \a f, deducing what to hold it as.
+    ///
+    /// \code
+    ///   auto guard = stdc::make_scope_guard([&] { std::fclose(file); });
+    ///   ...
+    ///   guard.dismiss(); // where the close is no longer wanted
+    /// \endcode
+    ///
+    /// \note Nodiscard, since a guard nobody keeps is destroyed at the end of the full
+    ///       expression and runs \a f there rather than at the end of the scope.
     template <typename F>
     [[nodiscard]] scope_guard<typename std::decay<F>::type> make_scope_guard(F &&f) {
         return scope_guard<typename std::decay<F>::type>(std::forward<F>(f));

@@ -137,6 +137,13 @@ file(WRITE ${_doxy_file} ${_doxy_content})
 add_custom_target(${PROJECT_NAME}_docs
     COMMAND ${CMAKE_COMMAND} -E make_directory ${_doxy_dir}
     COMMAND ${DOXYGEN_EXECUTABLE} ${_doxy_file}
+
+    # Undoes an escaping that Doxygen 1.17.0 applies to text it then assigns as a text node,
+    # which spells every operator in the treeview out in entities. See the script for why, and
+    # for why a Doxygen that does not do it is left alone.
+    COMMAND ${CMAKE_COMMAND} -DNAVTREE=${_doxy_dir}/html/navtree.js
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/doxygen-navtree.cmake
+
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Generating documentation into ${_doxy_dir}/html"
     VERBATIM
