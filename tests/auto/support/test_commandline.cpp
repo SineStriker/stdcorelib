@@ -2594,6 +2594,33 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_lay_the_whole_page_out) {
     BOOST_CHECK_EQUAL(parser.parse(argv({})).helpText(), "1:0 2:0 3:1 4:2 7:0 ");
 }
 
+// One command line, parsed once, one owner of the answer. It used to copy, and the copy aliased
+// rather than duplicated, which is a thing to be able to do by accident and never to want.
+BOOST_AUTO_TEST_CASE(test_a_result_has_one_owner) {
+    static_assert(!std::is_copy_constructible_v<ParseResult>, "a result is not copied");
+    static_assert(!std::is_copy_assignable_v<ParseResult>, "a result is not copied");
+    // Noexcept, or a vector of them copies where it means to move, and there is no copy.
+    static_assert(std::is_nothrow_move_constructible_v<ParseResult>, "a result moves");
+    static_assert(std::is_nothrow_move_assignable_v<ParseResult>, "a result moves");
+
+    auto parser = formatterTree();
+    auto first = parser.parse(argv({"-o", "out.txt", "in.txt"}));
+    BOOST_REQUIRE(first.isValid());
+
+    // Moved, and everything it hands out points into where it went.
+    auto second = std::move(first);
+    BOOST_CHECK_EQUAL(must(second.value(0)), "in.txt");
+    BOOST_CHECK_EQUAL(must(second.valueForOption("-o")), "out.txt");
+    BOOST_CHECK(has(second.helpText(), "Usage:"));
+
+    // Which is what a container of them needs.
+    std::vector<ParseResult> results;
+    results.push_back(std::move(second));
+    results.push_back(parser.parse(argv({"-o", "b", "a"})));
+    BOOST_CHECK_EQUAL(must(results.front().value(0)), "in.txt");
+    BOOST_CHECK_EQUAL(must(results.back().value(0)), "a");
+}
+
 // A formatter is handed over rather than owned, since a ParseResult prints its own help without
 // being given the parser that made it and has to keep whatever made that help alive.
 BOOST_AUTO_TEST_CASE(test_a_formatter_outlives_the_parser_that_used_it) {

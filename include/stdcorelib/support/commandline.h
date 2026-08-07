@@ -1111,9 +1111,11 @@ namespace stdc::cli {
         };
 
         ParseResult();
-        ParseResult(const ParseResult &other);
+
+        /// Move only: one command line, parsed once, one owner of the answer.
+        ParseResult(const ParseResult &other) = delete;
+        ParseResult &operator=(const ParseResult &other) = delete;
         ParseResult(ParseResult &&other) noexcept;
-        ParseResult &operator=(const ParseResult &other);
         ParseResult &operator=(ParseResult &&other) noexcept;
         ~ParseResult();
 
@@ -1233,7 +1235,7 @@ namespace stdc::cli {
 
     private:
         friend class Parser;
-        std::shared_ptr<detail::parse_data> _impl;
+        std::unique_ptr<detail::parse_data> _impl;
     };
 
     /// Turns arguments into a ParseResult against a command tree.

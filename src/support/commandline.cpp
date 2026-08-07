@@ -179,6 +179,9 @@ namespace stdc::cli {
         std::string prologue;
         std::string epilogue;
         HelpLayout help_layout = HelpLayout::defaultLayout();
+        /// Shared with the parser rather than copied, since the parser goes on using it for the
+        /// next parse while this may outlive it. The same reason root is shared, and the reason
+        /// it is not a unique_ptr: there is no one owner to give it to.
         std::shared_ptr<HelpFormatter> formatter;
         int display_options = Parser::Normal;
         int text_width = 0;
@@ -257,12 +260,10 @@ namespace stdc::cli {
     // ParseResult
     // ---------------------------------------------------------------------------------------
 
-    ParseResult::ParseResult() : _impl(std::make_shared<detail::parse_data>()) {
+    ParseResult::ParseResult() : _impl(std::make_unique<detail::parse_data>()) {
     }
 
-    ParseResult::ParseResult(const ParseResult &other) = default;
     ParseResult::ParseResult(ParseResult &&other) noexcept = default;
-    ParseResult &ParseResult::operator=(const ParseResult &other) = default;
     ParseResult &ParseResult::operator=(ParseResult &&other) noexcept = default;
     ParseResult::~ParseResult() = default;
 
