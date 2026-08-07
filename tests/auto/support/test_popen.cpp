@@ -560,14 +560,51 @@ BOOST_AUTO_TEST_CASE(test_no_fd_leak) {
 }
 
 // close_fds is on by default, so nothing of ours reaches the child but the standard streams.
+//
+// The count comes from the directory the system lists a process's own descriptors in, which is
+// not the same directory everywhere. This asked /proc for it and got "No such file or directory"
+// on macOS, where the count then came back as nothing and stoi answered zero, so the case passed
+// there having checked nothing at all for as long as it existed.
 BOOST_AUTO_TEST_CASE(test_close_fds) {
-    Popen p;
-    std::string err;
-    p.args({"/bin/sh", "-c", "ls /proc/self/fd | wc -l"}).stdout_(Popen::PIPE);
-    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
-    auto [out, errout] = p.communicate({}, Timeout);
-    // 0, 1, 2 and the descriptor ls itself opened on the directory
-    BOOST_CHECK_LE(std::stoi(first_line(out)), 5);
+    const auto &open_in_child = [](bool close_fds) {
+#ifdef __APPLE__
+        std::string script = "ls /dev/fd | wc -l";
+#else
+        std::string script = "ls /proc/self/fd | wc -l";
+#endif
+        Popen p;
+        std::string err;
+        p.args({"/bin/sh", "-c", script}).stdout_(Popen::PIPE).close_fds(close_fds);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, errout] = p.communicate({}, Timeout);
+        auto line = first_line(out);
+        // A blank answer is the directory not being there, which would make the check below
+        // pass by counting nothing.
+        BOOST_REQUIRE_MESSAGE(!line.empty() && line.find_first_not_of(" \t") != std::string::npos,
+                              "nothing came back from listing the child's descriptors");
+        return std::stoi(line);
+    };
+
+    // 0, 1, 2 and the descriptor ls itself opened on the directory.
+    BOOST_CHECK_LE(open_in_child(true), 5);
+
+    // And the other way, so the number above is known to mean something rather than being what
+    // this platform says no matter what.
+    //
+    // The descriptors have to be plain ones. The pipes Popen makes for itself are close on
+    // exec, so they do not reach a child even with close_fds off, which is what they should do
+    // and which makes them useless for measuring this.
+    std::vector<int> plain;
+    for (int i = 0; i < 8; i++) {
+        int fds[2];
+        BOOST_REQUIRE_EQUAL(pipe(fds), 0);
+        plain.push_back(fds[0]);
+        plain.push_back(fds[1]);
+    }
+    BOOST_CHECK_GT(open_in_child(false), open_in_child(true));
+    for (int fd : plain) {
+        close(fd);
+    }
 }
 
 // preexec_fn runs in the child, after the pipes are in place and before exec.

@@ -7,8 +7,6 @@ Usable, and used, but the version number is honest: interfaces still move.
 - The registry code assumes a little-endian host
 - `support/commandline.h` is 900 lines of inline code, paid for by every translation unit that
   includes it
-- `test_close_fds` in `tests/auto/support/test_popen.cpp` counts what a child has open by
-  listing `/proc/self/fd`, which macOS does not have. It passes there without checking anything.
 
 ## Wanted
 
