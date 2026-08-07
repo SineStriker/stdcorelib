@@ -1110,9 +1110,45 @@ namespace stdc::cli {
         /// The names from the root down to it, the root first.
         const std::vector<std::string> &commandPath() const;
 
-        /// Runs the handler of the command that was reached. \a errorCode is returned instead
-        /// when the parse failed or the command has no handler.
-        int invoke(int errorCode = -1) const;
+        /// What a Version option prints: the innermost command on the path that was given one,
+        /// so a root that says a version passes it to everything under it.
+        /// \sa Command::setVersion(), Command::addVersionOption()
+        std::string versionText() const;
+
+        /// Everything a \c main does with a command line, and its return value is what \c main
+        /// returns.
+        ///
+        /// \li a parse that failed is reported, and \a errorCode comes back
+        /// \li a Help or Version option that was given is answered, and 0 comes back, without
+        ///     the handler running. That is what keeps \c prog \c copy \c --help from doing
+        ///     whatever copy does.
+        /// \li otherwise the handler of the command that was reached runs, and \a errorCode
+        ///     comes back where there is none
+        ///
+        /// A program that wants to answer any of this itself calls parse() and does so. There
+        /// is nothing left over for a caller of this to have to finish.
+        inline int invoke(int errorCode = -1) const {
+            if (!isValid()) {
+                showError();
+                return errorCode;
+            }
+            if (isRoleSet(Option::Help)) {
+                showHelp();
+                return 0;
+            }
+            if (isRoleSet(Option::Version)) {
+                auto version = versionText();
+                if (!version.empty()) {
+                    console::u8puts(version);
+                    return 0;
+                }
+            }
+            const Command *target = command();
+            if (!target || !target->handler()) {
+                return errorCode;
+            }
+            return target->handler()(*this);
+        }
 
         /// Whether an option carrying \a role was given, whatever it was spelled as.
         bool isRoleSet(Option::Role role) const;
@@ -1322,7 +1358,8 @@ namespace stdc::cli {
 
         ParseResult parse(const std::vector<std::string> &args,
                           ParseOptions parseOptions = Standard) const;
-        /// Parses and runs the handler that was reached, which is what a \c main wants.
+        /// Parses and does everything a \c main does with the answer, reporting a failure and
+        /// answering a Help or Version option before any handler runs. \sa ParseResult::invoke()
         inline int invoke(const std::vector<std::string> &args, int errorCode = -1,
                           ParseOptions parseOptions = Standard) const {
             return parse(args, parseOptions).invoke(errorCode);

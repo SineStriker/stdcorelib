@@ -466,6 +466,51 @@ namespace {
         return result;
     }
 
+
+    // showError() writes to stderr and showHelp() to stdout, so reading either back means
+    // pointing that descriptor at a file for as long as it runs. A file is never a terminal, so
+    // the console code resolves color to never and what lands is plain text, unless the caller
+    // has forced a mode.
+    template <class F>
+    std::string captured(FILE *stream, const char *name, F &&body) {
+        auto path = std::filesystem::temp_directory_path() / name;
+
+        std::fflush(stream);
+        int saved = STDC_TEST_DUP(STDC_TEST_FILENO(stream));
+        BOOST_REQUIRE(saved >= 0);
+
+        FILE *file = nullptr;
+#ifdef _WIN32
+        fopen_s(&file, path.string().c_str(), "wb");
+#else
+        file = std::fopen(path.string().c_str(), "wb");
+#endif
+        BOOST_REQUIRE(file != nullptr);
+
+        STDC_TEST_DUP2(STDC_TEST_FILENO(file), STDC_TEST_FILENO(stream));
+        body();
+        std::fflush(stream);
+        STDC_TEST_DUP2(saved, STDC_TEST_FILENO(stream));
+        STDC_TEST_CLOSE(saved);
+        std::fclose(file);
+
+        std::ifstream in(path, std::ios::binary);
+        std::string res((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        return res;
+    }
+
+    template <class F>
+    std::string capturedStderr(F &&body) {
+        return captured(stderr, "stdc_cli_stderr.txt", std::forward<F>(body));
+    }
+
+    template <class F>
+    std::string capturedStdout(F &&body) {
+        return captured(stdout, "stdc_cli_stdout.txt", std::forward<F>(body));
+    }
 }
 
 BOOST_AUTO_TEST_CASE(test_parse_bare_command) {
@@ -913,9 +958,13 @@ BOOST_AUTO_TEST_CASE(test_invoke_runs_the_command_that_was_reached) {
     BOOST_CHECK_EQUAL(parser.invoke(argv({"copy", "file"})), 3);
     BOOST_CHECK_EQUAL(seen, "file");
 
-    // No handler, and a parse that failed, both hand back what the caller asked for.
+    // No handler, and a parse that failed, both hand back what the caller asked for. The
+    // failure is said on the way, since nothing else is going to say it.
     BOOST_CHECK_EQUAL(parser.invoke(argv({"bare"}), -9), -9);
-    BOOST_CHECK_EQUAL(parser.invoke(argv({"copy"}), -9), -9);
+    int code = 0;
+    auto complaint = capturedStderr([&] { code = parser.invoke(argv({"copy"}), -9); });
+    BOOST_CHECK_EQUAL(code, -9);
+    BOOST_CHECK(!complaint.empty());
 }
 
 BOOST_AUTO_TEST_CASE(test_typed_reads) {
@@ -1841,53 +1890,126 @@ BOOST_AUTO_TEST_CASE(test_a_command_with_no_name) {
     BOOST_CHECK(has(result.helpText(), "Usage:"));
 }
 
-namespace {
+// The library declares these two roles, gives them their spellings and holds the version
+// string, so it answers them. Leaving that to the caller meant a program written the obvious
+// way ran the command for "prog copy --help" rather than describing it, and did whatever that
+// command does. On a destructive command, --help was destructive.
+BOOST_AUTO_TEST_CASE(test_invoke_answers_help_and_version_before_the_handler) {
+    int ran = 0;
+    const auto &tree = [&ran] {
+        Parser parser(Command("prog", "What it is for")
+                          .addVersionOption("1.2.3")
+                          .addHelpOption(false, true)
+                          .addCommand(Command("copy", "Copy things")
+                                          .addArgument(Argument("src"))
+                                          .setHandler([&ran](const ParseResult &) {
+                                              ran++;
+                                              return 7;
+                                          })));
+        parser.setTextWidth(80);
+        return parser;
+    };
 
-    // showError() writes to stderr and showHelp() to stdout, so reading either back means
-    // pointing that descriptor at a file for as long as it runs. A file is never a terminal, so
-    // the console code resolves color to never and what lands is plain text, unless the caller
-    // has forced a mode.
-    template <class F>
-    std::string captured(FILE *stream, const char *name, F &&body) {
-        auto path = std::filesystem::temp_directory_path() / name;
-
-        std::fflush(stream);
-        int saved = STDC_TEST_DUP(STDC_TEST_FILENO(stream));
-        BOOST_REQUIRE(saved >= 0);
-
-        FILE *file = nullptr;
-#ifdef _WIN32
-        fopen_s(&file, path.string().c_str(), "wb");
-#else
-        file = std::fopen(path.string().c_str(), "wb");
-#endif
-        BOOST_REQUIRE(file != nullptr);
-
-        STDC_TEST_DUP2(STDC_TEST_FILENO(file), STDC_TEST_FILENO(stream));
-        body();
-        std::fflush(stream);
-        STDC_TEST_DUP2(saved, STDC_TEST_FILENO(stream));
-        STDC_TEST_CLOSE(saved);
-        std::fclose(file);
-
-        std::ifstream in(path, std::ios::binary);
-        std::string res((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        in.close();
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-        return res;
+    // The handler runs when nothing was asked for.
+    {
+        auto parser = tree();
+        BOOST_CHECK_EQUAL(parser.invoke(argv({"copy", "x"})), 7);
+        BOOST_CHECK_EQUAL(ran, 1);
     }
 
-    template <class F>
-    std::string capturedStderr(F &&body) {
-        return captured(stderr, "stdc_cli_stderr.txt", std::forward<F>(body));
+    // And does not when help was, which is the whole point.
+    {
+        ran = 0;
+        auto parser = tree();
+        int code = 0;
+        auto printed = capturedStdout([&] { code = parser.invoke(argv({"copy", "--help"})); });
+        BOOST_CHECK_EQUAL(code, 0);
+        BOOST_CHECK_EQUAL(ran, 0);
+        // The help of the command that was reached, not the root's.
+        BOOST_CHECK(has(printed, "Usage:\n    prog copy"));
+        BOOST_CHECK(has(printed, "Copy things"));
     }
 
-    template <class F>
-    std::string capturedStdout(F &&body) {
-        return captured(stdout, "stdc_cli_stdout.txt", std::forward<F>(body));
+    // The version, and no handler either.
+    {
+        ran = 0;
+        auto parser = tree();
+        int code = 0;
+        auto printed = capturedStdout([&] { code = parser.invoke(argv({"--version"})); });
+        BOOST_CHECK_EQUAL(code, 0);
+        BOOST_CHECK_EQUAL(ran, 0);
+        BOOST_CHECK_EQUAL(printed, "1.2.3\n");
     }
 
+    // addVersionOption() takes no global flag where addHelpOption() does, so the version option
+    // is the root's alone unless a program says otherwise, and a subcommand does not answer it.
+    {
+        auto parser = tree();
+        BOOST_CHECK(!parser.parse(argv({"copy", "x", "--version"})).isValid());
+    }
+
+    // Asked for both, help answers. It is the one that says what the other is.
+    {
+        auto parser = tree();
+        auto printed = capturedStdout([&] { parser.invoke(argv({"--help", "--version"})); });
+        BOOST_CHECK(has(printed, "Usage:"));
+        BOOST_CHECK(!has(printed, "1.2.3\n"));
+    }
+
+    // A parse that failed is reported rather than left for the caller to notice, since the
+    // return value of this is what main returns and there is nowhere else for it to be said.
+    {
+        ran = 0;
+        auto parser = tree();
+        int code = 0;
+        auto complaint = capturedStderr([&] { code = parser.invoke(argv({"copy"})); });
+        BOOST_CHECK_EQUAL(code, -1);
+        BOOST_CHECK_EQUAL(ran, 0);
+        BOOST_CHECK(has(complaint, "needs a value"));
+        BOOST_CHECK(has(complaint, "Try \"prog copy --help\""));
+    }
+
+    // A command with no handler still answers what it was asked.
+    {
+        Parser bare(Command("prog", "What it is for").addHelpOption());
+        bare.setTextWidth(80);
+        BOOST_CHECK_EQUAL(bare.invoke(argv({})), -1);
+        int code = 0;
+        auto printed = capturedStdout([&] { code = bare.invoke(argv({"--help"})); });
+        BOOST_CHECK_EQUAL(code, 0);
+        BOOST_CHECK(has(printed, "Usage:"));
+    }
+
+    // A version option with nothing to print is not an answer, so the handler runs as usual.
+    {
+        ran = 0;
+        Parser silent(Command("prog")
+                          .addOption(Option(Option::Version))
+                          .setHandler([&ran](const ParseResult &) {
+                              ran++;
+                              return 4;
+                          }));
+        BOOST_CHECK_EQUAL(silent.invoke(argv({"--version"})), 4);
+        BOOST_CHECK_EQUAL(ran, 1);
+    }
+}
+
+// The innermost command on the path that was given one.
+BOOST_AUTO_TEST_CASE(test_which_version_a_result_answers_with) {
+    Parser parser(Command("prog")
+                      .setVersion("1.0")
+                      .addCommand(Command("build").setVersion("2.0").addCommand(Command("deep")))
+                      .addCommand(Command("clean")));
+
+    BOOST_CHECK_EQUAL(parser.parse(argv({})).versionText(), "1.0");
+    // Its own beats the one above it.
+    BOOST_CHECK_EQUAL(parser.parse(argv({"build"})).versionText(), "2.0");
+    // And is passed on down, since a command with none of its own says what its parent says.
+    BOOST_CHECK_EQUAL(parser.parse(argv({"build", "deep"})).versionText(), "2.0");
+    BOOST_CHECK_EQUAL(parser.parse(argv({"clean"})).versionText(), "1.0");
+
+    // A tree that was never given one says nothing rather than making something up.
+    BOOST_CHECK(Parser(Command("prog")).parse(argv({})).versionText().empty());
 }
 
 // A name spelled wrong is worth answering with the declared names it is close to. Without it a
@@ -3068,7 +3190,8 @@ BOOST_AUTO_TEST_CASE(test_reading_a_result_that_failed) {
 
     BOOST_CHECK(!result.rawValue(0).has_value());
     BOOST_CHECK(result.command() != nullptr);
-    BOOST_CHECK_EQUAL(result.invoke(-3), -3);
+    BOOST_CHECK_EQUAL(capturedStderr([&] { BOOST_CHECK_EQUAL(result.invoke(-3), -3); }).empty(),
+                      false);
     BOOST_CHECK(!result.errorText().empty());
     // Help still renders, which is what a program prints when it says what went wrong.
     BOOST_CHECK(has(result.helpText(), "Usage:"));

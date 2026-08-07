@@ -333,12 +333,20 @@ namespace stdc::cli {
         return _impl->path;
     }
 
-    int ParseResult::invoke(int errorCode) const {
-        if (!isValid() || !_impl->target || !_impl->target->handler()) {
-            return errorCode;
+    // The innermost command on the path that was given one, so a subcommand may say a version of
+    // its own and everything under a root that says one inherits it.
+    std::string ParseResult::versionText() const {
+        std::string res;
+        const Command *at = _impl->root.get();
+        for (size_t i = 0; at; ++i) {
+            if (!at->version().empty()) {
+                res = at->version();
+            }
+            at = i + 1 < _impl->path.size() ? at->findCommand(_impl->path[i + 1]) : nullptr;
         }
-        return _impl->target->handler()(*this);
+        return res;
     }
+
 
     bool ParseResult::isRoleSet(Option::Role role) const {
         if (role == Option::NoRole) {
