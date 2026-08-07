@@ -1293,10 +1293,8 @@ namespace stdc::cli {
         Parser(Parser &&other) noexcept;
         Parser &operator=(Parser &&other) noexcept;
 
-        /// Sets a new root command, replacing the one given to the constructor.
-        ///
-        /// \note Do not change it once parse() has been called. A ParseResult reads the tree it
-        ///       was parsed against, and keeps reading the old one.
+        /// Sets a new root command, replacing the one given to the constructor or the one the
+        /// last parse() ran against.
         void setRootCommand(Command root);
         const Command &rootCommand() const;
 

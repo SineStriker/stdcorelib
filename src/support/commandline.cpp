@@ -1593,7 +1593,8 @@ namespace stdc::cli {
     void Parser::setRootCommand(Command root) {
         // A new tree rather than new contents for the old one. Every ParseResult already handed
         // out shares this pointer and holds raw pointers into what it addresses, so assigning
-        // through it leaves them all reading freed vectors.
+        // through it leaves them all reading freed vectors. Checked: assigning through it dies
+        // under ASAN in test_a_parser_is_reusable_and_its_tree_can_be_replaced.
         _impl->root = std::make_shared<Command>(std::move(root));
     }
 

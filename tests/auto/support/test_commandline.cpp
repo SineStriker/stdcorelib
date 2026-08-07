@@ -2594,6 +2594,43 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_lay_the_whole_page_out) {
     BOOST_CHECK_EQUAL(parser.parse(argv({})).helpText(), "1:0 2:0 3:1 4:2 7:0 ");
 }
 
+// A parser is not spent by parsing, and the tree under it can be replaced afterwards. What was
+// handed out goes on reading the tree it was parsed against, since a result holds that tree
+// rather than the parser, and setRootCommand puts a new pointer there rather than assigning
+// through the old one.
+BOOST_AUTO_TEST_CASE(test_a_parser_is_reusable_and_its_tree_can_be_replaced) {
+    Parser parser(Command("prog", "The first tree")
+                      .addArgument(Argument("path"))
+                      .addOption(Option({"-f"}, "Force")));
+    parser.setTextWidth(80);
+
+    // Two results from one parser, neither reading the other's values.
+    auto first = parser.parse(argv({"-f", "one"}));
+    auto second = parser.parse(argv({"two"}));
+    BOOST_CHECK(first.option("-f").has_value());
+    BOOST_CHECK(!second.option("-f").has_value());
+    BOOST_CHECK_EQUAL(must(first.value(0)), "one");
+    BOOST_CHECK_EQUAL(must(second.value(0)), "two");
+
+    parser.setRootCommand(Command("other", "The second tree").addArgument(Argument("target")));
+
+    // Both go on reading what they were parsed against, values and help text alike.
+    BOOST_CHECK_EQUAL(must(first.value(0)), "one");
+    BOOST_CHECK(first.option("-f").has_value());
+    BOOST_CHECK_EQUAL(must(second.value(0)), "two");
+    BOOST_CHECK(has(first.helpText(), "Usage:\n    prog"));
+    BOOST_CHECK(has(first.helpText(), "<path>"));
+    BOOST_CHECK(has(first.helpText(), "The first tree"));
+    BOOST_CHECK(!has(first.helpText(), "other"));
+
+    // And the next parse is against the new one.
+    auto third = parser.parse(argv({"x"}));
+    BOOST_CHECK(has(third.helpText(), "Usage:\n    other"));
+    BOOST_CHECK(has(third.helpText(), "<target>"));
+    BOOST_CHECK(!third.option("-f").has_value());
+    BOOST_CHECK_EQUAL(must(third.value(0)), "x");
+}
+
 // One command line, parsed once, one owner of the answer. It used to copy, and the copy aliased
 // rather than duplicated, which is a thing to be able to do by accident and never to want.
 BOOST_AUTO_TEST_CASE(test_a_result_has_one_owner) {
