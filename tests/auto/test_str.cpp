@@ -5,7 +5,14 @@
 #include <cstdarg>
 #include <map>
 #include <string>
+#include <system_error>
 #include <vector>
+
+#ifdef _WIN32
+// For the error numbers the UTF-8 category is asked about. Through this header, which defines
+// NOMINMAX first.
+#  include <stdcorelib/platform/windows/stdc_windows.h>
+#endif
 
 #include <boost/test/unit_test.hpp>
 
@@ -507,5 +514,33 @@ BOOST_AUTO_TEST_CASE(test_asprintf) {
     BOOST_CHECK_EQUAL(call_vasprintf("a=%d, b=%s", 7, "x"), "a=7, b=x");
     BOOST_CHECK_EQUAL(call_vasprintf("plain"), "plain");
 }
+
+#ifdef _WIN32
+// The category the registry and the process code build their error codes with. It exists so a
+// Windows message arrives as UTF-8 rather than in the process code page, and it has to keep
+// comparing equal to the system category or every existing check against std::errc breaks.
+BOOST_AUTO_TEST_CASE(test_the_utf8_error_category) {
+    const auto &category = windows_utf8_category();
+    BOOST_CHECK_EQUAL(std::string(category.name()), "system_utf8");
+
+    // A message, in UTF-8. Which text Windows gives depends on the system language, so what is
+    // checked is that there is one and that it is not the raw number.
+    std::error_code ec(ERROR_FILE_NOT_FOUND, category);
+    BOOST_CHECK(!ec.message().empty());
+    BOOST_CHECK(ec.message() != std::to_string(ERROR_FILE_NOT_FOUND));
+
+    // It answers the same conditions the system category does, so code written against
+    // std::errc keeps working on an error that came from here.
+    BOOST_CHECK(ec == std::errc::no_such_file_or_directory);
+    BOOST_CHECK_EQUAL(ec.default_error_condition().value(),
+                      std::error_code(ERROR_FILE_NOT_FOUND, std::system_category())
+                          .default_error_condition()
+                          .value());
+
+    // The same object every time, since an error_code holds a reference to it.
+    BOOST_CHECK_EQUAL(&category, &windows_utf8_category());
+    BOOST_CHECK(ec.category() == category);
+}
+#endif
 
 BOOST_AUTO_TEST_SUITE_END()

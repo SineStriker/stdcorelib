@@ -364,6 +364,26 @@ BOOST_AUTO_TEST_CASE(test_value_cast_throws_on_the_wrong_type) {
     BOOST_CHECK_EQUAL(any_cast<int>(constant), 42);
     BOOST_CHECK_THROW(any_cast<std::string>(constant), bad_any_cast);
 }
+
+// The exception is caught by type above and nothing had ever read what it says, which is the
+// part a program prints.
+BOOST_AUTO_TEST_CASE(test_the_bad_cast_says_what_it_is) {
+    any value = 42;
+    try {
+        (void) any_cast<std::string>(value);
+        BOOST_ERROR("the cast should have thrown");
+    } catch (const bad_any_cast &e) {
+        BOOST_CHECK_EQUAL(std::string(e.what()), "stdc::bad_any_cast");
+    }
+
+    // And it is a std::exception, so catching that catches this.
+    try {
+        (void) any_cast<std::string>(value);
+        BOOST_ERROR("the cast should have thrown");
+    } catch (const std::exception &e) {
+        BOOST_CHECK_EQUAL(std::string(e.what()), "stdc::bad_any_cast");
+    }
+}
 #endif
 
 BOOST_AUTO_TEST_SUITE_END()

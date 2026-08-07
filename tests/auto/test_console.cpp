@@ -611,4 +611,210 @@ BOOST_AUTO_TEST_CASE(test_width_asks_a_real_terminal) {
 
 #endif // !_WIN32
 
+// Half of this header writes to stdout and takes no FILE *, so nothing above could reach it: the
+// cases up to here all pass a scratch file. Redirecting the descriptor is what covers the rest.
+namespace {
+
+    // stdout, pointed at a file for the length of the object. Reading it back needs the real
+    // descriptor put back first, so that the file is closed and flushed.
+    class StdoutCapture {
+    public:
+        StdoutCapture() {
+            _path = std::tmpnam(_buf);
+            std::fflush(stdout);
+#ifdef _WIN32
+            _saved = _dup(_fileno(stdout));
+            FILE *file = nullptr;
+            fopen_s(&file, _path.c_str(), "wb");
+            _dup2(_fileno(file), _fileno(stdout));
+#else
+            _saved = dup(fileno(stdout));
+            FILE *file = std::fopen(_path.c_str(), "wb");
+            dup2(fileno(file), fileno(stdout));
+#endif
+            std::fclose(file);
+        }
+
+        ~StdoutCapture() {
+            restore();
+            std::remove(_path.c_str());
+        }
+
+        std::string done() {
+            restore();
+            std::string res;
+            FILE *in = nullptr;
+#ifdef _WIN32
+            fopen_s(&in, _path.c_str(), "rb");
+#else
+            in = std::fopen(_path.c_str(), "rb");
+#endif
+            if (!in) {
+                return res;
+            }
+            char buf[4096];
+            size_t n;
+            while ((n = std::fread(buf, 1, sizeof(buf), in)) > 0) {
+                res.append(buf, n);
+            }
+            std::fclose(in);
+            return res;
+        }
+
+    private:
+        void restore() {
+            if (_saved < 0) {
+                return;
+            }
+            std::fflush(stdout);
+#ifdef _WIN32
+            _dup2(_saved, _fileno(stdout));
+            _close(_saved);
+#else
+            dup2(_saved, fileno(stdout));
+            ::close(_saved);
+#endif
+            _saved = -1;
+        }
+
+        char _buf[L_tmpnam]{};
+        std::string _path;
+        int _saved = -1;
+    };
+
+    // The va_list overloads cannot be called without a variadic function to make one.
+    int call_vprintf(const char *fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        int res = console::vprintf(nostyle, nocolor, nocolor, fmt, args);
+        va_end(args);
+        return res;
+    }
+
+    int call_u8vprintf(const char *fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        int res = console::u8vprintf(fmt, args);
+        va_end(args);
+        return res;
+    }
+
+    int call_cvprintf(const char *fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        int res = console::cvprintf(fmt, args);
+        va_end(args);
+        return res;
+    }
+
+    int call_vfprintf(FILE *file, const char *fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        int res = console::vfprintf(nostyle, nocolor, nocolor, file, fmt, args);
+        va_end(args);
+        return res;
+    }
+
+    int call_u8vfprintf(FILE *file, const char *fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        int res = console::u8vfprintf(file, fmt, args);
+        va_end(args);
+        return res;
+    }
+
+    int call_cvfprintf(FILE *file, const char *fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        int res = console::cvfprintf(file, fmt, args);
+        va_end(args);
+        return res;
+    }
+
+}
+
+// puts() and its relatives end the line themselves, where the fputs() family does not. Nothing
+// had said so, and nothing had checked it.
+BOOST_AUTO_TEST_CASE(test_the_stdout_family_ends_its_own_line) {
+    ColorModeGuard guard(color_mode::automatic);
+    StdoutCapture capture;
+
+    console::puts(nostyle, nocolor, nocolor, "from a pointer");
+    console::puts(nostyle, nocolor, nocolor, std::string_view("from a view"));
+    console::printf(nostyle, nocolor, nocolor, "%d formatted", 42);
+    console::print(nostyle, nocolor, nocolor, "%1 placeholder", "one");
+    console::println(nostyle, nocolor, nocolor, "%1 and a line", "two");
+    console::println();
+
+    BOOST_CHECK_EQUAL(capture.done(),
+                      "from a pointer\nfrom a view\n42 formattedone placeholdertwo and a line\n\n");
+}
+
+BOOST_AUTO_TEST_CASE(test_the_utf8_family_reaches_stdout) {
+    ColorModeGuard guard(color_mode::automatic);
+    StdoutCapture capture;
+
+    console::u8puts("pointer");
+    console::u8puts(std::string_view("view"));
+    console::u8printf("%d formatted\n", 7);
+    console::u8print("%1 placeholder", "no line");
+    console::u8println("%1 and a line", "with");
+    console::u8println();
+
+    BOOST_CHECK_EQUAL(capture.done(),
+                      "pointer\nview\n7 formatted\nno line placeholderwith and a line\n\n");
+}
+
+// The markup family, whose whole point is that a target which is not a terminal gets the text
+// with every ${...} taken out rather than passed through.
+BOOST_AUTO_TEST_CASE(test_the_markup_family_reaches_stdout) {
+    ColorModeGuard guard(color_mode::automatic);
+    StdoutCapture capture;
+
+    console::cputs("${red}pointer");
+    console::cputs(std::string_view("${green}view"));
+    console::cprintf("${bold}%d formatted\n", 3);
+    console::cprint("${blue}%1 placeholder", "no line");
+    console::cprintln("${yellow}%1 and a line", "with");
+
+    BOOST_CHECK_EQUAL(capture.done(),
+                      "pointer\nview\n3 formatted\nno line placeholderwith and a line\n");
+}
+
+// Four severities that pick a color and otherwise behave as println(). Off a terminal the color
+// goes away and the line stays, which is the property worth pinning: nothing may leak markup.
+BOOST_AUTO_TEST_CASE(test_the_message_severities_are_println_with_a_color) {
+    ColorModeGuard guard(color_mode::automatic);
+    StdoutCapture capture;
+
+    console::debug("a %1", "debug");
+    console::success("a %1", "success");
+    console::warning("a %1", "warning");
+    console::critical("a %1", "critical");
+
+    BOOST_CHECK_EQUAL(capture.done(), "a debug\na success\na warning\na critical\n");
+}
+
+BOOST_AUTO_TEST_CASE(test_the_va_list_overloads_agree_with_the_variadic_ones) {
+    ColorModeGuard guard(color_mode::automatic);
+
+    // The three that take a file, checked against a scratch file.
+    {
+        TempFile file;
+        call_vfprintf(file.get(), "%d and %s\n", 1, "one");
+        call_u8vfprintf(file.get(), "%d and %s\n", 2, "two");
+        call_cvfprintf(file.get(), "${red}%d and %s\n", 3, "three");
+        BOOST_CHECK_EQUAL(file.contents(), "1 and one\n2 and two\n3 and three\n");
+    }
+
+    // And the three that take none, which is what needed the redirect.
+    {
+        StdoutCapture capture;
+        call_vprintf("%d and %s\n", 4, "four");
+        call_u8vprintf("%d and %s\n", 5, "five");
+        call_cvprintf("${bold}%d and %s\n", 6, "six");
+        BOOST_CHECK_EQUAL(capture.done(), "4 and four\n5 and five\n6 and six\n");
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

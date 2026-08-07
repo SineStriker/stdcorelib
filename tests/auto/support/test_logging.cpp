@@ -2,6 +2,8 @@
 
 #include <cstdio>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <stdcorelib/support/logging.h>
 
@@ -67,6 +69,14 @@ namespace {
     void captureSink(int level, const LogContext &, const std::string_view &) {
         ++g_emitCount;
         g_lastLevel = level;
+    }
+
+    std::vector<std::pair<int, std::string>> g_records;
+    LogContext g_lastContext;
+
+    void recordingSink(int level, const LogContext &context, const std::string_view &message) {
+        g_records.emplace_back(level, std::string(message));
+        g_lastContext = context;
     }
 
     // Redirects stdout and stderr into a scratch file for as long as it lives, and hands back
@@ -442,6 +452,95 @@ BOOST_AUTO_TEST_CASE(null_callback_restores_the_default) {
         text = captured.contents();
     }
     BOOST_CHECK_MESSAGE(text.find("built-in-sink-reached") != std::string::npos, text);
+}
+
+// Logger's own severity methods, which nothing had ever called. The macros do not reach them:
+// stdcWarning expands to LogCategory::log<Level>(), a different path that happens to end in the
+// same sink, so every one of these was compiled and never run.
+BOOST_AUTO_TEST_CASE(test_logger_severities_each_carry_their_own_level) {
+    LoggingGuard guard;
+    auto prev = Logger::logCallback();
+    Logger::setLogCallback(recordingSink);
+    g_records.clear();
+
+    Logger logger(__FILE__, __LINE__, __FUNCTION__, "stdc.severities");
+    logger.trace("a %1", "trace");
+    logger.debug("a %1", "debug");
+    logger.success("a %1", "success");
+    logger.info("a %1", "info");
+    logger.warning("a %1", "warning");
+    logger.critical("a %1", "critical");
+
+    // log() takes the level as a value rather than picking one, and printf() formats the C way
+    // instead of with placeholders.
+    logger.log(Logger::Warning, "by %1", "value");
+    logger.printf(Logger::Information, "%s and %d", "printf", 7);
+
+    auto records = g_records;
+    Logger::setLogCallback(prev);
+
+    BOOST_REQUIRE_EQUAL(records.size(), 8u);
+    BOOST_CHECK_EQUAL(records[0].first, int(Logger::Trace));
+    BOOST_CHECK_EQUAL(records[0].second, "a trace");
+    BOOST_CHECK_EQUAL(records[1].first, int(Logger::Debug));
+    BOOST_CHECK_EQUAL(records[1].second, "a debug");
+    BOOST_CHECK_EQUAL(records[2].first, int(Logger::Success));
+    BOOST_CHECK_EQUAL(records[2].second, "a success");
+    BOOST_CHECK_EQUAL(records[3].first, int(Logger::Information));
+    BOOST_CHECK_EQUAL(records[3].second, "a info");
+    BOOST_CHECK_EQUAL(records[4].first, int(Logger::Warning));
+    BOOST_CHECK_EQUAL(records[4].second, "a warning");
+    BOOST_CHECK_EQUAL(records[5].first, int(Logger::Critical));
+    BOOST_CHECK_EQUAL(records[5].second, "a critical");
+    BOOST_CHECK_EQUAL(records[6].first, int(Logger::Warning));
+    BOOST_CHECK_EQUAL(records[6].second, "by value");
+    BOOST_CHECK_EQUAL(records[7].first, int(Logger::Information));
+    BOOST_CHECK_EQUAL(records[7].second, "printf and 7");
+}
+
+// A Logger built from a LogContext rather than the four pieces, and what the sink is told about
+// where the record came from.
+BOOST_AUTO_TEST_CASE(test_logger_passes_its_context_through) {
+    LoggingGuard guard;
+    auto prev = Logger::logCallback();
+    Logger::setLogCallback(recordingSink);
+    g_records.clear();
+
+    Logger(LogContext("a_file.cpp", 4242, "a_function", "stdc.context")).warning("with context");
+
+    auto context = g_lastContext;
+    auto records = g_records;
+    Logger::setLogCallback(prev);
+
+    BOOST_REQUIRE_EQUAL(records.size(), 1u);
+    BOOST_CHECK_EQUAL(context.line, 4242);
+    BOOST_CHECK_EQUAL(std::string(context.file), "a_file.cpp");
+    BOOST_CHECK_EQUAL(std::string(context.function), "a_function");
+    BOOST_CHECK_EQUAL(std::string(context.category), "stdc.context");
+}
+
+// setLogFilter had a getter that nothing read, so nothing said the two agree, and nothing said
+// what it answers with no filter installed. It is never null: passing nullptr to the setter puts
+// the default filter back rather than leaving nothing in place.
+BOOST_AUTO_TEST_CASE(test_the_installed_filter_can_be_read_back) {
+    LoggingGuard guard;
+
+    auto byDefault = LogCategory::logFilter();
+    BOOST_CHECK(byDefault != nullptr);
+
+    LogCategory::LogCategoryFilter filter = [](LogCategory *cat) {
+        cat->setLevelEnabled(Logger::Debug, false);
+    };
+    LogCategory::setLogFilter(filter);
+    BOOST_CHECK(LogCategory::logFilter() == filter);
+
+    // And it is the one that runs, so the getter is not answering about something else.
+    LogCategory c("stdc.readback");
+    BOOST_CHECK(!c.isLevelEnabled(Logger::Debug));
+
+    LogCategory::setLogFilter(nullptr);
+    BOOST_CHECK(LogCategory::logFilter() == byDefault);
+    BOOST_CHECK(c.isLevelEnabled(Logger::Debug));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

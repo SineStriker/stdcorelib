@@ -146,6 +146,10 @@ namespace stdc {
 
         using LogCategoryFilter = void (*)(LogCategory *);
 
+        /// The filter in force, which is the default one where none was installed.
+        ///
+        /// \return never \c nullptr. setLogFilter() takes one to mean the default rather than
+        ///         none, so there is no state in which nothing is filtering.
         static LogCategoryFilter logFilter();
 
         /// Replaces the category filter and re-runs it over every registered category.

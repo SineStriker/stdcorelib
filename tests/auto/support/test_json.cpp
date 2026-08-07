@@ -773,4 +773,21 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_DepthLimit) {
     BOOST_CHECK(error.find("nested too deeply") != std::string::npos);
 }
 
+// isBool was the one type predicate nothing asked. It has to say no to the numbers, which is
+// where a bool would go wrong if the type were kept as an int.
+BOOST_AUTO_TEST_CASE(test_is_bool_answers_only_for_a_bool) {
+    BOOST_CHECK(stdc::JsonValue(true).isBool());
+    BOOST_CHECK(stdc::JsonValue(false).isBool());
+
+    BOOST_CHECK(!stdc::JsonValue().isBool());
+    BOOST_CHECK(!stdc::JsonValue(0).isBool());
+    BOOST_CHECK(!stdc::JsonValue(1).isBool());
+    BOOST_CHECK(!stdc::JsonValue(1.0).isBool());
+    BOOST_CHECK(!stdc::JsonValue("true").isBool());
+
+    // And through a parse, which is where the distinction has to survive.
+    BOOST_CHECK(stdc::JsonValue::fromJson("true", false).isBool());
+    BOOST_CHECK(!stdc::JsonValue::fromJson("1", false).isBool());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

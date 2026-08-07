@@ -355,4 +355,25 @@ BOOST_AUTO_TEST_CASE(test_nontrivial_element) {
     BOOST_CHECK_EQUAL(v2[0], "hello");
 }
 
+// The copy and move constructors build the new array from other.get_allocator(), so this had
+// been running the whole time with nothing asserting what it hands back.
+BOOST_AUTO_TEST_CASE(test_the_allocator_can_be_read_back) {
+    vlarray<int, 4> array;
+    array.push_back(1);
+    array.push_back(2);
+
+    // The reference is to the array's own allocator rather than a copy, so it stays the same one
+    // across a call that grows past the inline buffer.
+    const auto *before = &array.get_allocator();
+    for (int i = 0; i < 32; ++i) {
+        array.push_back(i);
+    }
+    BOOST_CHECK_EQUAL(before, &array.get_allocator());
+
+    // A copy is built through it and answers with one of its own.
+    vlarray<int, 4> copy = array;
+    BOOST_CHECK(&copy.get_allocator() != &array.get_allocator());
+    BOOST_CHECK_EQUAL(copy.size(), array.size());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

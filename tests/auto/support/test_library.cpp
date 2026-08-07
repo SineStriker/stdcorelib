@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <utility>
 
+#include <stdcorelib/scope_guard.h>
 #include <stdcorelib/support/sharedlibrary.h>
 
 #include <boost/test/unit_test.hpp>
@@ -240,6 +241,31 @@ BOOST_AUTO_TEST_CASE(test_locate_library_path) {
     if (!located.empty()) {
         BOOST_CHECK(fs::equivalent(located, candidate.path));
     }
+}
+
+// A process-wide setting that hands back what it replaced, which is the whole reason it is a
+// getter as well as a setter. Nothing had ever called it, so nothing had said the returned path
+// is the old one rather than the new.
+BOOST_AUTO_TEST_CASE(test_setting_the_library_path_gives_back_the_old_one) {
+    auto original = SharedLibrary::setLibraryPath(std::filesystem::path());
+
+    // Restored whatever this case does, since the setting outlives it.
+    auto guard = stdc::make_scope_guard([&] {
+        SharedLibrary::setLibraryPath(original);
+    });
+
+    auto first = std::filesystem::temp_directory_path();
+    auto wasEmpty = SharedLibrary::setLibraryPath(first);
+    BOOST_CHECK(wasEmpty.empty());
+
+    // The second call answers with the first path, not the second.
+    auto second = std::filesystem::temp_directory_path() / "elsewhere";
+    auto wasFirst = SharedLibrary::setLibraryPath(second);
+    BOOST_CHECK(wasFirst == first);
+
+    // And putting the empty path back reports the one that was in force.
+    auto wasSecond = SharedLibrary::setLibraryPath(std::filesystem::path());
+    BOOST_CHECK(wasSecond == second);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

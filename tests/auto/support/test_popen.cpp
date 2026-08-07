@@ -497,6 +497,46 @@ BOOST_AUTO_TEST_CASE(test_shell) {
     BOOST_CHECK_EQUAL(first_line(out), "shelled");
 }
 
+// kill() and terminate() are send_signal() with a signal picked for them, and the general form
+// had no caller. What it accepts is the part that differs by platform.
+BOOST_AUTO_TEST_CASE(test_send_signal_takes_what_the_platform_takes) {
+    {
+        Popen p;
+        std::string err;
+        p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+#ifdef _WIN32
+        // Only the two console control events, and anything else is refused rather than
+        // approximated.
+        BOOST_CHECK(!p.send_signal(SIGTERM));
+        BOOST_CHECK(p.error_code().value() != 0);
+        std::ignore = p.kill();
+#else
+        BOOST_CHECK(p.send_signal(SIGKILL));
+        BOOST_CHECK_EQUAL(p.error_code().value(), 0);
+#endif
+        BOOST_REQUIRE(p.wait(Timeout));
+    }
+
+    // A child that has already gone is not a failure to signal. Python answers the same way,
+    // since the alternative is a race every caller would have to write around.
+    {
+        Popen p;
+        std::string err;
+        p.args(FilterX).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        BOOST_CHECK(p.kill());
+        BOOST_REQUIRE(p.wait(Timeout));
+
+#ifdef _WIN32
+        BOOST_CHECK(p.send_signal(Popen::WS_CTRL_BREAK_EVENT));
+#else
+        BOOST_CHECK(p.send_signal(SIGTERM));
+#endif
+        BOOST_CHECK_EQUAL(p.error_code().value(), 0);
+    }
+}
+
 // A signal death is reported as the negated signal number, as in Python.
 BOOST_AUTO_TEST_CASE(test_signal_returncode) {
     {

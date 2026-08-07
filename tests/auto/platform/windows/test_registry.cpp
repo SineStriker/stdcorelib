@@ -270,6 +270,109 @@ BOOST_AUTO_TEST_CASE(test_throwing_overloads) {
     }
 }
 
+// valueOr is the one pair where the throwing overload is not simply the ec one with a throw on
+// the end: a missing value is the answer rather than a failure, so that overload has to come
+// back with the default and not raise. Only the ec form was covered.
+BOOST_AUTO_TEST_CASE(test_value_or_without_an_error_code) {
+    std::error_code ec;
+    RegKey hkcuKey(RegKey::RK_CurrentUser);
+    RegKey testKey = hkcuKey.create(L"SOFTWARE\\test_registry_value_or", ec,
+                                    RegKey::DA_Read | RegKey::DA_Write, RegKey::CO_Volatile);
+    BOOST_REQUIRE(testKey.isValid());
+    auto guard = stdc::make_scope_guard([&] {
+        std::error_code ignored;
+        hkcuKey.removeKey(L"SOFTWARE\\test_registry_value_or", ignored);
+    });
+
+    BOOST_REQUIRE(testKey.setValue(L"present", RegValue(L"here"), ec));
+
+    // A value that is there comes back whatever the default says.
+    BOOST_CHECK(testKey.valueOr(L"present", RegValue(L"fallback")).toString() == L"here");
+
+    // One that is not is the default rather than an exception.
+    BOOST_CHECK_NO_THROW(testKey.valueOr(L"absent", RegValue(L"fallback")));
+    BOOST_CHECK(testKey.valueOr(L"absent", RegValue(L"fallback")).toString() == L"fallback");
+
+    // And with no default given at all, which is RegValue::Invalid. That argument had never been
+    // written down anywhere, so nothing had checked it names a type rather than the number -1:
+    // RegValue has a constructor taking Type and another taking int32_t.
+    RegValue absent = testKey.valueOr(L"absent");
+    BOOST_CHECK(!absent.isValid());
+    BOOST_CHECK_EQUAL(absent.type(), RegValue::Invalid);
+
+    RegValue absentWithCode = testKey.valueOr(L"absent", ec);
+    BOOST_CHECK_EQUAL(ec.value(), ERROR_SUCCESS);
+    BOOST_CHECK(!absentWithCode.isValid());
+
+    // A real failure still throws. A key whose handle is gone answers nothing at all, and that
+    // is not the missing value case valueOr swallows.
+    RegKey closed = hkcuKey.open(L"SOFTWARE\\test_registry_value_or", ec, RegKey::DA_Read);
+    BOOST_REQUIRE(closed.isValid());
+    BOOST_REQUIRE(closed.close(ec));
+    BOOST_CHECK_THROW(closed.valueOr(L"present", RegValue(L"fallback")), std::system_error);
+}
+
+// Every enumeration above hands the iterators an ec, so they take keyAt(index, ec) and never the
+// overload that throws. Same for removeAll. These three had no caller at all.
+BOOST_AUTO_TEST_CASE(test_enumerating_without_an_error_code) {
+    std::error_code ec;
+    RegKey hkcuKey(RegKey::RK_CurrentUser);
+    RegKey testKey = hkcuKey.create(L"SOFTWARE\\test_registry_no_ec", ec,
+                                    RegKey::DA_Read | RegKey::DA_Write, RegKey::CO_Volatile);
+    BOOST_REQUIRE(testKey.isValid());
+    auto guard = stdc::make_scope_guard([&] {
+        std::error_code ignored;
+        hkcuKey.removeKey(L"SOFTWARE\\test_registry_no_ec", ignored);
+    });
+
+    // Volatile like its parent: Windows refuses a key that would outlive the one above it.
+    BOOST_REQUIRE(testKey.create(L"child", ec, RegKey::DA_Read | RegKey::DA_Write,
+                                 RegKey::CO_Volatile)
+                      .isValid());
+    BOOST_REQUIRE(testKey.setValue(L"a_value", RegValue(L"a"), ec));
+
+    // Indexed reads, which is what the iterators call when given no ec.
+    auto firstKey = testKey.keyAt(0);
+    BOOST_REQUIRE(firstKey.has_value());
+    BOOST_CHECK(firstKey->name == L"child");
+
+    auto firstValue = testKey.valueAt(0);
+    BOOST_REQUIRE(firstValue.has_value());
+    BOOST_CHECK(firstValue->name == L"a_value");
+
+    // Past the end the two forms part company. The one taking an ec answers with an empty
+    // optional and ERROR_NO_MORE_ITEMS, and the one without treats that as a failure like any
+    // other and throws, so its optional is in practice never empty.
+    BOOST_CHECK(!testKey.keyAt(99, ec).has_value());
+    BOOST_CHECK_EQUAL(ec.value(), ERROR_NO_MORE_ITEMS);
+    BOOST_CHECK(!testKey.valueAt(99, ec).has_value());
+    BOOST_CHECK_EQUAL(ec.value(), ERROR_NO_MORE_ITEMS);
+
+    BOOST_CHECK_THROW(testKey.keyAt(99), std::system_error);
+    BOOST_CHECK_THROW(testKey.valueAt(99), std::system_error);
+
+    // And the enumerators built without an ec walk the same way as the ones with.
+    int keys = 0;
+    for (const auto &entry : testKey.enumKeys()) {
+        BOOST_CHECK(entry.name == L"child");
+        ++keys;
+    }
+    BOOST_CHECK_EQUAL(keys, 1);
+
+    int values = 0;
+    for (const auto &entry : testKey.enumValues()) {
+        BOOST_CHECK(entry.name == L"a_value");
+        ++values;
+    }
+    BOOST_CHECK_EQUAL(values, 1);
+
+    // removeAll empties the key and leaves the key itself.
+    BOOST_CHECK(testKey.removeAll());
+    BOOST_CHECK_EQUAL(testKey.keyCount(), 0);
+    BOOST_CHECK_EQUAL(testKey.valueCount(), 0);
+    BOOST_CHECK(testKey.isValid());
+}
+
 BOOST_AUTO_TEST_CASE(test_regkey_ownership) {
     std::error_code ec;
     RegKey hkcuKey(RegKey::RK_CurrentUser);

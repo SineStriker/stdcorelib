@@ -375,4 +375,30 @@ BOOST_AUTO_TEST_CASE(test_what_a_broken_sequence_costs) {
     }
 }
 
+// The predicate the conversions are written against. Everything above went through them and
+// nothing had asked it directly, so the surrogate range and the ceiling were only ever checked
+// by their effect on a conversion.
+BOOST_AUTO_TEST_CASE(test_which_code_points_are_valid) {
+    BOOST_CHECK(utf::is_valid_code_point(0));
+    BOOST_CHECK(utf::is_valid_code_point(U'A'));
+    BOOST_CHECK(utf::is_valid_code_point(U'你'));
+
+    // The surrogates encode a pair in UTF-16 and stand for nothing on their own.
+    BOOST_CHECK(utf::is_valid_code_point(0xD7FF));
+    BOOST_CHECK(!utf::is_valid_code_point(0xD800));
+    BOOST_CHECK(!utf::is_valid_code_point(0xDBFF));
+    BOOST_CHECK(!utf::is_valid_code_point(0xDC00));
+    BOOST_CHECK(!utf::is_valid_code_point(0xDFFF));
+    BOOST_CHECK(utf::is_valid_code_point(0xE000));
+
+    // And the last code point there is, against the first one there is not.
+    BOOST_CHECK(utf::is_valid_code_point(0x10FFFF));
+    BOOST_CHECK(!utf::is_valid_code_point(0x110000));
+    BOOST_CHECK(!utf::is_valid_code_point(0xFFFFFFFF));
+
+    // constexpr, so it answers where a constant is wanted.
+    static_assert(utf::is_valid_code_point(U'A'), "");
+    static_assert(!utf::is_valid_code_point(0xD800), "");
+}
+
 BOOST_AUTO_TEST_SUITE_END()
