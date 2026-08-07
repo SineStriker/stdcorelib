@@ -791,6 +791,108 @@ BOOST_AUTO_TEST_CASE(test_prior_can_set_itself_on_an_empty_line) {
     BOOST_CHECK(!ok(parser, {"value"}).option("--help").has_value());
 }
 
+// Everything the tokenizer does, asked once at the root and once a level down, against one set
+// of declarations put in both places. Anything that reads the whole command line rather than
+// what the command that was reached was given looks right on a flat tree and is wrong under a
+// subcommand, which is how AutoSetWhenNoSymbols was broken for every subcommand while a case
+// watched the line that decides it.
+BOOST_AUTO_TEST_CASE(test_the_parser_reads_the_same_a_level_down) {
+    const auto &declare = [](std::string name) {
+        return Command(std::move(name))
+            .addArguments({Argument("src").multi(), Argument("dest")})
+            .addOptions({
+                Option({"-f", "--force"}, "Force"),
+                Option({"-o", "--output"}, "Out").arg("file"),
+                Option({"-n"}, "Count").arg(Argument("n").type<int>()),
+                Option({"-m"}, "Mode").arg(Argument("mode").expect({"fast", "slow"})),
+                Option({"-c"}, "Config").arg(Argument("path", {}, false).defaultValue("none")),
+            });
+    };
+
+    // Everything a caller can read back, in one string, so a mismatch says what differs rather
+    // than only that something does.
+    const auto &readBack = [](const ParseResult &result) {
+        std::string res = result.isValid() ? "ok" : "error " + std::to_string(int(result.error()));
+        for (int i = 0; i < 2; ++i) {
+            res += " |";
+            for (auto value : result.rawValues(i)) {
+                res += " " + std::string(value);
+            }
+        }
+        for (const auto *token : {"-f", "-o", "-n", "-m", "-c"}) {
+            auto given = result.option(token);
+            res += std::string(" ") + token + "=";
+            res += given ? given->value<std::string>().value_or("(set)") : "(no)";
+        }
+        return res;
+    };
+
+    const std::vector<std::vector<std::string>> lines = {
+        {},
+        {"a"},
+        {"a", "b"},
+        {"a", "b", "c"},
+        {"-f", "a", "b"},
+        {"a", "-f", "b"},
+        {"a", "b", "-f"},
+        {"-o", "x", "a", "b"},
+        {"--output=x", "a", "b"},
+        {"-ox", "a", "b"},
+        {"--force", "--output", "x", "a", "b"},
+        {"-fo", "x", "a", "b"},
+        {"--", "-f", "b"},
+        {"-n", "12", "a", "b"},
+        {"-n", "notanumber", "a", "b"},
+        {"-m", "fast", "a", "b"},
+        {"-m", "sideways", "a", "b"},
+        {"-c", "a", "b"},
+        {"--unknown", "a", "b"},
+        {"-f", "-f", "a", "b"},
+        {"-o", "a", "b"},
+    };
+
+    for (auto options : {Parser::Standard, Parser::AllowUnixGroupFlags}) {
+        Parser flat(declare("prog"));
+        Parser deep(Command("prog").addCommand(declare("inner")));
+
+        for (const auto &line : lines) {
+            std::vector<std::string> flatArgs = {"prog"};
+            flatArgs.insert(flatArgs.end(), line.begin(), line.end());
+            std::vector<std::string> deepArgs = {"prog", "inner"};
+            deepArgs.insert(deepArgs.end(), line.begin(), line.end());
+
+            std::string what;
+            for (const auto &item : line) {
+                what += " " + item;
+            }
+            BOOST_CHECK_MESSAGE(readBack(flat.parse(flatArgs, options)) ==
+                                    readBack(deep.parse(deepArgs, options)),
+                                "[" + what + "] reads one way at the root and another a level "
+                                             "down:\n  root " +
+                                    readBack(flat.parse(flatArgs, options)) + "\n  down " +
+                                    readBack(deep.parse(deepArgs, options)));
+        }
+    }
+}
+
+// A response file is expanded before the command is looked for, so it may name one.
+BOOST_AUTO_TEST_CASE(test_a_response_file_may_name_a_subcommand) {
+    auto path = std::filesystem::temp_directory_path() / "stdc_cli_response_nested.txt";
+    {
+        std::ofstream file(path, std::ios::binary);
+        file << "build\n-j\n4\ntarget\n";
+    }
+
+    Parser parser(Command("prog").addCommand(
+        Command("build").addArgument(Argument("target")).addOption(Option({"-j"}, "Jobs").arg("n"))));
+    auto result = ok(parser, {"@" + path.string()}, Parser::EnableResponseFile);
+    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "build"}));
+    BOOST_CHECK_EQUAL(must(result.value(0)), "target");
+    BOOST_CHECK_EQUAL(must(result.valueForOption<int>("-j")), 4);
+
+    std::filesystem::remove(path);
+}
+
 // Everything the prior ladder does, asked once at the root and once a level down, because the
 // two only tell each other apart there. A root only tree makes "the line was empty" and "this
 // command was given nothing" the same value, which is how AutoSetWhenNoSymbols was broken for
