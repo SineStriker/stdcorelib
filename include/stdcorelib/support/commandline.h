@@ -6,6 +6,37 @@
 ///
 /// The shape of the API comes from SysCmdLine, https://github.com/SineStriker/syscmdline, which
 /// this replaces.
+///
+/// \section cli_help Changing the help text
+///
+/// Five rungs, and a program climbs only as far as it needs to. Each one is written in terms of
+/// the one below it, so nothing is reimplemented to change one thing.
+///
+/// \verbatim
+///   1  how much room it has          parser.setIndent(2)
+///                                    parser.setSpacing(1)
+///                                    parser.setTextWidth(100)
+///
+///   2  how it is printed             layout.setTitleStyle({console::bold})
+///                                    layout.setBodyStyle(HelpBlock::Epilogue, {...})
+///
+///   3  which blocks, in what order   HelpLayout().add(HelpBlock::Usage)
+///                                                .add(HelpBlock::Options)
+///                                                .add(myOwnBlock)
+///
+///   4  how a block is made or laid   struct Mine : HelpFormatter {
+///      out, one rung at a time           std::vector<HelpBlock> blocks(...) const override {
+///                                            auto res = HelpFormatter::blocks(...);
+///                                            ...
+///                                        }
+///                                    };
+///
+///   5  none of the above             for (auto &block : result.helpBlocks()) { ... }
+/// \endverbatim
+///
+/// Rungs 1 to 3 are settings on the Parser and need no type of your own. Rung 4 is
+/// HelpFormatter, which is a ladder of its own and carries the diagram of it. Rung 5 hands the
+/// blocks over and gets out of the way.
 
 #ifndef STDCORELIB_COMMANDLINE_H
 #define STDCORELIB_COMMANDLINE_H
@@ -921,6 +952,128 @@ namespace stdc::cli {
         std::vector<HelpBlock> _blocks;
     };
 
+    /// How much room the help text has, and what it says beyond the necessary.
+    struct HelpSizes {
+        /// How far the body of a section is set in from the margin.
+        int indent = 4;
+        /// How many columns separate the two columns of a list.
+        int spacing = 4;
+        /// How many columns the whole text may use.
+        int textWidth = 80;
+        /// A bitwise or of Parser::DisplayOption values.
+        int displayOptions = 0;
+    };
+
+    /// How the help text is made, from a command tree at the top to printable runs at the
+    /// bottom. Rung 4 of \ref cli_help.
+    ///
+    /// \verbatim
+    ///     the command that was reached, and ParseResult::helpLayout()
+    ///                    |
+    ///                    v
+    ///    +---- blocks(result, sizes) ---------- what the text is made of: which blocks
+    ///    |               |                      there are, what each is called, what goes
+    ///    |               |                      in its two columns
+    ///    |               v
+    ///    |      displayed(Option, bool) ------- how one name is spelled, before there is
+    ///    |               |                      any block to put it in
+    ///    |               v                        "-o, --output <file>"
+    ///    |      displayed(Argument) -----------   "<file>", "[<file>]", "<file>..."
+    ///    |
+    ///    +--> std::vector<HelpBlock> ---------> ParseResult::helpBlocks() stops here and
+    ///                    |                      hands these over
+    ///                    v
+    ///    +---- render(blocks, sizes) ---------- the whole page: measures every list, puts a
+    ///    |               |                      blank line between one block and the next
+    ///    |               v
+    ///    |      renderBlock(block, sizes, widest)
+    ///    |                                      one block: its heading, its columns lined
+    ///    |                                      up to widest, its descriptions wrapped
+    ///    |
+    ///    +--> std::vector<Run>
+    ///                    |
+    ///          +---------+---------+
+    ///          v                   v
+    ///   ParseResult::        ParseResult::
+    ///     helpText()           showHelp()
+    ///   joins them and       prints them and
+    ///   drops the styles     applies the styles
+    /// \endverbatim
+    ///
+    /// Subclass and override the rung that says what wants changing. **Every default is public
+    /// and callable**, which is what keeps "the same as before except for this" down to a call
+    /// to the base rather than a renderer written again:
+    ///
+    /// \code
+    ///   struct Shouty : cli::HelpFormatter {
+    ///       std::vector<cli::HelpBlock> blocks(const cli::ParseResult &result,
+    ///                                          const cli::HelpSizes &sizes) const override {
+    ///           auto res = HelpFormatter::blocks(result, sizes);
+    ///           for (auto &block : res) {
+    ///               block.title = stdc::str::to_upper(block.title);
+    ///           }
+    ///           return res;
+    ///       }
+    ///   };
+    ///   parser.setHelpFormatter(std::make_shared<Shouty>());
+    /// \endcode
+    ///
+    /// A rung reaches the ones under it through \c this, so overriding
+    /// displayed(const Argument &) alone changes every metavar in the usage line and in every
+    /// list, without touching anything else.
+    ///
+    /// Nothing is kept here between calls, so one of these can be shared by every parser in a
+    /// program. What there is to keep is HelpSizes, which the parser owns and hands over.
+    class STDC_EXPORT HelpFormatter {
+    public:
+        /// One run of help text and how it is printed. ParseResult::helpText() joins these and
+        /// drops the styles, ParseResult::showHelp() prints them and applies them.
+        struct Run {
+            TextStyle style;
+            std::string text;
+        };
+
+        HelpFormatter();
+        virtual ~HelpFormatter();
+
+        /// How an argument is written where it is named. \c \<file\>, or \c [\<file\>] where it
+        /// may be left out, with an ellipsis where it repeats.
+        virtual std::string displayed(const Argument &argument) const;
+
+        /// How an option is written, with whatever it takes after it. Every spelling of it in a
+        /// list, and the first one alone on the usage line.
+        ///
+        /// \note The arguments it takes are asked of displayed(const Argument &), so overriding
+        ///       that one reaches here too.
+        virtual std::string displayed(const Option &option, bool allSpellings) const;
+
+        /// What the help text is made of, in the order ParseResult::helpLayout() asks for and
+        /// with the groups a CommandCatalogue asks for already split.
+        virtual std::vector<HelpBlock> blocks(const ParseResult &result,
+                                              const HelpSizes &sizes) const;
+
+        /// One block laid out, its heading over it and its columns lined up to \a widest.
+        ///
+        /// The blank line that separates one block from the next is render()'s, not this one's,
+        /// so what comes back is the block and nothing around it.
+        virtual std::vector<Run> renderBlock(const HelpBlock &block, const HelpSizes &sizes,
+                                             size_t widest) const;
+
+        /// The whole page. Measures the lists, then asks renderBlock() for each block and puts
+        /// a blank line between them.
+        virtual std::vector<Run> render(const std::vector<HelpBlock> &blocks,
+                                        const HelpSizes &sizes) const;
+
+        /// How wide the left column of \a block is, in columns rather than in bytes.
+        static size_t widestOf(const HelpBlock &block);
+        /// The widest across all of them, which is what AlignAllCatalogues lines up to.
+        static size_t widestOf(const std::vector<HelpBlock> &blocks);
+
+        /// \a text broken into lines of at most \a columns columns, at spaces where there are
+        /// any and between characters where there are none. Newlines already in it are kept.
+        static std::vector<std::string> wrapped(const std::string &text, int columns);
+    };
+
     /// What a command line turned out to mean, or why it did not.
     class STDC_EXPORT ParseResult {
     public:
@@ -1036,11 +1189,22 @@ namespace stdc::cli {
             return given ? given->value<T>() : std::nullopt;
         }
 
+        /// Printed above and below the help text, as the parser was told.
+        const std::string &prologue() const;
+        const std::string &epilogue() const;
+        /// Which blocks the help text is made of, in what order, and how each is printed.
+        const HelpLayout &helpLayout() const;
+        /// What the commands above the one that was reached declared global, which is in scope
+        /// here and is demanded here, gathered by the walk the parser made.
+        ///
+        /// \warning These point into the command tree and last as long as it does.
+        std::vector<const Option *> inheritedOptions() const;
+
         /// The help text for the command that was reached, as the blocks it is made of, in the
         /// order the layout asks for and with the groups a catalogue asks for already split.
         ///
-        /// This is what helpText() lays out. Ask for these where the layout cannot say what the
-        /// program wants, and print them however it likes.
+        /// This is what helpText() lays out. Ask for these where neither HelpLayout nor a
+        /// HelpFormatter can say what the program wants, and print them however it likes.
         std::vector<HelpBlock> helpBlocks() const;
 
         /// The help text for the command that was reached, prologue and epilogue included.
@@ -1153,6 +1317,15 @@ namespace stdc::cli {
         /// \note HelpLayout::defaultLayout() is what a parser starts with.
         void setHelpLayout(HelpLayout layout);
         const HelpLayout &helpLayout() const;
+
+        /// How those blocks are made and laid out, for a program that wants something no
+        /// arrangement of the above can say.
+        ///
+        /// \note A plain HelpFormatter is what a parser starts with, and null puts that back.
+        ///       Nothing is kept in one between calls, so a formatter may be shared.
+        /// \sa HelpFormatter, which is a ladder rather than one method
+        void setHelpFormatter(std::shared_ptr<HelpFormatter> formatter);
+        const std::shared_ptr<HelpFormatter> &helpFormatter() const;
 
         ParseResult parse(const std::vector<std::string> &args, int parseOptions = Standard) const;
         /// Parses and runs the handler that was reached, which is what a \c main wants.

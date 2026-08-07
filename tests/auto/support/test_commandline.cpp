@@ -2443,6 +2443,223 @@ BOOST_AUTO_TEST_CASE(test_styling_is_in_what_is_printed_and_not_in_the_text) {
     BOOST_CHECK_EQUAL(stripped, plain);
 }
 
+namespace {
+
+    /// A tree with one of everything the rungs below touch, so that a case can say which of
+    /// them moved and which did not.
+    Parser formatterTree() {
+        Parser parser(Command("prog", "What the program is for")
+                          .addArgument(Argument("path", "Where to work"))
+                          .addOption(Option({"-o", "--output"}, "Where to write")
+                                         .arg("file")
+                                         .required())
+                          .addOption(Option({"-v"}, "Say more")));
+        parser.setEpilogue("An epilogue line");
+        parser.setTextWidth(80);
+        return parser;
+    }
+
+    /// Rung 1: how a metavar is spelled, which both the usage line and every list ask for.
+    struct Braces : HelpFormatter {
+        std::string displayed(const Argument &argument) const override {
+            return "{" + argument.displayName() + "}";
+        }
+    };
+
+}
+
+// Overriding the bottom rung alone reaches everywhere a name is written, including through the
+// option rung, which asks for its arguments through this rather than straight to the base.
+BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_how_a_name_is_spelled) {
+    auto parser = formatterTree();
+    parser.setHelpFormatter(std::make_shared<Braces>());
+    auto text = parser.parse(argv({})).helpText();
+
+    BOOST_CHECK(has(text, "Usage:\n    prog -o {file} [options] {path}"));
+    BOOST_CHECK(has(text, "-o, --output {file}"));
+    BOOST_CHECK(has(text, "{path}    Where to work"));
+    BOOST_CHECK(!has(text, "<"));
+
+    // The rung above it is untouched, so the spellings are still listed the way they were.
+    BOOST_CHECK(has(text, "-o, --output"));
+}
+
+// The rung above, overridden on top of the base rather than instead of it.
+BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_how_an_option_is_written) {
+    struct Joined : HelpFormatter {
+        std::string displayed(const Option &option, bool allSpellings) const override {
+            auto res = HelpFormatter::displayed(option, allSpellings);
+            auto at = res.find(" <");
+            if (at != std::string::npos) {
+                res.replace(at, 1, "=");
+            }
+            return res;
+        }
+    };
+
+    auto parser = formatterTree();
+    parser.setHelpFormatter(std::make_shared<Joined>());
+    auto text = parser.parse(argv({})).helpText();
+
+    BOOST_CHECK(has(text, "-o, --output=<file>"));
+    BOOST_CHECK(has(text, "Usage:\n    prog -o=<file> [options] <path>"));
+    // A positional argument is not an option and is written the way it was.
+    BOOST_CHECK(has(text, "<path>    Where to work"));
+}
+
+// The middle rung: what the text is made of. Everything CLI11 needs eight overridables for is
+// this one hook, since what comes back is data rather than eight pieces of finished text.
+BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_what_the_blocks_hold) {
+    struct Shouty : HelpFormatter {
+        std::vector<HelpBlock> blocks(const ParseResult &result,
+                                      const HelpSizes &sizes) const override {
+            auto res = HelpFormatter::blocks(result, sizes);
+            for (auto &block : res) {
+                for (auto &c : block.title) {
+                    c = c >= 'a' && c <= 'z' ? char(c - 'a' + 'A') : c;
+                }
+            }
+            HelpBlock seeAlso;
+            seeAlso.title = "SEE ALSO";
+            seeAlso.text = "prog(1)";
+            res.push_back(std::move(seeAlso));
+            return res;
+        }
+    };
+
+    auto parser = formatterTree();
+    parser.setHelpFormatter(std::make_shared<Shouty>());
+    auto result = parser.parse(argv({}));
+    auto text = result.helpText();
+
+    BOOST_CHECK(has(text, "OPTIONS:"));
+    BOOST_CHECK(!has(text, "Options:"));
+    BOOST_CHECK(has(text, "SEE ALSO:\n    prog(1)\n"));
+    // Laid out like any other block, which is the point of adding one here rather than printing
+    // it after the help text.
+    BOOST_CHECK(has(text, "An epilogue line\n\nSEE ALSO:"));
+
+    // helpBlocks() answers with what the formatter made rather than with what the layout asked
+    // for, so the two ways of reaching the blocks agree.
+    BOOST_CHECK_EQUAL(result.helpBlocks().back().title, "SEE ALSO");
+}
+
+// One block laid out differently and the rest left alone, which is what the base being callable
+// per block is for.
+BOOST_AUTO_TEST_CASE(test_a_formatter_can_lay_one_block_out_differently) {
+    struct BareOptions : HelpFormatter {
+        std::vector<Run> renderBlock(const HelpBlock &block, const HelpSizes &sizes,
+                                     size_t widest) const override {
+            if (block.role != HelpBlock::Options) {
+                return HelpFormatter::renderBlock(block, sizes, widest);
+            }
+            std::vector<Run> res;
+            for (const auto &entry : block.entries) {
+                res.push_back({block.entryStyle, entry.left + ";"});
+            }
+            res.push_back({{}, "\n"});
+            return res;
+        }
+    };
+
+    auto parser = formatterTree();
+    parser.setHelpFormatter(std::make_shared<BareOptions>());
+    auto text = parser.parse(argv({})).helpText();
+
+    BOOST_CHECK(has(text, "-o, --output <file>;-v;\n"));
+    BOOST_CHECK(!has(text, "Options:"));
+    // Everything that is not that block is as it was, heading, indent and all.
+    BOOST_CHECK(has(text, "Description:\n    What the program is for\n"));
+    BOOST_CHECK(has(text, "Usage:\n    prog -o <file> [options] <path>\n"));
+    BOOST_CHECK(has(text, "Arguments:\n    <path>    Where to work\n"));
+}
+
+// The top rung, which is the whole page and reuses none of it.
+BOOST_AUTO_TEST_CASE(test_a_formatter_can_lay_the_whole_page_out) {
+    struct Terse : HelpFormatter {
+        std::vector<Run> render(const std::vector<HelpBlock> &blocks,
+                                const HelpSizes &) const override {
+            std::vector<Run> res;
+            for (const auto &block : blocks) {
+                res.push_back({{}, std::to_string(int(block.role)) + ":" +
+                                       std::to_string(block.entries.size()) + " "});
+            }
+            return res;
+        }
+    };
+
+    auto parser = formatterTree();
+    parser.setHelpFormatter(std::make_shared<Terse>());
+    // Description, usage, arguments, options, epilogue, with the counts each holds.
+    BOOST_CHECK_EQUAL(parser.parse(argv({})).helpText(), "1:0 2:0 3:1 4:2 7:0 ");
+}
+
+// A formatter is handed over rather than owned, since a ParseResult prints its own help without
+// being given the parser that made it and has to keep whatever made that help alive.
+BOOST_AUTO_TEST_CASE(test_a_formatter_outlives_the_parser_that_used_it) {
+    auto formatter = std::make_shared<Braces>();
+    ParseResult result;
+    {
+        auto parser = formatterTree();
+        parser.setHelpFormatter(formatter);
+        result = parser.parse(argv({}));
+    }
+    BOOST_CHECK(has(result.helpText(), "{path}"));
+
+    // Nothing is kept in one between calls, so the same formatter answers for two parsers.
+    auto one = formatterTree();
+    auto two = formatterTree();
+    one.setHelpFormatter(formatter);
+    two.setHelpFormatter(formatter);
+    BOOST_CHECK_EQUAL(one.parse(argv({})).helpText(), two.parse(argv({})).helpText());
+}
+
+// Null is how a program stops using one, rather than leaving a parser that cannot answer for
+// its own help text.
+BOOST_AUTO_TEST_CASE(test_no_formatter_means_the_plain_one) {
+    auto parser = formatterTree();
+    BOOST_CHECK(parser.helpFormatter() != nullptr);
+
+    parser.setHelpFormatter(std::make_shared<Braces>());
+    BOOST_CHECK(has(parser.parse(argv({})).helpText(), "{path}"));
+
+    parser.setHelpFormatter(nullptr);
+    BOOST_CHECK(parser.helpFormatter() != nullptr);
+    BOOST_CHECK(has(parser.parse(argv({})).helpText(), "<path>"));
+}
+
+// What a formatter is handed to work from, which is the same thing the default works from.
+BOOST_AUTO_TEST_CASE(test_a_result_answers_for_what_its_help_is_made_from) {
+    auto parser = helpTree();
+    auto root = parser.parse(argv({}));
+
+    BOOST_CHECK_EQUAL(root.prologue(), "A prologue line");
+    BOOST_CHECK_EQUAL(root.epilogue(), "An epilogue line");
+    BOOST_CHECK(!root.helpLayout().isEmpty());
+    // The root has nothing above it, so it inherits nothing.
+    BOOST_CHECK(root.inheritedOptions().empty());
+
+    auto sub = parser.parse(argv({"copy", "a", "b"}));
+    BOOST_REQUIRE_EQUAL(sub.inheritedOptions().size(), 1u);
+    BOOST_CHECK(sub.inheritedOptions().front()->isGlobal());
+}
+
+// The measuring a formatter needs to lay a block out itself, lent out rather than written again.
+BOOST_AUTO_TEST_CASE(test_the_formatter_lends_out_what_it_measures_with) {
+    auto lines = HelpFormatter::wrapped("one two three four", 9);
+    BOOST_REQUIRE_EQUAL(lines.size(), 3u);
+    BOOST_CHECK_EQUAL(lines[0], "one two");
+    BOOST_CHECK_EQUAL(lines[2], "four");
+
+    HelpBlock block;
+    block.entries = {{"-v", "Say more"}, {"--verbose", "The same"}};
+    BOOST_CHECK_EQUAL(HelpFormatter::widestOf(block), 9u);
+
+    HelpBlock wider;
+    wider.entries = {{"--configuration", ""}};
+    BOOST_CHECK_EQUAL(HelpFormatter::widestOf(std::vector<HelpBlock>{block, wider}), 15u);
+}
+
 // The left column is measured in columns too. A metavar written in a script that is not ASCII
 // is longer in bytes than it is wide, and counting bytes pushes every description in the block
 // further right than it belongs.
