@@ -216,4 +216,163 @@ BOOST_AUTO_TEST_CASE(test_valid_utf8_shapes) {
     BOOST_CHECK(utf::is_valid_utf8(bytes({0xF0, 0x90, 0x80, 0x80}))); // U+10000
 }
 
+// Every code point there is, encoded and decoded again.
+//
+// The cases above pick the interesting ones by hand, which is how the interesting ones get
+// picked wrong. There are only about a million scalars, so there is no need to choose.
+BOOST_AUTO_TEST_CASE(test_every_code_point_survives_a_round_trip) {
+    std::u32string all;
+    all.reserve(0x110000);
+    for (char32_t c = 0; c <= utf::max_code_point; ++c) {
+        // The surrogate range is not a code point anybody can write, so it is not in the sweep.
+        if (c >= 0xD800 && c <= 0xDFFF) {
+            continue;
+        }
+        all.push_back(c);
+    }
+    BOOST_REQUIRE_EQUAL(all.size(), 0x110000u - 0x800u);
+
+    const auto u8 = utf::utf32_to_utf8(all);
+    const auto u16 = utf::utf32_to_utf16(all);
+
+    BOOST_CHECK(utf::is_valid_utf8(u8));
+    BOOST_CHECK(utf::is_valid_utf16(u16));
+    BOOST_CHECK(utf::is_valid_utf32(all));
+
+    BOOST_CHECK(utf::utf8_to_utf32(u8) == all);
+    BOOST_CHECK(utf::utf16_to_utf32(u16) == all);
+    BOOST_CHECK(utf::utf8_to_utf16(u8) == u16);
+    BOOST_CHECK(utf::utf16_to_utf8(u16) == u8);
+
+    // And the byte counts are what the encoding says they should be, so a round trip that
+    // silently agreed with itself on a wrong encoding would still be caught.
+    size_t expected = 0;
+    for (char32_t c : all) {
+        expected += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+    }
+    BOOST_CHECK_EQUAL(u8.size(), expected);
+}
+
+// Every byte on its own. Only the ASCII half is a string by itself, and the rest each announce
+// something that is not there.
+BOOST_AUTO_TEST_CASE(test_every_single_byte) {
+    for (int b = 0; b <= 0xFF; ++b) {
+        auto s = bytes({b});
+        bool valid = b <= 0x7F;
+        BOOST_CHECK_MESSAGE(utf::is_valid_utf8(s) == valid,
+                            "byte " + std::to_string(b) + " should be " +
+                                (valid ? "valid" : "invalid") + " on its own");
+    }
+}
+
+// Every string of two bytes there is. Two ways to be one: two ASCII characters, or one two byte
+// sequence, which means a lead of C2 to DF and a trail of 80 to BF. C0 and C1 could only ever
+// spell something shorter, and anything above DF announces a third byte that is not there.
+BOOST_AUTO_TEST_CASE(test_every_two_byte_string) {
+    int wrong = 0;
+    for (int lead = 0x00; lead <= 0xFF; ++lead) {
+        for (int trail = 0x00; trail <= 0xFF; ++trail) {
+            bool two_characters = lead <= 0x7F && trail <= 0x7F;
+            bool one_sequence =
+                lead >= 0xC2 && lead <= 0xDF && trail >= 0x80 && trail <= 0xBF;
+            bool expected = two_characters || one_sequence;
+            if (utf::is_valid_utf8(bytes({lead, trail})) != expected) {
+                if (++wrong <= 8) {
+                    BOOST_ERROR("pair " + std::to_string(lead) + " " + std::to_string(trail) +
+                                " should be " + (expected ? "valid" : "invalid"));
+                }
+            }
+        }
+    }
+    BOOST_CHECK_EQUAL(wrong, 0);
+}
+
+// Every three byte sequence whose first two bytes are a plausible start, which is the block
+// where the surrogate hole and the overlong floor both live.
+BOOST_AUTO_TEST_CASE(test_every_three_byte_sequence) {
+    int wrong = 0;
+    for (int lead = 0xE0; lead <= 0xEF; ++lead) {
+        for (int second = 0x00; second <= 0xFF; ++second) {
+            for (int third = 0x00; third <= 0xFF; ++third) {
+                char32_t c = char32_t(((lead & 0x0F) << 12) | ((second & 0x3F) << 6) |
+                                      (third & 0x3F));
+                bool shaped = second >= 0x80 && second <= 0xBF && third >= 0x80 && third <= 0xBF;
+                // Three bytes may not spell what two would have, and may not spell a surrogate.
+                bool expected = shaped && c >= 0x800 && !(c >= 0xD800 && c <= 0xDFFF);
+                if (utf::is_valid_utf8(bytes({lead, second, third})) != expected) {
+                    if (++wrong <= 8) {
+                        BOOST_ERROR("triple " + std::to_string(lead) + " " +
+                                    std::to_string(second) + " " + std::to_string(third) +
+                                    " should be " + (expected ? "valid" : "invalid"));
+                    }
+                }
+            }
+        }
+    }
+    BOOST_CHECK_EQUAL(wrong, 0);
+}
+
+// How many replacement characters one broken sequence costs.
+//
+// Unicode's recommendation is one per maximal subpart: the decoder consumes as much as could
+// still have become a valid sequence, and that whole run is one error. The count is the whole
+// question, and it is the part a decoder is easiest to get wrong by emitting one per byte.
+BOOST_AUTO_TEST_CASE(test_what_a_broken_sequence_costs) {
+    struct Case {
+        std::string input;
+        size_t replacements;
+        const char *why;
+    };
+
+    const Case cases[] = {
+        // A truncated sequence is one error however many bytes it got through, as long as every
+        // byte of it was still on the way to something valid.
+        {bytes({0xC2}), 1, "a two byte lead with nothing after it"},
+        {bytes({0xE1, 0x80}), 1, "a three byte sequence one byte short"},
+        {bytes({0xE1}), 1, "a three byte lead alone"},
+        {bytes({0xF1, 0x80, 0x80}), 1, "a four byte sequence one byte short"},
+        {bytes({0xF1, 0x80}), 1, "two bytes short"},
+        {bytes({0xF1}), 1, "a four byte lead alone"},
+
+        // A byte that could never have continued the sequence ends it, and counts on its own.
+        {bytes({0xE0, 0x80}), 2, "E0 only takes A0 to BF, so 80 is not a continuation of it"},
+        {bytes({0xF0, 0x80}), 2, "F0 only takes 90 to BF"},
+        {bytes({0xF4, 0x90}), 2, "F4 only takes 80 to 8F, which is where U+10FFFF ends"},
+        {bytes({0xED, 0xA0}), 2, "ED only takes 80 to 9F, which is where the surrogates start"},
+
+        // Stray continuation bytes are one error each, since none of them starts anything.
+        {bytes({0x80}), 1, "one stray continuation byte"},
+        {bytes({0x80, 0x80}), 2, "two of them"},
+        {bytes({0x80, 0x80, 0x80}), 3, "three of them"},
+
+        // Bytes that can never appear anywhere.
+        {bytes({0xC0, 0x80}), 2, "C0 could only ever spell something shorter"},
+        {bytes({0xFE}), 1, "FE is not a lead byte"},
+        {bytes({0xFF, 0xFF}), 2, "nor is FF, twice"},
+
+        // And what follows a broken sequence is read as itself.
+        {bytes({0xE1, 0x80, 'A'}), 1, "a truncated sequence then a letter"},
+        {bytes({0xC2, 'A', 0xC2, 'B'}), 2, "two truncated leads with letters between"},
+    };
+
+    for (const auto &c : cases) {
+        auto out = utf::utf8_to_utf32(c.input);
+        size_t count = 0;
+        for (char32_t ch : out) {
+            if (ch == Fffd) {
+                count++;
+            }
+        }
+        BOOST_CHECK_MESSAGE(count == c.replacements,
+                            std::string(c.why) + ": expected " +
+                                std::to_string(c.replacements) + " replacements, got " +
+                                std::to_string(count));
+        // Whatever it was, it is not valid, and failing rather than replacing says so.
+        BOOST_CHECK(!utf::is_valid_utf8(c.input));
+        bool ok = true;
+        BOOST_CHECK(utf::utf8_to_utf32(c.input, utf::fail, &ok).empty());
+        BOOST_CHECK(!ok);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
