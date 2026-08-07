@@ -31,8 +31,6 @@ find_package(stdcorelib REQUIRED)
 target_link_libraries(myapp PRIVATE stdcorelib::stdcorelib)
 ```
 
-A version argument is satisfied by any release with the same major version that is at least as new, so `find_package(stdcorelib 1.1)` takes 1.2 and not 2.0.
-
 Or as a subdirectory:
 
 ```cmake
@@ -66,5 +64,6 @@ Parts are derived from other projects and keep their attribution in the source:
 - [qtbase](https://github.com/qt/qtbase)
 - [xmake](https://github.com/xmake-io/xmake)
 - [Registry](https://github.com/m4x1m1l14n/Registry)
+- [LLVM](https://github.com/llvm/llvm-project)
 
 The generated documentation is styled with [doxygen-awesome-css](https://github.com/jothepro/doxygen-awesome-css), MIT, fetched at configure time by `cmake/doxygen.cmake` when `STDC_BUILD_DOCS` is on, pinned to a tag and checked against a hash. It is a stylesheet: nothing in the library uses it.
