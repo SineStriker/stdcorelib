@@ -54,8 +54,7 @@ target_link_libraries(myapp PRIVATE stdcorelib::stdcorelib)
 | Platform and system | Program and machine information, the Windows registry |
 | Utilities | Flags, scope guards, version numbers |
 
-Each topic carries its own description and an example. Build the `stdcorelib_docs` target with
-`-DSTDC_BUILD_DOCS=ON`, or read the headers, which is where that text lives.
+Each topic carries its own description and an example. Build the `stdcorelib_docs` target with `-DSTDC_BUILD_DOCS=ON`, or read the headers, which is where that text lives.
 
 ## License
 
@@ -68,7 +67,4 @@ Parts are derived from other projects and keep their attribution in the source:
 - [xmake](https://github.com/xmake-io/xmake)
 - [Registry](https://github.com/m4x1m1l14n/Registry)
 
-The generated documentation is styled with
-[doxygen-awesome-css](https://github.com/jothepro/doxygen-awesome-css), MIT, fetched at
-configure time by `cmake/doxygen.cmake` when `STDC_BUILD_DOCS` is on, pinned to a tag and
-checked against a hash. It is a stylesheet: nothing in the library uses it.
+The generated documentation is styled with [doxygen-awesome-css](https://github.com/jothepro/doxygen-awesome-css), MIT, fetched at configure time by `cmake/doxygen.cmake` when `STDC_BUILD_DOCS` is on, pinned to a tag and checked against a hash. It is a stylesheet: nothing in the library uses it.
