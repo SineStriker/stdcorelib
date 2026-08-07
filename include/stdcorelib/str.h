@@ -20,7 +20,45 @@
 #include <stdcorelib/stdc_global.h>
 #include <stdcorelib/adt/array_view.h>
 
+/// \defgroup text Text
+///
+/// Strings, formatting, the console and UTF conversion.
+///
+/// \code
+///     using namespace stdc;
+///
+///     auto msg  = formatN("%1 took %2 ms", name, elapsed);  // arguments carry their own types
+///     auto head = str::trim(str::split(line, ",").front());
+///     auto path = str::join({"usr", "local", "bin"}, "/");
+///     auto full = str::varexp("${HOME}/config", env);       // ${VAR}, nested, $$ escapes
+/// \endcode
+///
+/// \c formatN takes anything \c str::to_string handles, which includes \c std::filesystem::path and
+/// wide strings, so there is nothing to convert at the call site.
+///
+/// The console writes attributes, and writes UTF-8 that holds up on a Windows console. Whether
+/// escapes are emitted at all is decided per target file, so redirecting to a file gets the text
+/// alone rather than a pile of escape sequences.
+///
+/// \code
+///     console::printf(console::bold, console::lightgreen, console::nocolor, "%d passed\n", n);
+///     console::warning("%1 is deprecated, use %2", old_name, new_name);
+///     u8println("plain UTF-8, transcoded for the console if it needs it");
+///
+///     // Or with the attributes inside the string rather than beside it.
+///     cprintln("${lightgreen}ok ${@blue bold}on blue ${reset}plain, 50$$ off");
+/// \endcode
+///
+/// \c console::set_color_mode() is where a \c --color=always flag or \c NO_COLOR belongs, and
+/// \c console::width() answers how wide the terminal is.
+///
+/// The conversions in \ref utf.h are what the rest of this is built on, and they follow the Unicode
+/// substitution rule: one replacement character per ill-formed maximal subpart, not one per byte.
+
 namespace stdc {
+
+    /// \addtogroup text
+    /// @{
 
     namespace str {
 
@@ -513,6 +551,7 @@ namespace stdc {
     STDC_EXPORT const std::error_category &windows_utf8_category() noexcept;
 #endif
 
+    /// @}
 }
 
 #endif // STDCORELIB_STR_H

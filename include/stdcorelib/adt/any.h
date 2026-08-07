@@ -15,6 +15,9 @@
 
 namespace stdc {
 
+    /// \addtogroup containers
+    /// @{
+
     namespace detail {
 
         /// How much of a value an any carries without reaching for the heap.
@@ -303,6 +306,7 @@ namespace stdc {
         lhs.swap(rhs);
     }
 
+    /// @}
 }
 
 #endif // STDCORELIB_ANY_H

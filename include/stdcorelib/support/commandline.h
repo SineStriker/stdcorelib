@@ -58,7 +58,39 @@
 #include <stdcorelib/flags.h>
 #include <stdcorelib/adt/array_view.h>
 
+/// \defgroup cli Command line
+///
+/// Declaring what a program takes on its command line, and reading back what it was given. Replaces
+/// SysCmdLine, https://github.com/SineStriker/syscmdline.
+///
+/// A tree of stdc::cli::Command, each carrying its stdc::cli::Argument and stdc::cli::Option, is
+/// handed to a stdc::cli::Parser. What comes back is a stdc::cli::ParseResult, and everything read
+/// out of one answers with \c std::optional, so a value that is not there and a value that is empty
+/// are different answers.
+///
+/// \code
+///     using namespace stdc;
+///
+///     cli::Parser parser(cli::Command("prog", "What it is for")
+///                            .addArgument(cli::Argument("path", "Where to work"))
+///                            .addOption(cli::Option({"-j", "--jobs"}, "How many at once")
+///                                           .arg(cli::Argument("n").type<int>()))
+///                            .addHelpOption(true)
+///                            .addVersionOption("1.0.0"));
+///
+///     return parser.invoke(system::command_line_arguments());
+/// \endcode
+///
+/// \c invoke() reports a parse that failed, answers \c --help and \c --version, and otherwise
+/// runs the handler of the command that was reached. Its return value is what \c main returns.
+///
+/// Changing the help text is a ladder, and a program climbs only as far as it needs to. See
+/// \ref cli_help.
+
 namespace stdc::cli {
+
+    /// \addtogroup cli
+    /// @{
 
     /// How a token is turned into a \c T, and what to call \c T in the help text.
     ///
@@ -592,17 +624,20 @@ namespace stdc::cli {
         };
 
         inline CommandCatalogue &addCommands(std::string group, std::vector<std::string> names) {
-            assert(canAddGroup(_commands, names) && "a name in this group is in another group already");
+            assert(canAddGroup(_commands, names) &&
+                   "a name in this group is in another group already");
             _commands.push_back({std::move(group), std::move(names)});
             return *this;
         }
         inline CommandCatalogue &addOptions(std::string group, std::vector<std::string> names) {
-            assert(canAddGroup(_options, names) && "a name in this group is in another group already");
+            assert(canAddGroup(_options, names) &&
+                   "a name in this group is in another group already");
             _options.push_back({std::move(group), std::move(names)});
             return *this;
         }
         inline CommandCatalogue &addArguments(std::string group, std::vector<std::string> names) {
-            assert(canAddGroup(_arguments, names) && "a name in this group is in another group already");
+            assert(canAddGroup(_arguments, names) &&
+                   "a name in this group is in another group already");
             _arguments.push_back({std::move(group), std::move(names)});
             return *this;
         }
@@ -1435,8 +1470,8 @@ namespace stdc::cli {
     ///   drops the styles     applies the styles
     /// \endverbatim
     ///
-    /// Subclass and override the rung that says what wants changing. **Every default is public
-    /// and callable**, which is what keeps "the same as before except for this" down to a call
+    /// Subclass and override the rung that says what wants changing. <b>Every default is public
+    /// and callable</b>, which is what keeps "the same as before except for this" down to a call
     /// to the base rather than a renderer written again:
     ///
     /// \code
@@ -1525,6 +1560,7 @@ namespace stdc::cli {
         static std::vector<std::string> wrapped(const std::string &text, int columns);
     };
 
+    /// @}
 }
 
 #endif // STDCORELIB_COMMANDLINE_H

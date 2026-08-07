@@ -11,7 +11,16 @@
 
 #include <stdcorelib/stdc_global.h>
 
+/// \defgroup types Type identity and registries
+///
+/// stdc::type_id names a type without \c typeid, and keeps that name the same across a shared
+/// library boundary, which is the part \c std::type_index does not promise.
+/// stdc::StaticRegistry and stdc::DynamicRegistry are what a plugin system registers into.
+
 namespace stdc {
+
+    /// \addtogroup types
+    /// @{
 
     namespace detail {
 
@@ -150,6 +159,7 @@ namespace stdc {
         friend struct std::hash<type_id>;
     };
 
+    /// @}
 }
 
 template <>

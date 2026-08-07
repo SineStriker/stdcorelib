@@ -10,6 +10,9 @@
 
 namespace stdc {
 
+    /// \addtogroup containers
+    /// @{
+
     template <typename...>
     using void_t = void;
 
@@ -65,6 +68,7 @@ namespace stdc {
 #endif
     }
 
+    /// @}
 }
 
 #endif // STDCORELIB_ALGORITHMS_H

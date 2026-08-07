@@ -18,6 +18,9 @@
 
 namespace stdc {
 
+    /// \addtogroup types
+    /// @{
+
     namespace detail {
 
         /// The one object this process keeps under \a name, built by \a create the first time
@@ -162,7 +165,7 @@ namespace stdc {
         /// \note An instance already handed out by instantiate() is not affected. This only
         ///       stops new ones being made.
         ///
-        /// \warning **A plugin has to do this before it is unloaded.** The factory it registered
+        /// \warning <b>A plugin has to do this before it is unloaded.</b> The factory it registered
         ///          is code inside the plugin, and the registry outlives the plugin, so an entry
         ///          left behind is a call into memory that is no longer mapped. Nothing detects
         ///          this: the entry looks exactly like any other until somebody instantiates it.
@@ -265,6 +268,7 @@ namespace stdc {
         STDC_DISABLE_COPY_MOVE(DynamicRegistry)
     };
 
+    /// @}
 }
 
 #endif // STDCORELIB_DYNAMICREGISTRY_H

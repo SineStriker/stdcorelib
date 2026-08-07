@@ -11,6 +11,9 @@
 
 namespace stdc {
 
+    /// \addtogroup utility
+    /// @{
+
     template <class F>
     class scope_guard {
     public:
@@ -49,6 +52,7 @@ namespace stdc {
         return scope_guard<typename std::decay<F>::type>(std::forward<F>(f));
     }
 
+    /// @}
 }
 
 #endif // STDCORELIB_SCOPE_GUARD_H

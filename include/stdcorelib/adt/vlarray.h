@@ -15,6 +15,9 @@
 
 namespace stdc {
 
+    /// \addtogroup containers
+    /// @{
+
     /// The size-agnostic base of \c vlarray.
     ///
     /// Owns the pointer/size/capacity and the allocator, but not the inline buffer, so a single
@@ -509,6 +512,7 @@ namespace stdc {
         alignas(T) unsigned char m_buffer[N ? N * sizeof(T) : 1];
     };
 
+    /// @}
 }
 
 #endif // STDCORELIB_VLARRAY_H

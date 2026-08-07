@@ -10,6 +10,9 @@
 
 namespace stdc {
 
+    /// \addtogroup platform
+    /// @{
+
     namespace path {
 
         /// Builds a path from UTF-8.
@@ -70,6 +73,7 @@ namespace stdc {
     using path::clean_path;
     using path::normalize_separators;
 
+    /// @}
 }
 
 #endif // STDCORELIB_PATH_H

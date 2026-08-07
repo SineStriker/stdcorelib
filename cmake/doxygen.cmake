@@ -2,9 +2,51 @@
 # installing it is a copy.
 set(_doxy_dir ${CMAKE_CURRENT_BINARY_DIR}/out/share/doc/${STDC_INSTALL_NAME})
 
+# doxygen-awesome-css, https://github.com/jothepro/doxygen-awesome-css, MIT. Stock Doxygen output
+# looks like stock Doxygen output.
+#
+# Fetched rather than committed, pinned to a tag and checked against a hash, so that eighty
+# kilobytes of somebody else's stylesheet is not carried in this repository. It lands in the
+# build directory and is downloaded once: a configure that finds the file already there does
+# nothing. The only build that needs the network is one that asked for documentation.
+set(_doxy_awesome_tag "v2.4.2")
+set(_doxy_awesome_dir ${CMAKE_CURRENT_BINARY_DIR}/doxygen-awesome-css-${_doxy_awesome_tag})
+set(_doxy_awesome_url
+    "https://raw.githubusercontent.com/jothepro/doxygen-awesome-css/${_doxy_awesome_tag}")
+
+foreach(_item
+    "doxygen-awesome.css;5ec49e2dfd097f6b5384e3aae0476eab47748e311fc70e207925f8fcc37477b9"
+    "doxygen-awesome-sidebar-only.css;dc7ddd235375b71ecb0af920faa6b925ee9445ac617f3bc962b0b0db97da7b4f"
+    "LICENSE;e3da754c3f657cc78594fa2e8a3283665f78c743df2485fa9e498a8973051191"
+)
+    list(GET _item 0 _name)
+    list(GET _item 1 _hash)
+
+    if(EXISTS ${_doxy_awesome_dir}/${_name})
+        continue()
+    endif()
+
+    message(STATUS "Fetching ${_name} from doxygen-awesome-css ${_doxy_awesome_tag}")
+    file(DOWNLOAD "${_doxy_awesome_url}/${_name}" ${_doxy_awesome_dir}/${_name}
+        EXPECTED_HASH SHA256=${_hash}
+        TLS_VERIFY ON
+        STATUS _status
+    )
+    list(GET _status 0 _code)
+
+    if(NOT _code EQUAL 0)
+        list(GET _status 1 _reason)
+        file(REMOVE ${_doxy_awesome_dir}/${_name})
+        message(FATAL_ERROR "Cannot fetch ${_name} for the documentation theme: ${_reason}")
+    endif()
+endforeach()
+
 # Only the settings that differ from Doxygen's defaults. Everything left out keeps the default
 # of whichever Doxygen runs.
-set(_doxy_content "PROJECT_NAME           = ${PROJECT_NAME}
+# The name the pages carry, which is the target's in capitals, the way the README writes it.
+string(TOUPPER ${PROJECT_NAME} _doxy_title)
+
+set(_doxy_content "PROJECT_NAME           = ${_doxy_title}
 PROJECT_NUMBER         = ${PROJECT_VERSION}
 PROJECT_BRIEF          = \"${DOXY_DESCRIPTION}\"
 OUTPUT_DIRECTORY       = ${_doxy_dir}
@@ -13,8 +55,15 @@ GENERATE_LATEX         = NO
 
 # The public headers and nothing else. src/ holds the implementation and the private _p.h
 # headers.
-INPUT                  = ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/README.md
-USE_MDFILE_AS_MAINPAGE = ${CMAKE_CURRENT_SOURCE_DIR}/README.md
+#
+# docs/doxygen holds what is written for this and nothing else, which is the landing page. Every
+# topic is defined by the header that owns it, so that the prose and what it describes cannot
+# drift apart, and that leaves only the page no header owns.
+#
+# The README is not in here. It answers what a reader arriving at the repository asks, which is
+# how to build this and how to link it, and none of that belongs in a reference. Carrying it in
+# put a second front page beside the real one.
+INPUT                  = ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/docs/doxygen
 RECURSIVE              = YES
 STRIP_FROM_INC_PATH    = ${CMAKE_CURRENT_SOURCE_DIR}/include
 STRIP_FROM_PATH        = ${CMAKE_CURRENT_SOURCE_DIR}
@@ -29,6 +78,17 @@ EXTRACT_ALL            = YES
 EXTRACT_STATIC         = YES
 HIDE_UNDOC_MEMBERS     = NO
 SORT_MEMBER_DOCS       = NO
+
+# What is in the headers because it has to be, rather than because anybody reads it: every
+# detail namespace, the traits that answer a question about a type, and the bases that exist to
+# be inherited from once.
+#
+# The patterns are split on whitespace, so none of them may contain a space. A pattern written
+# to name one template specialization, with the space that a template argument list has in it,
+# is read as two patterns, and the second one matched enough to leave the index with nothing in
+# it at all. Silently, and with no warning from Doxygen. Hence *enable_if* here, which names the
+# same two specializations without a space.
+EXCLUDE_SYMBOLS        = *::detail *::detail::* stdc::str::conv* *enable_if* stdc::is_map stdc::has_key_type* stdc::has_mapped_type* stdc::vlarray_base stdc::flag stdc::incompatible_flag stdc::winapi::kernel32 stdc::winapi::user32
 
 # Doxygen does not see the configure step, so the switches are spelled out here. Without them
 # the export attribute reads as part of every class name, and the platform headers document
@@ -55,10 +115,18 @@ WARN_AS_ERROR          = FAIL_ON_WARNINGS
 # never asked for it. Turning it on means installing graphviz wherever this runs.
 HAVE_DOT               = NO
 
+# The sidebar-only variant of the theme fetched above. These four are what it asks for rather
+# than a taste of ours: the treeview is where it puts the navigation, and HTML_COLORSTYLE has to
+# be LIGHT because the stylesheet does the colors itself from Doxygen 1.9.5 on.
+#
+# Stylesheets only. Its JavaScript extensions, the dark mode toggle among them, need a custom
+# HTML_HEADER, and a header copied out of one Doxygen is a thing to keep in step with every
+# other Doxygen that ever builds this. The versions here and on the runner already differ.
 GENERATE_TREEVIEW      = YES
 DISABLE_INDEX          = NO
 FULL_SIDEBAR           = NO
 HTML_COLORSTYLE        = LIGHT
+HTML_EXTRA_STYLESHEET  = ${_doxy_awesome_dir}/doxygen-awesome.css ${_doxy_awesome_dir}/doxygen-awesome-sidebar-only.css
 ")
 
 set(_doxy_file ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_Doxyfile)

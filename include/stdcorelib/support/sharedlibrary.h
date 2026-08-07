@@ -11,6 +11,9 @@
 
 namespace stdc {
 
+    /// \addtogroup process
+    /// @{
+
     /// Loads a shared library at run time and resolves symbols from it. \c LoadLibraryEx on
     /// Windows, \c dlopen elsewhere.
     ///
@@ -114,6 +117,7 @@ namespace stdc {
 
     STDC_DECLARE_OPERATORS_FOR_FLAGS(SharedLibrary::LoadHints)
 
+    /// @}
 }
 
 #endif // STDCORELIB_SHAREDLIBRARY_H

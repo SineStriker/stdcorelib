@@ -10,6 +10,9 @@
 
 namespace stdc {
 
+    /// \addtogroup types
+    /// @{
+
     /// A registry that fills itself before \c main, so an implementation is available merely by
     /// having been linked in.
     ///
@@ -243,6 +246,7 @@ namespace stdc {
         static Node *_tail;
     };
 
+    /// @}
 }
 
 /// Defines the storage for a \c StaticRegistry over \a TYPE, decorated with \a EXPORT.

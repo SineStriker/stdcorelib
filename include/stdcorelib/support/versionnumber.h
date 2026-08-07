@@ -12,6 +12,9 @@
 
 namespace stdc {
 
+    /// \addtogroup utility
+    /// @{
+
     class STDC_EXPORT VersionNumber {
     public:
         VersionNumber();
@@ -73,6 +76,7 @@ namespace std {
         return out;
     }
 
+    /// @}
 }
 
 #endif // STDCORELIB_VERSIONNUMBER_H

@@ -16,6 +16,9 @@
 
 namespace stdc {
 
+    /// \addtogroup containers
+    /// @{
+
     template <class K, class V, template <class, class, class...> class Map = std::unordered_map,
               class... Mods>
     class linked_map {
@@ -347,6 +350,7 @@ namespace stdc {
         }
     };
 
+    /// @}
 }
 
 #endif // STDCORELIB_LINKED_MAP_H

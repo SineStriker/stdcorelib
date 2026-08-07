@@ -12,7 +12,14 @@
 #include <stdcorelib/stdc_global.h>
 #include <stdcorelib/adt/array_view.h>
 
+/// \defgroup json JSON and CBOR
+///
+/// stdc::JsonValue reads and writes both, over the same tree.
+
 namespace stdc {
+
+    /// \addtogroup json
+    /// @{
 
     class JsonValue;
 
@@ -179,6 +186,7 @@ namespace stdc {
         void copyFrom(const JsonValue &RHS);
     };
 
+    /// @}
 }
 
 #endif // STDCORELIB_JSON_H

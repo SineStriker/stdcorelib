@@ -15,7 +15,50 @@
 #include <stdcorelib/stdc_global.h>
 #include <stdcorelib/adt/array_view.h>
 
+/// \defgroup process Processes and libraries
+///
+/// Starting a child process and loading a shared object, on both Windows and POSIX.
+///
+/// stdc::Popen is a port of Python's \c subprocess.Popen. The pipes are \c std::iostream, so the
+/// usual vocabulary works on them, and stdc::Popen::communicate() is the one to reach for when more
+/// than one is open: draining them by hand, one at a time, deadlocks as soon as the other fills.
+///
+/// \code
+///     using namespace stdc;
+///
+///     Popen proc;
+///     proc.args({"git", "describe", "--tags"})
+///         .stdin_(Popen::DEVNULL)
+///         .stdout_(Popen::PIPE)
+///         .stderr_(Popen::STDOUT);
+///
+///     std::string err;
+///     if (!proc.start(&err)) {
+///         return err;
+///     }
+///     auto [out, _] = proc.communicate({}, 5000);
+///     int code = proc.returncode().value_or(-1);
+/// \endcode
+///
+/// A Popen owns its child and kills it on the way out. \c detached(true) gives that up: the
+/// child is launched independently and this process keeps nothing but its pid.
+///
+/// stdc::SharedLibrary loads one at run time and resolves symbols from it.
+/// \c SharedLibrary::setLibraryPath() is what lets a plugin outside the usual directories find the
+/// libraries next to it, and \c locateLibraryPath() answers where a given address came from.
+///
+/// \code
+///     SharedLibrary lib;
+///     if (!lib.open(plugin_path)) {
+///         return lib.lastError();
+///     }
+///     auto entry = reinterpret_cast<int (*)()>(lib.resolve("plugin_init"));
+/// \endcode
+
 namespace stdc {
+
+    /// \addtogroup process
+    /// @{
 
     /// Creates and controls a child process, after Python's \c subprocess.Popen.
     ///
@@ -415,6 +458,7 @@ namespace stdc {
         std::unique_ptr<Impl> _impl;
     };
 
+    /// @}
 }
 
 #endif // STDCORELIB_POPEN_H

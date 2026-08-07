@@ -9,7 +9,21 @@
 #include <vector>
 #include <cassert>
 
+/// \defgroup containers Containers and views
+///
+/// stdc::array_view is a read-only view over any contiguous container, so one parameter replaces a
+/// pile of overloads. stdc::vlarray keeps its first N elements inline and stays off the heap while
+/// it is small. stdc::linked_map remembers insertion order, over \c std::unordered_map or
+/// \c std::map. stdc::any holds a value of any type and hands it back without RTTI.
+///
+/// \code
+///     stdc::vlarray<int, 16> v;   // nothing allocated until the seventeenth element
+/// \endcode
+
 namespace stdc {
+
+    /// \addtogroup containers
+    /// @{
 
     /// A read-only view of a contiguous array, close to \c std::span<const \c T> from C++20.
     ///
@@ -248,6 +262,7 @@ namespace stdc {
         return !(LHS == RHS);
     }
 
+    /// @}
 }
 
 #endif // STDCORELIB_ARRAY_VIEW_H

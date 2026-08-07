@@ -19,6 +19,9 @@
 
 namespace stdc::windows {
 
+    /// \addtogroup platform
+    /// @{
+
     /// A registry value together with its type, holding the data rather than pointing at it.
     ///
     /// A value that failed to load has type \c Invalid, which isValid() reports.
@@ -804,6 +807,7 @@ namespace stdc::windows {
         return result;
     }
 
+    /// @}
 }
 
 #endif // STDCORELIB_REGISTRY_H

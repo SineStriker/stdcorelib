@@ -11,7 +11,40 @@
 #include <stdcorelib/stdc_global.h>
 #include <stdcorelib/adt/array_view.h>
 
+/// \defgroup platform Platform and system
+///
+/// What the program can ask about itself and about the machine, answered from the OS rather than
+/// from \c argv[0].
+///
+/// \code
+///     using namespace stdc;
+///
+///     auto dir  = system::application_directory();
+///     auto args = system::command_line_arguments();    // UTF-8, from the wide command line
+///     auto env  = system::environment();               // UTF-8 too, however it is stored
+///     auto text = path::to_utf8(dir / "config.json");  // path::string() is the lossy one
+///     auto tidy = path::clean_path(messy);             // resolves . and .. without touching disk
+/// \endcode
+///
+/// On Windows, stdc::windows::RegKey and stdc::windows::RegValue read and write the registry. Every
+/// operation comes in two forms: one taking an \c std::error_code and \c noexcept, one without that
+/// throws.
+///
+/// \code
+///     using namespace stdc::windows;
+///
+///     std::error_code ec;
+///     RegKey hklm(RegKey::RK_LocalMachine);
+///     RegKey key = hklm.open(L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", ec);
+///     if (key.isValid()) {
+///         auto name = key.value(L"ProductName", ec).toString();
+///     }
+/// \endcode
+
 namespace stdc {
+
+    /// \addtogroup platform
+    /// @{
 
     namespace system {
 
@@ -64,6 +97,7 @@ namespace stdc {
 
     }
 
+    /// @}
 }
 
 #endif // STDCORELIB_SYSTEM_H

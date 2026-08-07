@@ -10,7 +10,25 @@
 #include <type_traits>
 #include <utility>
 
+/// \defgroup utility Utilities
+///
+/// stdc::flags is type-safe bit flags over an enum, in the shape of \c QFlags. stdc::scope_guard
+/// runs something on the way out unless \c dismiss() says otherwise. stdc::VersionNumber parses,
+/// prints, compares and hashes a four part version, and answers with nothing for a string that is
+/// not one.
+///
+/// \code
+///     auto guard = stdc::make_scope_guard([&] { std::fclose(f); });
+///     auto ver = stdc::VersionNumber::fromString("1.2.3").value_or(stdc::VersionNumber());
+/// \endcode
+///
+/// \ref vla.h has \c STDC_VLA_ALLOC and \c STDC_VLA_NEW for stack arrays sized at run time, and
+/// \ref pimpl.h the \c stdc_impl_t boilerplate the library uses on itself.
+
 namespace stdc {
+
+    /// \addtogroup utility
+    /// @{
 
     class flag {
     public:
@@ -257,6 +275,7 @@ namespace stdc {
         using Base::i;
     };
 
+    /// @}
 }
 
 #define STDC_DECLARE_FLAGS(Flags, Enum) using Flags = ::stdc::flags<Enum>;

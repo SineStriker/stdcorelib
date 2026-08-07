@@ -5,7 +5,29 @@
 
 #include <stdcorelib/str.h>
 
+/// \defgroup logging Logging
+///
+/// Named categories with per-level switches and Qt-style filter rules.
+///
+/// \code
+///     static stdc::LogCategory lc("app.io");
+///
+///     lc.stdcWarning("cannot read %1", path);
+///     lc.stdcDebugF("offset=%zu", off);   // the printf-style variant
+///     stdcInfo("no category in scope, so this goes to the default one");
+///
+///     lc.setFilterRules("*.debug = false\n"        // silence debug everywhere
+///                       "app.io = false\n"         // silence this category
+///                       "app.io.warning = true");  // except for its warnings
+/// \endcode
+///
+/// \c Logger::setLogCallback() replaces the sink, which is how records reach a file or a UI instead
+/// of the terminal.
+
 namespace stdc {
+
+    /// \addtogroup logging
+    /// @{
 
     class LogContext {
     public:
@@ -197,6 +219,7 @@ namespace stdc {
         };
     };
 
+    /// @}
 }
 
 /// What the macros below fall back to when no LogCategory is in scope. A category of your own

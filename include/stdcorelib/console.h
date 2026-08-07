@@ -10,6 +10,9 @@
 
 namespace stdc {
 
+    /// \addtogroup text
+    /// @{
+
     namespace console {
 
         /// Text attributes, combined with \c |.
@@ -332,6 +335,7 @@ namespace stdc {
     using console::cprint;
     using console::cprintln;
 
+    /// @}
 }
 
 #endif // STDCORELIB_CONSOLE_H

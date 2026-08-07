@@ -12,6 +12,9 @@
 
 namespace stdc::windows {
 
+    /// \addtogroup platform
+    /// @{
+
     STDC_EXPORT std::wstring SystemError(DWORD error_code, DWORD language_id = 0);
 
     STDC_EXPORT RTL_OSVERSIONINFOW SystemVersion();
@@ -20,6 +23,7 @@ namespace stdc::windows {
 
     STDC_EXPORT FILETIME TimePointToFileTime(const std::chrono::system_clock::time_point &tp);
 
+    /// @}
 }
 
 #endif // STDCORELIB_WINEXTRA_H

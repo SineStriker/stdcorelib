@@ -8,6 +8,9 @@
 
 namespace stdc {
 
+    /// \addtogroup containers
+    /// @{
+
     /// A reverse iterator that stores the position it denotes, not the one after it.
     ///
     /// \c std::reverse_iterator holds \c base() and dereferences a copy of \c base()-1, so the
@@ -150,6 +153,7 @@ namespace stdc {
         T _it{};
     };
 
+    /// @}
 }
 
 #endif // STDCORELIB_ITERATOR_H

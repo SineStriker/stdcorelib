@@ -10,6 +10,9 @@
 
 namespace stdc {
 
+    /// \addtogroup text
+    /// @{
+
     /// Conversions between the three UTF encodings, without the standard library's help and
     /// without the platform's.
     ///
@@ -100,6 +103,7 @@ namespace stdc {
 
     }
 
+    /// @}
 }
 
 #endif // STDCORELIB_UTF_H
