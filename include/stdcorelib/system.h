@@ -48,7 +48,7 @@ namespace stdc {
 
     namespace system {
 
-        /// \name Where the running program is
+        /// \name Program location
         /// @{
 
         /// The executable's own path, taken from the OS rather than from \c argv[0], which the

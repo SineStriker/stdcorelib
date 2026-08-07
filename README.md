@@ -40,9 +40,9 @@ add_subdirectory(stdcorelib)
 target_link_libraries(myapp PRIVATE stdcorelib::stdcorelib)
 ```
 
-## What is in it
+## Components
 
-| Topic | |
+| Component | |
 | --- | --- |
 | Command line | Declaring what a program takes, and reading back what it was given |
 | Processes and libraries | Starting a child process, loading a shared object |
@@ -54,7 +54,7 @@ target_link_libraries(myapp PRIVATE stdcorelib::stdcorelib)
 | Platform and system | Program and machine information, the Windows registry |
 | Utilities | Flags, scope guards, version numbers |
 
-Each topic carries its own description and an example. Build the `stdcorelib_docs` target with `-DSTDC_BUILD_DOCS=ON`, or read the headers, which is where that text lives.
+Each carries its own description and an example. Build the `stdcorelib_docs` target with `-DSTDC_BUILD_DOCS=ON`, or read the headers, which is where that text lives.
 
 ## License
 

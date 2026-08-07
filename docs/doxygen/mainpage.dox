@@ -11,7 +11,7 @@
 /// color, UTF-8 that survives a Windows console, launching a child process, loading a shared
 /// object. The rest is a handful of containers and utilities that kept getting rewritten.
 ///
-/// \section main_conventions What holds throughout
+/// \section main_conventions Conventions
 ///
 /// \li <b>Every \c std::string is UTF-8.</b> Arguments, environment, log messages, what a child
 ///     process wrote. On Windows they are converted at the system call rather than through the
