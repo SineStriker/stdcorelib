@@ -1,4 +1,4 @@
-project(test_jsonconformance)
+project(test_jsonconformance LANGUAGES CXX)
 
 file(GLOB _src *.h *.cpp)
 add_executable(${PROJECT_NAME} ${_src})

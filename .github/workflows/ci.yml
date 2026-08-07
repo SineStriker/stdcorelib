@@ -83,8 +83,14 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure --no-tests=error
 
-  # Exceptions switched off. Three platforms rather than five, being the MSVC standard library,
-  # libstdc++ and libc++.
+  # Exceptions switched off. Four platforms rather than five, the fifth being linux-clang, whose
+  # frontend and standard library are both covered by one of the others.
+  #
+  # windows-clang-cl earns its place and used to be left out on the reasoning that three standard
+  # libraries covered it. That was the wrong axis. What varies is whether the frontend enforces
+  # the flag: cl accepts a throw under /EHs-c- and only stops unwinding, clang-cl rejects it the
+  # way -fno-exceptions does. So registry.h, whose throwing overloads are inline and therefore
+  # compiled by every translation unit that includes it, built there and nowhere else.
   #
   # The flag is private to the library target, so the tests are built the ordinary way and run
   # against a library that was not. A consumer gets the same split. This is also the only thing
@@ -97,7 +103,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ linux-gcc, macos, windows-msvc ]
+        platform: [ linux-gcc, macos, windows-msvc, windows-clang-cl ]
         include:
           - platform: linux-gcc
             os: ubuntu-latest
@@ -108,6 +114,9 @@ jobs:
           - platform: windows-msvc
             os: windows-latest
             cxx: cl
+          - platform: windows-clang-cl
+            os: windows-latest
+            cxx: clang-cl
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup

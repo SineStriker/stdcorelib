@@ -255,7 +255,8 @@ namespace stdc::windows {
         ///         isValid() to see whether it opened.
         /// \throws std::system_error from the overload that takes no \a ec
         /// \note Every operation on this class comes in these two forms. The one taking an \a ec
-        ///       sets it to the failure reason and is \c noexcept, the one without throws.
+        ///       sets it to the failure reason and is \c noexcept, the one without throws. Only
+        ///       the \a ec form is there in a translation unit compiled without exceptions.
         inline RegKey open(const std::wstring &path, int access = DA_Read);
         RegKey open(const std::wstring &path, std::error_code &ec, int access = DA_Read) noexcept;
 
@@ -652,6 +653,22 @@ namespace stdc::windows {
         friend class value_iterator;
     };
 
+    inline RegValue RegKey::valueOr(const std::wstring &name, std::error_code &ec,
+                                    const RegValue &defaultValue) const noexcept {
+        auto result = value(name, ec);
+        if (ec.value() == ERROR_FILE_NOT_FOUND) {
+            ec.clear();
+            return defaultValue;
+        }
+        return result;
+    }
+
+    // The overloads that report a failure by throwing, which is every one below. An inline
+    // function that is not a template is compiled in every translation unit that includes it,
+    // called or not, so leaving these here without exceptions does not merely make them
+    // unusable, it stops the header compiling at all.
+#ifdef STDC_EXCEPTIONS
+
     inline RegKey RegKey::open(const std::wstring &path, int access) {
         std::error_code ec;
         auto result = open(path, ec, access);
@@ -757,16 +774,6 @@ namespace stdc::windows {
         return result;
     }
 
-    inline RegValue RegKey::valueOr(const std::wstring &name, std::error_code &ec,
-                                    const RegValue &defaultValue) const noexcept {
-        auto result = value(name, ec);
-        if (ec.value() == ERROR_FILE_NOT_FOUND) {
-            ec.clear();
-            return defaultValue;
-        }
-        return result;
-    }
-
     inline bool RegKey::setValue(const std::wstring &name, const RegValue &value) {
         std::error_code ec;
         auto result = setValue(name, value, ec);
@@ -806,6 +813,8 @@ namespace stdc::windows {
             throw std::system_error(ec);
         return result;
     }
+
+#endif
 
     /// @}
 }

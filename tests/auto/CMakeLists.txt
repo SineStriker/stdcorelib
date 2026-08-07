@@ -1,4 +1,4 @@
-project(test_auto)
+project(test_auto LANGUAGES CXX)
 
 find_package(Boost CONFIG COMPONENTS unit_test_framework)
 
