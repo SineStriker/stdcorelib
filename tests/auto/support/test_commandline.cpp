@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <stdcorelib/console.h>
+#include <stdcorelib/path.h>
 #include <stdcorelib/support/commandline.h>
 
 #include <boost/test/unit_test.hpp>
@@ -1065,6 +1066,113 @@ BOOST_AUTO_TEST_CASE(test_response_files) {
     // A file that is not there is said so rather than passed along.
     bad(parser, {"@no_such_response_file.txt"}, ParseResult::ErrorReadingResponseFile,
         Parser::EnableResponseFile);
+
+    std::filesystem::remove(path);
+}
+
+// A response file is written by a build system rather than typed at a shell, so a line arrives
+// carrying things a shell would have taken off. All three of these were measured against
+// qmcorecmd's suite, where every one of them turned a working command line into a diagnostic.
+BOOST_AUTO_TEST_CASE(test_a_response_file_line_is_not_taken_as_it_is_written) {
+    auto path = std::filesystem::temp_directory_path() / "stdc_cli_response_shapes.txt";
+    const auto &given = [&path](const std::string &contents) {
+        {
+            // Binary, so that what the case says is on the line is what lands on it.
+            std::ofstream file(path, std::ios::binary);
+            file << contents;
+        }
+        Parser parser(Command("prog")
+                          .addArguments({Argument("a"), Argument("b")})
+                          .addOption(Option({"-f"}, "Force"))
+                          .addOption(Option({"--out"}, "Out").arg("dir")));
+        return ok(parser, {"@" + path.string()}, Parser::EnableResponseFile);
+    };
+
+    // Blanks at either end, which a generator writes when it lines its arguments up.
+    {
+        auto result = given("  -f  \n\tone\t\n   --out=dir   \n  two\n");
+        BOOST_CHECK(result.option("-f").has_value());
+        BOOST_CHECK_EQUAL(must(result.value(0)), "one");
+        BOOST_CHECK_EQUAL(must(result.value(1)), "two");
+        BOOST_CHECK_EQUAL(must(result.valueForOption("--out")), "dir");
+    }
+
+    // One pair of quotes, which is how a path with a space in it is written. CMake writes every
+    // path that way, so this is the ordinary case rather than the odd one.
+    {
+        auto result = given("\"src dir/\"\n\"dest dir/\"\n");
+        BOOST_CHECK_EQUAL(must(result.value(0)), "src dir/");
+        BOOST_CHECK_EQUAL(must(result.value(1)), "dest dir/");
+    }
+
+    // One pair, not every quote on the line, and only where there is a pair to take.
+    {
+        auto result = given("\"a\"b\"c\"\n\"unbalanced\n");
+        BOOST_CHECK_EQUAL(must(result.value(0)), "a\"b\"c");
+        BOOST_CHECK_EQUAL(must(result.value(1)), "\"unbalanced");
+    }
+
+    // Quotes come off after the blanks do, so a quoted path indented by its generator is still
+    // the path.
+    BOOST_CHECK_EQUAL(must(given("   \"src dir/\"   \nx\n").value(0)), "src dir/");
+
+    // The blanks inside a pair of quotes are the argument's own and stay.
+    BOOST_CHECK_EQUAL(must(given("\"  padded  \"\nx\n").value(0)), "  padded  ");
+
+    // A byte order mark on the first line, which is what a Windows editor leaves behind.
+    {
+        auto result = given("\xEF\xBB\xBF-f\none\ntwo\n");
+        BOOST_CHECK(result.option("-f").has_value());
+        BOOST_CHECK_EQUAL(must(result.value(0)), "one");
+    }
+
+    // Only the first line carries one, and only whole. Two of its three bytes are not a mark
+    // and belong to whatever they are part of.
+    BOOST_CHECK_EQUAL(must(given("x\n\xEF\xBB\xBFy\n").value(1)), "\xEF\xBB\xBFy");
+    BOOST_CHECK_EQUAL(must(given("\xEF\xBB" "y\nx\n").value(0)), "\xEF\xBB" "y");
+
+    // A line that is only a pair of quotes is an empty argument, which is the one way a response
+    // file has of writing one. A line that is empty or only blanks is not an argument at all.
+    {
+        auto result = given("\"\"\n   \n\nsecond\n");
+        BOOST_CHECK_EQUAL(must(result.value(0)), "");
+        BOOST_CHECK_EQUAL(must(result.value(1)), "second");
+    }
+
+    // CRLF is taken off wherever the file was written and whatever it is read on.
+    {
+        auto result = given("-f\r\n\"one two\"\r\nthree\r\n");
+        BOOST_CHECK(result.option("-f").has_value());
+        BOOST_CHECK_EQUAL(must(result.value(0)), "one two");
+        BOOST_CHECK_EQUAL(must(result.value(1)), "three");
+    }
+
+    // Read as bytes, so nothing in the file is interpreted. A Windows text stream takes a Ctrl-Z
+    // for the end of the file, which would drop everything a response file has after one.
+    {
+        auto result = given("one\n\x1a" "two\n");
+        BOOST_CHECK_EQUAL(must(result.value(0)), "one");
+        BOOST_CHECK_EQUAL(must(result.value(1)), "\x1a" "two");
+    }
+
+    std::filesystem::remove(path);
+}
+
+// The name after the @ is UTF-8 like everything else here. Handing it to ifstream as a narrow
+// string reads it in the system code page on Windows, so a file whose name is not ASCII is
+// reported missing while sitting there.
+BOOST_AUTO_TEST_CASE(test_a_response_file_is_found_by_a_name_that_is_not_ascii) {
+    auto path = std::filesystem::temp_directory_path() /
+                stdc::path::from_utf8("stdc_cli_\xe5\x93\x8d\xe5\xba\x94.txt");
+    {
+        std::ofstream file(path, std::ios::binary);
+        file << "one\ntwo\n";
+    }
+
+    Parser parser(Command("prog").addArguments({Argument("a"), Argument("b")}));
+    auto result = ok(parser, {"@" + stdc::path::to_utf8(path)}, Parser::EnableResponseFile);
+    BOOST_CHECK_EQUAL(must(result.value(0)), "one");
+    BOOST_CHECK_EQUAL(must(result.value(1)), "two");
 
     std::filesystem::remove(path);
 }

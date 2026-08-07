@@ -12,6 +12,7 @@
 #include <unordered_map>
 
 #include "console.h"
+#include "path.h"
 #include "utf.h"
 
 namespace stdc::cli {
@@ -1037,6 +1038,32 @@ namespace stdc::cli {
             }
         }
 
+        /// Whitespace at either end, gone. The carriage return of a CRLF line is whitespace, so
+        /// a file written on Windows needs no step of its own.
+        std::string_view trimmed(std::string_view text) {
+            const auto space = [](char c) {
+                return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\v' || c == '\f';
+            };
+            while (!text.empty() && space(text.front())) {
+                text.remove_prefix(1);
+            }
+            while (!text.empty() && space(text.back())) {
+                text.remove_suffix(1);
+            }
+            return text;
+        }
+
+        // A line of a response file is not a token until three things are taken off it. What
+        // writes these files is a build system rather than a shell, and none of the three is
+        // something a shell would have left behind.
+        //
+        //  - blanks at either end, since a generator lines its arguments up
+        //  - one pair of quotes, since a path with a space in it has to be written somehow, and
+        //    CMake writes every path that way
+        //  - a byte order mark, since a Windows editor puts one on the first line
+        //
+        // A line that is only a pair of quotes is an empty argument and is kept. A line that is
+        // empty or only blanks is not an argument at all and is dropped.
         void ParserCore::expandResponseFiles() {
             std::vector<std::string> out;
             for (const auto &token : tokens) {
@@ -1044,20 +1071,40 @@ namespace stdc::cli {
                     out.push_back(token);
                     continue;
                 }
-                std::ifstream file(token.substr(1));
+                // The name is UTF-8 like everything else here, and on Windows handing that to
+                // ifstream as a narrow string reads it in the system code page.
+                //
+                // Read as bytes, so that nothing in the file is interpreted. A Windows text
+                // stream takes a Ctrl-Z for the end of the file and drops the rest. The
+                // carriage returns of a CRLF file are not the reason: those are whitespace and
+                // come off in the trim below, on every platform and whichever mode this is.
+                std::ifstream file(path::from_utf8(std::string_view(token).substr(1)),
+                                   std::ios::binary);
                 if (!file) {
                     fail(ParseResult::ErrorReadingResponseFile,
                          "cannot read response file \"" + token.substr(1) + "\"");
                     return;
                 }
+                bool first = true;
                 std::string line;
                 while (std::getline(file, line)) {
-                    if (!line.empty() && line.back() == '\r') {
-                        line.pop_back();
+                    std::string_view text = line;
+                    if (first) {
+                        first = false;
+                        // Only the first line can carry one, and only whole. Two of its three
+                        // bytes are not a mark.
+                        if (text.substr(0, 3) == "\xEF\xBB\xBF") {
+                            text.remove_prefix(3);
+                        }
                     }
-                    if (!line.empty()) {
-                        out.push_back(line);
+                    text = trimmed(text);
+                    if (text.empty()) {
+                        continue;
                     }
+                    if (text.size() >= 2 && text.front() == '"' && text.back() == '"') {
+                        text = text.substr(1, text.size() - 2);
+                    }
+                    out.emplace_back(text);
                 }
             }
             tokens = std::move(out);
