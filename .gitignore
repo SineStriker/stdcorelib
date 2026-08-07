@@ -47,3 +47,6 @@ CMakeSettings.json
 /vcpkg
 /data
 /*.natvis
+
+CLAUDE.md
+AGENTS.md
