@@ -73,7 +73,7 @@ namespace stdc {
                           "Only enumerations up to 64 bits are supported.");
             static_assert(std::is_enum<Enum>::value, "flags is only usable on enumeration types.");
 
-            static constexpr size_t IntegerSize = (std::max) (sizeof(Enum), sizeof(int));
+            static constexpr size_t IntegerSize = std::max(sizeof(Enum), sizeof(int));
             using Integers = integer_for_size<IntegerSize>;
 
         protected:

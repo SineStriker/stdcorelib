@@ -944,15 +944,23 @@ BOOST_AUTO_TEST_CASE(test_how_few_and_how_many_a_multi_argument_takes) {
 // Two multi arguments in a row, which is the case that shows the reservation rule is counting
 // required arguments rather than arguments.
 BOOST_AUTO_TEST_CASE(test_two_greedy_arguments_in_a_row) {
+    // A mistake, and said so wherever the question is asked. A greedy argument leaves a token
+    // for each required argument after it and none for anything else, so a second one would
+    // never see a token.
+    BOOST_CHECK(!Argument::canFollow({Argument("first").multi()},
+                                     Argument("second").multi().optional()));
+
+#ifdef NDEBUG
+    // Built anyway, since the assert saying so is not compiled in here. The first is greedy and
+    // the second is not required, so the first takes the lot rather than anything going wrong.
     Parser parser(Command("prog").addArguments({
         Argument("first").multi(),
         Argument("second").multi().optional(),
     }));
-
-    // The first is greedy and the second is not required, so the first takes the lot.
     auto result = ok(parser, {"a", "b", "c"});
     BOOST_CHECK_EQUAL(must(result.values(0)).size(), 3u);
     BOOST_CHECK(must(result.values(1)).empty());
+#endif
 }
 
 // Options and positionals interleaved, which every one of the three suites checks somewhere.
@@ -1320,12 +1328,16 @@ BOOST_AUTO_TEST_CASE(test_usage_spells_out_the_options_that_are_required) {
         BOOST_CHECK(has(text, "Usage:\n    prog build -t <name>\n"));
     }
 
+#ifdef NDEBUG
     // An option with no spelling cannot be typed, so it is not in the hint either. It used to
-    // be counted, which put "[options]" on a command that had nothing to offer.
+    // be counted, which put "[options]" on a command that had nothing to offer. Adding one is
+    // a mistake the assert catches where it is compiled in, and this is what happens where it
+    // is not. \sa test_an_option_with_no_spelling_is_ignored_rather_than_fatal
     {
         Parser parser(Command("prog").addOption(Option()));
         BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage:\n    prog\n"));
     }
+#endif
 }
 
 BOOST_AUTO_TEST_CASE(test_a_catalogue_names_the_headings_and_keeps_their_order) {
@@ -1552,6 +1564,13 @@ BOOST_AUTO_TEST_CASE(test_an_option_with_no_spelling_is_ignored_rather_than_fata
     // The catalogue is what makes this bite: the name of an option is asked for only while
     // matching it against a group, so a tree without one never calls token() at all. That is
     // also why a first attempt at this test passed with the defect still in.
+    // A mistake, and said so wherever the question is asked: an option nobody can type is an
+    // option nobody can give.
+    BOOST_CHECK(!Option::canJoin({}, Option()));
+    BOOST_CHECK(!Option::canJoin({}, Option(Option::NoRole)));
+
+#ifdef NDEBUG
+    // Built anyway, since the assert saying so is not compiled in here.
     CommandCatalogue catalogue;
     catalogue.addOptions("Common Options", {"-f"});
 
@@ -1569,6 +1588,7 @@ BOOST_AUTO_TEST_CASE(test_an_option_with_no_spelling_is_ignored_rather_than_fata
     // It parses too, and is simply not something that can be written.
     BOOST_CHECK(ok(parser, {"-f"}).option("-f").has_value());
     BOOST_CHECK(!ok(parser, {}).option("").has_value());
+#endif
 }
 
 BOOST_AUTO_TEST_CASE(test_a_result_outlives_the_parse_and_the_tree_it_read) {
@@ -2592,6 +2612,81 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_lay_the_whole_page_out) {
     parser.setHelpFormatter(std::make_shared<Terse>());
     // Description, usage, arguments, options, epilogue, with the counts each holds.
     BOOST_CHECK_EQUAL(parser.parse(argv({})).helpText(), "1:0 2:0 3:1 4:2 7:0 ");
+}
+
+// What a tree may not be built out of. Every one of these is asserted where an assert survives,
+// and every one is asked here as a question, so the rule is checked in a release build too.
+BOOST_AUTO_TEST_CASE(test_what_an_argument_may_follow) {
+    const std::vector<Argument> none;
+    BOOST_CHECK(Argument::canFollow(none, Argument("path")));
+
+    // A name to be known by, and one nobody else has.
+    BOOST_CHECK(!Argument::canFollow(none, Argument("")));
+    BOOST_CHECK(!Argument::canFollow({Argument("path")}, Argument("path")));
+    BOOST_CHECK(Argument::canFollow({Argument("path")}, Argument("dest")));
+
+    // Nothing that has to be given after one that may be left out, or a single token could be
+    // meant for either.
+    BOOST_CHECK(!Argument::canFollow({Argument("a").optional()}, Argument("b")));
+    BOOST_CHECK(Argument::canFollow({Argument("a").optional()}, Argument("b").optional()));
+    BOOST_CHECK(Argument::canFollow({Argument("a")}, Argument("b").optional()));
+
+    // A greedy one leaves a token for each required argument after it, so a required one may
+    // follow and nothing else may. This is copy <src>... <dest>.
+    BOOST_CHECK(Argument::canFollow({Argument("src").multi()}, Argument("dest")));
+    BOOST_CHECK(!Argument::canFollow({Argument("src").multi()}, Argument("dest").optional()));
+    BOOST_CHECK(!Argument::canFollow({Argument("src").multi()}, Argument("dest").multi()));
+
+    // One that takes everything leaves nothing to follow it with.
+    BOOST_CHECK(!Argument::canFollow({Argument("rest").nargs(Argument::Remainder)},
+                                     Argument("dest")));
+
+    // The same rules wherever arguments are held, so an option's own list obeys them.
+    BOOST_CHECK(!Argument::canFollow({Argument("a").optional()}, Argument("b")));
+}
+
+BOOST_AUTO_TEST_CASE(test_what_an_option_may_join) {
+    const std::vector<Option> none;
+    BOOST_CHECK(Option::canJoin(none, Option({"-f", "--force"}, "Force")));
+
+    // Something to type, and something that could not be taken for a value.
+    BOOST_CHECK(!Option::canJoin(none, Option()));
+    BOOST_CHECK(!Option::canJoin(none, Option({""}, "Nameless")));
+    BOOST_CHECK(!Option::canJoin(none, Option({"force"}, "No dash")));
+    BOOST_CHECK(!Option::canJoin(none, Option({"-"}, "Just a dash")));
+    BOOST_CHECK(Option::canJoin(none, Option({"/f"}, "The DOS spelling")));
+
+    // No spelling that one already there answers to, whichever of its spellings it is.
+    const std::vector<Option> taken = {Option({"-f", "--force"}, "Force")};
+    BOOST_CHECK(!Option::canJoin(taken, Option({"-f"}, "Again")));
+    BOOST_CHECK(!Option::canJoin(taken, Option({"-x", "--force"}, "Again by its long name")));
+    BOOST_CHECK(Option::canJoin(taken, Option({"-x", "--other"}, "Neither")));
+
+    // One that stands in for an empty command line is written by nobody, so there is nothing to
+    // require and nothing to give it.
+    BOOST_CHECK(Option::canJoin(none, Option({"-h"}, "Help").prior(Option::AutoSetWhenNoSymbols)));
+    BOOST_CHECK(!Option::canJoin(
+        none, Option({"-h"}, "Help").prior(Option::AutoSetWhenNoSymbols).required()));
+    BOOST_CHECK(!Option::canJoin(
+        none, Option({"-h"}, "Help").prior(Option::AutoSetWhenNoSymbols).arg("topic")));
+}
+
+BOOST_AUTO_TEST_CASE(test_what_a_subcommand_may_join_and_what_a_catalogue_may_group) {
+    const std::vector<Command> none;
+    BOOST_CHECK(Command::canAddCommand(none, Command("copy")));
+    BOOST_CHECK(!Command::canAddCommand(none, Command("")));
+    BOOST_CHECK(!Command::canAddCommand({Command("copy")}, Command("copy")));
+    BOOST_CHECK(Command::canAddCommand({Command("copy")}, Command("move")));
+
+    // A name in two groups would be listed under the first that claims it and missing from the
+    // other, which reads as the catalogue having been ignored.
+    const std::vector<CommandCatalogue::Group> none_yet;
+    BOOST_CHECK(CommandCatalogue::canAddGroup(none_yet, {"copy", "move"}));
+    BOOST_CHECK(!CommandCatalogue::canAddGroup(none_yet, {"copy", "copy"}));
+
+    const std::vector<CommandCatalogue::Group> filesystem = {{"Filesystem", {"copy", "move"}}};
+    BOOST_CHECK(!CommandCatalogue::canAddGroup(filesystem, {"build", "copy"}));
+    BOOST_CHECK(CommandCatalogue::canAddGroup(filesystem, {"build", "configure"}));
 }
 
 // A parser is not spent by parsing, and the tree under it can be replaced afterwards. What was

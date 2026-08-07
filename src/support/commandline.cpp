@@ -290,7 +290,7 @@ namespace stdc::cli {
                 row[0] = i;
                 for (size_t j = 1; j <= b.size(); ++j) {
                     size_t above = row[j];
-                    row[j] = (std::min)({row[j] + 1, row[j - 1] + 1,
+                    row[j] = std::min({row[j] + 1, row[j - 1] + 1,
                                          diagonal + (a[i - 1] == b[j - 1] ? 0 : 1)});
                     diagonal = above;
                 }
@@ -694,7 +694,7 @@ namespace stdc::cli {
                 parts.push_back("[commands]");
             }
 
-            int room = (std::max) (text_width - indent, min_description);
+            int room = std::max(text_width - indent, min_description);
             std::string res = head;
             int line_width = console::display_width(head);
             for (const auto &part : parts) {
@@ -869,7 +869,7 @@ namespace stdc::cli {
             // Where a description starts, and therefore where the lines under the first one are
             // indented to, so a wrapped entry stays one block instead of drifting left.
             size_t column = size_t(sizes.indent) + widest + size_t(sizes.spacing);
-            int room = (std::max) (sizes.textWidth - int(column), min_description);
+            int room = std::max(sizes.textWidth - int(column), min_description);
             for (const auto &entry : block.entries) {
                 appendRun(out, {}, std::string(size_t(sizes.indent), ' '));
                 appendRun(out, block.entryStyle, entry.left);
@@ -892,7 +892,7 @@ namespace stdc::cli {
         // Prose under a heading is set in under it. Prose without one sits at the margin, which
         // is what a prologue and an epilogue want.
         size_t margin = block.title.empty() ? 0 : size_t(sizes.indent);
-        int room = (std::max) (sizes.textWidth - int(margin), min_description);
+        int room = std::max(sizes.textWidth - int(margin), min_description);
         for (const auto &line : wrapped(block.text, room)) {
             appendRun(out, {}, std::string(margin, ' '));
             appendRun(out, block.bodyStyle, line);
@@ -1404,7 +1404,7 @@ namespace stdc::cli {
                     size_t available = positional.size() - taken;
                     take = available > reserved ? available - reserved : 1;
                 }
-                take = (std::min) (take, positional.size() - taken);
+                take = std::min(take, positional.size() - taken);
 
                 const std::string where = "<" + argument.displayName() + ">";
                 for (size_t k = 0; k < take; ++k) {

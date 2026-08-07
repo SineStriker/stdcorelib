@@ -159,14 +159,14 @@ namespace stdc::cli {
         static inline bool parse(std::string_view token, T *out) {
             if constexpr (std::is_signed_v<T>) {
                 int64_t v;
-                if (!detail::parse_signed(token, &v, int64_t((std::numeric_limits<T>::min)()),
-                                          int64_t((std::numeric_limits<T>::max)()))) {
+                if (!detail::parse_signed(token, &v, int64_t(std::numeric_limits<T>::min()),
+                                          int64_t(std::numeric_limits<T>::max()))) {
                     return false;
                 }
                 *out = T(v);
             } else {
                 uint64_t v;
-                if (!detail::parse_unsigned(token, &v, uint64_t((std::numeric_limits<T>::max)()))) {
+                if (!detail::parse_unsigned(token, &v, uint64_t(std::numeric_limits<T>::max()))) {
                     return false;
                 }
                 *out = T(v);
@@ -322,6 +322,44 @@ namespace stdc::cli {
                 (void) item;
             }
         }
+    public:
+        /// Whether \a argument may be added after \a arguments, which is what every place that
+        /// takes one asserts.
+        ///
+        /// Public and callable rather than only asserted, since an assert is compiled out of a
+        /// release build and a rule nobody can ask about there is a rule nobody can test.
+        ///
+        /// \li it has a name, and no argument beside it has that name
+        /// \li nothing that has to be given follows one that may be left out, since a single
+        ///     token could then be meant for either
+        /// \li nothing at all follows a Remainder, which leaves nothing to follow it with
+        /// \li only something required follows a Multiple. That one leaves a token for each
+        ///     required argument after it and none for the rest, so anything else would never
+        ///     see one. \c copy \c \<src\>... \c \<dest\> is the shape this exists for.
+        static inline bool canFollow(const std::vector<Argument> &arguments,
+                                     const Argument &argument) {
+            if (argument.name().empty()) {
+                return false;
+            }
+            for (const auto &item : arguments) {
+                if (item.name() == argument.name()) {
+                    return false;
+                }
+                if (!item.isRequired() && argument.isRequired()) {
+                    return false;
+                }
+                if (item.arity() == Remainder) {
+                    return false;
+                }
+                if (item.arity() == Multiple &&
+                    (!argument.isRequired() || argument.arity() != Single)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+    private:
         inline void assertDefaultIsUsable() const {
             if (!_hasDefault) {
                 return;
@@ -409,12 +447,40 @@ namespace stdc::cli {
 
         /// Adds an argument. An option's argument needs no description of its own.
         inline Option &arg(std::string name, bool required = true) {
-            _args.emplace_back(Argument(std::move(name), {}, required));
-            return *this;
+            return arg(Argument(std::move(name), {}, required));
         }
         inline Option &arg(Argument argument) {
+            assert(Argument::canFollow(_args, argument) &&
+                   "this option cannot take that argument after the ones it has");
             _args.emplace_back(std::move(argument));
             return *this;
+        }
+
+        /// Whether \a option may be added beside \a options, which is what
+        /// Command::addOption() asserts. \sa Argument::canFollow(), on why this is public
+        ///
+        /// \li it has at least one spelling, and every one of them could be typed and told
+        ///     apart from a value
+        /// \li no spelling of it is a spelling of one already there
+        /// \li one that stands in for an empty command line is written by nobody, so it can be
+        ///     neither required nor given a value
+        static inline bool canJoin(const std::vector<Option> &options, const Option &option) {
+            if (option.tokens().empty()) {
+                return false;
+            }
+            for (const auto &token : option.tokens()) {
+                if (token.size() < 2 || (token.front() != '-' && token.front() != '/')) {
+                    return false;
+                }
+                for (const auto &item : options) {
+                    const auto &taken = item.tokens();
+                    if (std::find(taken.begin(), taken.end(), token) != taken.end()) {
+                        return false;
+                    }
+                }
+            }
+            return option.prior() != AutoSetWhenNoSymbols ||
+                   (!option.isRequired() && option.arguments().empty());
         }
         inline Option &required(bool on = true) {
             _required = on;
@@ -526,16 +592,40 @@ namespace stdc::cli {
         };
 
         inline CommandCatalogue &addCommands(std::string group, std::vector<std::string> names) {
+            assert(canAddGroup(_commands, names) && "a name in this group is in another group already");
             _commands.push_back({std::move(group), std::move(names)});
             return *this;
         }
         inline CommandCatalogue &addOptions(std::string group, std::vector<std::string> names) {
+            assert(canAddGroup(_options, names) && "a name in this group is in another group already");
             _options.push_back({std::move(group), std::move(names)});
             return *this;
         }
         inline CommandCatalogue &addArguments(std::string group, std::vector<std::string> names) {
+            assert(canAddGroup(_arguments, names) && "a name in this group is in another group already");
             _arguments.push_back({std::move(group), std::move(names)});
             return *this;
+        }
+
+        /// Whether \a names may be added as a group beside \a groups, which is what the three
+        /// above assert. \sa Argument::canFollow(), on why this is public
+        ///
+        /// A name in two groups would be listed under the first that claims it and silently
+        /// missing from the other, which reads as the catalogue having been ignored.
+        static inline bool canAddGroup(const std::vector<Group> &groups,
+                                       const std::vector<std::string> &names) {
+            for (size_t i = 0; i < names.size(); ++i) {
+                if (std::find(names.begin(), names.begin() + i, names[i]) != names.begin() + i) {
+                    return false;
+                }
+                for (const auto &group : groups) {
+                    if (std::find(group.members.begin(), group.members.end(), names[i]) !=
+                        group.members.end()) {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         inline const std::vector<Group> &commandGroups() const {
@@ -571,35 +661,57 @@ namespace stdc::cli {
         }
 
         inline Command &addArgument(Argument argument) {
+            assert(Argument::canFollow(_args, argument) &&
+                   "this command cannot take that argument after the ones it has");
             _args.emplace_back(std::move(argument));
             return *this;
         }
         inline Command &addArguments(std::vector<Argument> arguments) {
             for (auto &item : arguments) {
-                _args.emplace_back(std::move(item));
+                addArgument(std::move(item));
             }
             return *this;
         }
         inline Command &addOption(Option option) {
+            assert(Option::canJoin(_options, option) &&
+                   "this option cannot be spelled, or is spelled the way one already here is");
             _options.emplace_back(std::move(option));
             return *this;
         }
         inline Command &addOptions(std::vector<Option> options) {
             for (auto &item : options) {
-                _options.emplace_back(std::move(item));
+                addOption(std::move(item));
             }
             return *this;
         }
         inline Command &addCommand(Command command) {
+            assert(canAddCommand(_commands, command) &&
+                   "this subcommand has no name, or the name of one already here");
             _commands.emplace_back(std::move(command));
             return *this;
         }
         inline Command &addCommands(std::vector<Command> commands) {
             for (auto &item : commands) {
-                _commands.emplace_back(std::move(item));
+                addCommand(std::move(item));
             }
             return *this;
         }
+
+        /// Whether \a command may be added beside \a commands, which is what addCommand()
+        /// asserts. \sa Argument::canFollow(), on why this is public
+        static inline bool canAddCommand(const std::vector<Command> &commands,
+                                         const Command &command) {
+            if (command.name().empty()) {
+                return false;
+            }
+            for (const auto &item : commands) {
+                if (item.name() == command.name()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         inline Command &setHandler(Handler handler) {
             _handler = std::move(handler);
             return *this;
@@ -1357,7 +1469,7 @@ namespace stdc::cli {
         static inline size_t widestOf(const HelpBlock &block) {
             size_t res = 0;
             for (const auto &entry : block.entries) {
-                res = (std::max) (res, size_t(console::display_width(entry.left)));
+                res = std::max(res, size_t(console::display_width(entry.left)));
             }
             return res;
         }
@@ -1366,7 +1478,7 @@ namespace stdc::cli {
         static inline size_t widestOf(const std::vector<HelpBlock> &blocks) {
             size_t res = 0;
             for (const auto &block : blocks) {
-                res = (std::max) (res, widestOf(block));
+                res = std::max(res, widestOf(block));
             }
             return res;
         }
