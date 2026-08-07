@@ -31,7 +31,7 @@ find_package(stdcorelib REQUIRED)
 target_link_libraries(myapp PRIVATE stdcorelib::stdcorelib)
 ```
 
-The installed package config carries a version file with `AnyNewerVersion` compatibility, so a version argument is a floor rather than an exact match.
+A version argument is satisfied by any release with the same major version that is at least as new, so `find_package(stdcorelib 1.1)` takes 1.2 and not 2.0.
 
 Or as a subdirectory:
 

@@ -219,7 +219,7 @@ if(STDC_INSTALL)
     write_basic_package_version_file(
         "${CMAKE_CURRENT_BINARY_DIR}/${STDC_INSTALL_NAME}ConfigVersion.cmake"
         VERSION ${PROJECT_VERSION}
-        COMPATIBILITY AnyNewerVersion
+        COMPATIBILITY SameMajorVersion
     )
 
     # Add configuration file
