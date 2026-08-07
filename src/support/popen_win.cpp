@@ -7,6 +7,7 @@
 #include <io.h>
 
 #include <array>
+#include <thread>
 #include <algorithm>
 #include <cassert>
 #include <set>
@@ -19,6 +20,137 @@
 namespace fs = std::filesystem;
 
 namespace stdc {
+
+    /// Runs \a body on a worker thread and leaves whatever it throws in \a error for the thread
+    /// that joins it, since an exception crossing a thread boundary would call std::terminate.
+    template <class F>
+    void run_capturing(std::exception_ptr &error, F &&body) {
+#ifdef STDC_EXCEPTIONS
+        try {
+            body();
+        } catch (...) {
+            error = std::current_exception();
+        }
+#else
+        // Nothing can be thrown here, so nothing arrives to be reported and the slot stays empty.
+        (void) error;
+        body();
+#endif
+    }
+
+    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1623
+    //
+    // A pipe blocks its writer once full, so stdout and stderr cannot be drained one after the
+    // other, and neither can be drained after the child exits. All three streams have to move
+    // at once, and on Windows an anonymous pipe cannot be waited on, so the only way to have
+    // three things move at once is three threads. Python reaches the same conclusion here, and
+    // polls instead on unix, which is what popen_unix.cpp does.
+    std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
+                                                                       int timeout) {
+        error_code.clear();
+
+        // Same answer as the other five, rather than the no_such_process the check below would
+        // give. A detached child exists, it is just not ours to talk to.
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return {};
+        }
+
+        if (!_child_created) {
+            error_code = std::make_error_code(std::errc::no_such_process);
+            return {};
+        }
+
+        std::string out, err;
+        std::thread out_thread, err_thread, in_thread;
+        std::exception_ptr out_error, err_error, in_error;
+
+        const auto &read_all = [](FILE *file, std::string &dest, std::exception_ptr &error) {
+            run_capturing(error, [&] {
+                char buf[4096];
+                size_t n;
+                while ((n = std::fread(buf, 1, sizeof(buf), file)) > 0) {
+                    dest.append(buf, n);
+                }
+            });
+        };
+
+        const auto &start_workers = [&] {
+            if (stdout_stream.is_open()) {
+                out_thread =
+                    std::thread(read_all, stdout_stream.file(), std::ref(out), std::ref(out_error));
+            }
+            if (stderr_stream.is_open()) {
+                err_thread =
+                    std::thread(read_all, stderr_stream.file(), std::ref(err), std::ref(err_error));
+            }
+
+            // Input has its own worker too. Otherwise a child that never reads can fill the pipe
+            // and block this thread before it ever reaches the timeout below.
+            if (stdin_stream.is_open()) {
+                in_thread = std::thread([&] {
+                    run_capturing(in_error, [&] {
+                        if (!input.empty()) {
+                            stdin_stream.write(input.data(), std::streamsize(input.size()));
+                        }
+                        stdin_stream.flush();
+                        stdin_stream.close();
+                    });
+                });
+            }
+        };
+
+#ifdef STDC_EXCEPTIONS
+        try {
+            start_workers();
+        } catch (...) {
+            // No writer exists yet when thread construction can fail, so closing stdin is safe.
+            stdin_stream.close();
+            std::ignore = kill_impl();
+            std::ignore = _wait();
+            if (out_thread.joinable())
+                out_thread.join();
+            if (err_thread.joinable())
+                err_thread.join();
+            close_std_files();
+            throw;
+        }
+#else
+        // Starting a thread can still fail, but without exceptions it takes the process down
+        // where it happens rather than arriving here to be cleaned up after.
+        start_workers();
+#endif
+        _communication_started = true;
+
+        // A timeout kills the child rather than leaving it behind. Its exit is what closes the
+        // write ends, and without that the reader threads below never finish.
+        if (!_wait(timeout)) {
+            auto wait_error = error_code;
+            std::ignore = kill_impl();
+            std::ignore = _wait();
+            error_code =
+                wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
+        }
+
+        if (in_thread.joinable()) {
+            in_thread.join();
+        }
+        if (out_thread.joinable()) {
+            out_thread.join();
+        }
+        if (err_thread.joinable()) {
+            err_thread.join();
+        }
+        close_std_files();
+
+        if (in_error)
+            std::rethrow_exception(in_error);
+        if (out_error)
+            std::rethrow_exception(out_error);
+        if (err_error)
+            std::rethrow_exception(err_error);
+        return {out, err};
+    }
 
     using namespace winapi;
 

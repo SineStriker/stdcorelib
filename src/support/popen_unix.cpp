@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <grp.h>
+#include <poll.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
 
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <tuple>
 #include <limits>
 #include <mutex>
 #include <thread>
@@ -27,6 +29,174 @@
 #include "scope_guard.h"
 
 namespace stdc {
+
+    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L2094
+    //
+    // A pipe blocks its writer once full, so stdout and stderr cannot be drained one after the
+    // other, and neither can be drained after the child exits: the child would still be blocked
+    // writing the one nobody is taking. All three streams have to move at once.
+    //
+    // Here that is one poll loop and no threads. Python does the same on this platform and uses
+    // threads only on Windows, where an anonymous pipe cannot be waited on. Threads would work
+    // here too, and did, at the price of three of them per call and a signal disposition that
+    // two concurrent calls would fight over.
+    //
+    // \note Reads go straight to the descriptor. Anything a caller already pulled out through
+    //       stdin_(), stdout_() or stderr_() into the stream's own buffer is theirs and is not
+    //       seen here, which was true of the thread version as well.
+    std::tuple<std::string, std::string> Popen::Impl::communicate_impl(const std::string &input,
+                                                                       int timeout) {
+        error_code.clear();
+
+        // Same answer as the other five, rather than the no_such_process the check below would
+        // give. A detached child exists, it is just not ours to talk to.
+        if (_detached_started) {
+            error_code = std::make_error_code(std::errc::operation_not_supported);
+            return {};
+        }
+        if (!_child_created) {
+            error_code = std::make_error_code(std::errc::no_such_process);
+            return {};
+        }
+
+        // Whatever the caller wrote through the stream goes out ahead of the input given here,
+        // in the order they wrote it.
+        if (stdin_stream.is_open()) {
+            stdin_stream.flush();
+        }
+
+        int in_fd = stdin_stream.is_open() ? ::fileno(stdin_stream.file()) : -1;
+        int out_fd = stdout_stream.is_open() ? ::fileno(stdout_stream.file()) : -1;
+        int err_fd = stderr_stream.is_open() ? ::fileno(stderr_stream.file()) : -1;
+
+        // Non-blocking, so that neither a full pipe nor an empty one can hold the loop still
+        // while another stream has something to say.
+        for (int fd : {in_fd, out_fd, err_fd}) {
+            if (fd < 0) {
+                continue;
+            }
+            int flags = ::fcntl(fd, F_GETFL, 0);
+            if (flags >= 0) {
+                std::ignore = ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+            }
+        }
+
+        std::string out, err;
+        size_t written = 0;
+        bool timed_out = false;
+
+        const auto started = std::chrono::steady_clock::now();
+        const auto &remaining = [&]() -> int {
+            if (timeout < 0) {
+                return -1;
+            }
+            auto spent = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - started)
+                             .count();
+            return spent >= timeout ? 0 : int(timeout - spent);
+        };
+
+        // Nothing to say, so the child is told that now rather than after the loop. A child
+        // reading to end of input would otherwise wait for a close that never comes.
+        if (in_fd >= 0 && input.empty()) {
+            stdin_stream.close();
+            in_fd = -1;
+        }
+
+        const auto &drain = [](int fd, std::string &dest) {
+            // Until it would block. One readable event can carry more than one bufferful.
+            char buf[4096];
+            for (;;) {
+                ssize_t n = ::read(fd, buf, sizeof(buf));
+                if (n > 0) {
+                    dest.append(buf, size_t(n));
+                    continue;
+                }
+                if (n == 0) {
+                    return false; // end of it
+                }
+                if (errno == EINTR) {
+                    continue;
+                }
+                return errno == EAGAIN || errno == EWOULDBLOCK;
+            }
+        };
+
+        _communication_started = true;
+
+        while (in_fd >= 0 || out_fd >= 0 || err_fd >= 0) {
+            struct pollfd fds[3] {};
+            int count = 0;
+            int in_slot = -1, out_slot = -1, err_slot = -1;
+            if (in_fd >= 0) {
+                fds[count] = {in_fd, POLLOUT, 0};
+                in_slot = count++;
+            }
+            if (out_fd >= 0) {
+                fds[count] = {out_fd, POLLIN, 0};
+                out_slot = count++;
+            }
+            if (err_fd >= 0) {
+                fds[count] = {err_fd, POLLIN, 0};
+                err_slot = count++;
+            }
+
+            int ready = ::poll(fds, nfds_t(count), remaining());
+            if (ready < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                error_code = std::error_code(errno, std::generic_category());
+                error_api = "poll";
+                break;
+            }
+            if (ready == 0) {
+                timed_out = true;
+                break;
+            }
+
+            if (in_slot >= 0 && fds[in_slot].revents) {
+                // The reader is gone. Writing now is what would raise SIGPIPE, so this is where
+                // that is answered: by not writing.
+                if (fds[in_slot].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                    stdin_stream.close();
+                    in_fd = -1;
+                } else {
+                    ssize_t n = ::write(in_fd, input.data() + written, input.size() - written);
+                    if (n > 0) {
+                        written += size_t(n);
+                    } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                        // EPIPE, if the child went between the poll and the write.
+                        stdin_stream.close();
+                        in_fd = -1;
+                    }
+                    // End of input is what lets a child reading to the end finish.
+                    if (in_fd >= 0 && written == input.size()) {
+                        stdin_stream.close();
+                        in_fd = -1;
+                    }
+                }
+            }
+            if (out_slot >= 0 && fds[out_slot].revents && !drain(out_fd, out)) {
+                out_fd = -1;
+            }
+            if (err_slot >= 0 && fds[err_slot].revents && !drain(err_fd, err)) {
+                err_fd = -1;
+            }
+        }
+
+        // A timeout kills the child rather than leaving it behind.
+        if (timed_out || !_wait(remaining())) {
+            auto wait_error = error_code;
+            std::ignore = kill_impl();
+            std::ignore = _wait();
+            error_code =
+                wait_error.value() != 0 ? wait_error : std::make_error_code(std::errc::timed_out);
+        }
+
+        close_std_files();
+        return {out, err};
+    }
 
     static inline std::error_code make_last_error_code() {
         return std::error_code(errno, std::system_category());
