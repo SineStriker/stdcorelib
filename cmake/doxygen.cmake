@@ -88,7 +88,7 @@ SORT_MEMBER_DOCS       = NO
 # is read as two patterns, and the second one matched enough to leave the index with nothing in
 # it at all. Silently, and with no warning from Doxygen. Hence *enable_if* here, which names the
 # same two specializations without a space.
-EXCLUDE_SYMBOLS        = *::detail *::detail::* stdc::str::conv* *enable_if* stdc::is_map stdc::has_key_type* stdc::has_mapped_type* stdc::void_t stdc::vlarray_base stdc::flag stdc::incompatible_flag stdc::winapi::kernel32 stdc::winapi::user32
+EXCLUDE_SYMBOLS        = *::detail *::detail::* stdc::str::conv* *enable_if* stdc::is_map stdc::has_key_type* stdc::has_mapped_type* stdc::vlarray_base stdc::flag stdc::incompatible_flag stdc::winapi::kernel32 stdc::winapi::user32
 
 # Doxygen does not see the configure step, so the switches are spelled out here. Without them
 # the export attribute reads as part of every class name, and the platform headers document
