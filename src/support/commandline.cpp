@@ -217,34 +217,37 @@ namespace stdc::cli {
     // OptionResult
     // ---------------------------------------------------------------------------------------
 
+    // Everything here reaches through _data without checking it. ParseResult::option() is the
+    // only thing that makes one of these, and it makes one only where there is data to point at.
     int OptionResult::count() const {
-        auto data = static_cast<const OptionData *>(_data);
-        return data ? int(data->occurrences.size()) : 0;
+        return int(static_cast<const OptionData *>(_data)->occurrences.size());
     }
 
     const Option *OptionResult::option() const {
-        auto data = static_cast<const OptionData *>(_data);
-        return data ? data->option : nullptr;
+        return static_cast<const OptionData *>(_data)->option;
     }
 
-    std::string_view OptionResult::rawValue(int index, int occurrence) const {
+    // The slot is a vector of the tokens that argument took. Whether that vector is empty and
+    // whether the token in it is empty are different questions, which is why nothing here is
+    // reported as empty text.
+    std::optional<std::string_view> OptionResult::rawValue(int index, int occurrence) const {
         auto data = static_cast<const OptionData *>(_data);
-        if (!data || occurrence < 0 || size_t(occurrence) >= data->occurrences.size()) {
-            return {};
+        if (occurrence < 0 || size_t(occurrence) >= data->occurrences.size()) {
+            return std::nullopt;
         }
         const auto &slots = data->occurrences[size_t(occurrence)];
         if (index < 0 || size_t(index) >= slots.size() || slots[size_t(index)].empty()) {
-            return {};
+            return std::nullopt;
         }
-        return slots[size_t(index)].front();
+        return std::string_view(slots[size_t(index)].front());
     }
 
     std::vector<std::string_view> OptionResult::rawValues(int index) const {
         std::vector<std::string_view> res;
-        auto data = static_cast<const OptionData *>(_data);
-        if (!data || index < 0) {
+        if (index < 0) {
             return res;
         }
+        auto data = static_cast<const OptionData *>(_data);
         for (const auto &slots : data->occurrences) {
             if (size_t(index) >= slots.size()) {
                 continue;
@@ -339,11 +342,6 @@ namespace stdc::cli {
         return _impl->target->handler()(*this);
     }
 
-    bool ParseResult::isOptionSet(std::string_view token) const {
-        auto data = _impl->find(token);
-        return data && !data->occurrences.empty();
-    }
-
     bool ParseResult::isRoleSet(Option::Role role) const {
         if (role == Option::NoRole) {
             return false;
@@ -356,16 +354,22 @@ namespace stdc::cli {
         return false;
     }
 
-    OptionResult ParseResult::option(std::string_view token) const {
-        return OptionResult(_impl->find(token));
+    // Nothing rather than an empty result, so that there is one way to ask whether an option
+    // was given and one kind of OptionResult to hold.
+    std::optional<OptionResult> ParseResult::option(std::string_view token) const {
+        auto data = _impl->find(token);
+        if (!data || data->occurrences.empty()) {
+            return std::nullopt;
+        }
+        return OptionResult(data);
     }
 
-    std::string_view ParseResult::rawValue(int index) const {
+    std::optional<std::string_view> ParseResult::rawValue(int index) const {
         if (index < 0 || size_t(index) >= _impl->arguments.size() ||
             _impl->arguments[size_t(index)].empty()) {
-            return {};
+            return std::nullopt;
         }
-        return _impl->arguments[size_t(index)].front();
+        return std::string_view(_impl->arguments[size_t(index)].front());
     }
 
     std::vector<std::string_view> ParseResult::rawValues(int index) const {

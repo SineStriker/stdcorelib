@@ -5,13 +5,6 @@ Usable, and used, but the version number is honest: interfaces still move.
 ## Known gaps
 
 - The registry code assumes a little-endian host
-- `cli::ParseResult::value<T>()` answers with a value initialized `T` when there is nothing to
-  convert, so a zero can mean a zero was given, that what was given is not a number, or that
-  nothing was given at all. Declaring the type on the argument turns the second into a parse
-  error, and `tryValue()` returns an optional for the rest. Neither is enforced.
-- `cli::ParseResult::tryValue()` reads an option given an empty value, `--prefix=`, as nothing,
-  the same as one never given, since the two come back as the same empty text. `isSet()` tells
-  them apart.
 - `support/commandline.h` is 900 lines of inline code, paid for by every translation unit that
   includes it
 

@@ -5,8 +5,7 @@
 /// Declaring what a program takes on its command line, and reading back what it was given.
 ///
 /// The shape of the API comes from SysCmdLine, https://github.com/SineStriker/syscmdline, which
-/// this replaces. A program moving across is renaming rather than rewriting. Where the two part
-/// on what a command line means, this says so beside Parser.
+/// this replaces.
 
 #ifndef STDCORELIB_COMMANDLINE_H
 #define STDCORELIB_COMMANDLINE_H
@@ -671,27 +670,29 @@ namespace stdc::cli {
     /// What one option was given.
     ///
     /// A view onto the ParseResult it came from, the way \c std::string_view is a view onto a
-    /// string. It owns nothing and keeps nothing alive.
+    /// string. It owns nothing and keeps nothing alive. One exists only where the option was
+    /// given, so there is no such thing as an empty one and nothing here has to ask.
     ///
     /// \warning Do not outlive that result. \c parser.parse(args).option("-f") reads freed
     ///          storage at the semicolon, since the result it was taken from was a temporary.
     /// \sa ParseResult::option()
     class STDC_EXPORT OptionResult {
     public:
-        /// How many times the option was given.
+        /// How many times the option was given, which is at least once.
         int count() const;
-        inline bool isSet() const {
-            return count() > 0;
-        }
-        /// The option itself, or null when it was never declared.
+        /// The option itself.
         const Option *option() const;
 
         /// The \a index'th argument of the \a occurrence'th appearance, as text, or the
-        /// default value where there is one. Empty when there is neither.
+        /// default value where there is one, or nothing when there is neither.
+        ///
+        /// An option given an empty value, \c --prefix= , has one, and it is the empty string.
+        /// That is why this answers with an optional rather than with empty text: whether a
+        /// token is there and whether the token is empty are different questions.
         ///
         /// \warning Points into the ParseResult and lasts exactly as long as it does. Ask
         ///          value<T>() for something that owns what it holds.
-        std::string_view rawValue(int index = 0, int occurrence = 0) const;
+        std::optional<std::string_view> rawValue(int index = 0, int occurrence = 0) const;
 
         /// Every value the \a index'th argument took, across every occurrence.
         ///
@@ -705,38 +706,32 @@ namespace stdc::cli {
         /// turns the second into a diagnostic while parsing, which leaves this meaning only the
         /// first.
         ///
-        /// \note An option given an empty value, \c --prefix= , reads as nothing here too,
-        ///       since what comes back is the same empty text either way. isSet() tells those
-        ///       two apart, and value<T>() gives the empty string rather than nothing.
-        ///
         /// \code
-        ///   int jobs = result.option("-j").tryValue<int>().value_or(default_jobs());
+        ///   int jobs = result.option("-j").value<int>().value_or(default_jobs());
         /// \endcode
         template <class T = std::string>
-        std::optional<T> tryValue(int index = 0, int occurrence = 0) const {
+        std::optional<T> value(int index = 0, int occurrence = 0) const {
             auto raw = rawValue(index, occurrence);
+            if (!raw) {
+                return std::nullopt;
+            }
             T out{};
-            if (raw.empty() || !value_traits<T>::parse(raw, &out)) {
+            if (!value_traits<T>::parse(*raw, &out)) {
                 return std::nullopt;
             }
             return out;
         }
 
-        /// The same without the check. A token that is not a \c T gives a value initialized
-        /// \c T. Declare the type on the Argument to have that rejected while parsing instead.
+        /// Every value the \a index'th argument took, converted, or nothing when one of them
+        /// is not a \c T. An empty vector means there were none to convert.
         template <class T = std::string>
-        T value(int index = 0, int occurrence = 0) const {
-            T out{};
-            value_traits<T>::parse(rawValue(index, occurrence), &out);
-            return out;
-        }
-
-        template <class T = std::string>
-        std::vector<T> values(int index = 0) const {
+        std::optional<std::vector<T>> values(int index = 0) const {
             std::vector<T> out;
             for (auto raw : rawValues(index)) {
                 T item{};
-                value_traits<T>::parse(raw, &item);
+                if (!value_traits<T>::parse(raw, &item)) {
+                    return std::nullopt;
+                }
                 out.push_back(std::move(item));
             }
             return out;
@@ -795,16 +790,26 @@ namespace stdc::cli {
         /// when the parse failed or the command has no handler.
         int invoke(int errorCode = -1) const;
 
-        bool isOptionSet(std::string_view token) const;
         /// Whether an option carrying \a role was given, whatever it was spelled as.
         bool isRoleSet(Option::Role role) const;
-        OptionResult option(std::string_view token) const;
 
-        /// The \a index'th positional argument of the command that was reached, as text.
+        /// What \a token was given, or nothing when it was not given at all, which covers an
+        /// option nobody declared as well as one nobody wrote.
+        ///
+        /// \code
+        ///   if (auto force = result.option("-f")) { ... }
+        /// \endcode
+        std::optional<OptionResult> option(std::string_view token) const;
+
+        /// The \a index'th positional argument of the command that was reached, as text, or
+        /// the default value where there is one, or nothing when there is neither.
+        ///
+        /// An argument given an empty string has one, and it is the empty string. That is why
+        /// this answers with an optional rather than with empty text.
         ///
         /// \warning Points into this result and lasts exactly as long as it does. Ask value<T>()
         ///          for something that owns what it holds.
-        std::string_view rawValue(int index) const;
+        std::optional<std::string_view> rawValue(int index) const;
         /// Every token the \a index'th positional argument took.
         ///
         /// \warning The same. These point into this result.
@@ -817,35 +822,31 @@ namespace stdc::cli {
         /// turns the second into a diagnostic while parsing, which leaves this meaning only the
         /// first.
         ///
-        /// \note An option given an empty value, \c --prefix= , reads as nothing here too,
-        ///       since what comes back is the same empty text either way. isSet() tells those
-        ///       two apart, and value<T>() gives the empty string rather than nothing.
-        ///
         /// \code
-        ///   int jobs = result.tryValue<int>(0).value_or(default_jobs());
+        ///   int jobs = result.value<int>(0).value_or(default_jobs());
         /// \endcode
         template <class T = std::string>
-        std::optional<T> tryValue(int index) const {
+        std::optional<T> value(int index) const {
             auto raw = rawValue(index);
+            if (!raw) {
+                return std::nullopt;
+            }
             T out{};
-            if (raw.empty() || !value_traits<T>::parse(raw, &out)) {
+            if (!value_traits<T>::parse(*raw, &out)) {
                 return std::nullopt;
             }
             return out;
         }
-
+        /// Every token the \a index'th argument took, converted, or nothing when one of them
+        /// is not a \c T. An empty vector means there were none to convert.
         template <class T = std::string>
-        T value(int index) const {
-            T out{};
-            value_traits<T>::parse(rawValue(index), &out);
-            return out;
-        }
-        template <class T = std::string>
-        std::vector<T> values(int index) const {
+        std::optional<std::vector<T>> values(int index) const {
             std::vector<T> out;
             for (auto raw : rawValues(index)) {
                 T item{};
-                value_traits<T>::parse(raw, &item);
+                if (!value_traits<T>::parse(raw, &item)) {
+                    return std::nullopt;
+                }
                 out.push_back(std::move(item));
             }
             return out;
@@ -853,14 +854,9 @@ namespace stdc::cli {
 
         /// The first argument of \a token's first occurrence.
         template <class T = std::string>
-        T valueForOption(std::string_view token) const {
-            return option(token).value<T>();
-        }
-
-        // @overload: valueForOption, saying whether there was one
-        template <class T = std::string>
-        std::optional<T> tryValueForOption(std::string_view token) const {
-            return option(token).tryValue<T>();
+        std::optional<T> valueForOption(std::string_view token) const {
+            auto given = option(token);
+            return given ? given->value<T>() : std::nullopt;
         }
 
         /// The help text for the command that was reached, prologue and epilogue included.
