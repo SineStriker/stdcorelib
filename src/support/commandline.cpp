@@ -310,10 +310,13 @@ namespace stdc::cli {
         // short typo, which is worse than saying nothing.
         const size_t threshold = input.size() / 2;
 
+        // Set in as far as the help text sets a section body in, since this is a list under a
+        // line that introduces it and reads as one.
+        const std::string margin(size_t(_impl->indent < 0 ? 0 : _impl->indent), ' ');
         std::string suggestions;
         for (const auto &item : _impl->error_candidates) {
             if (edit_distance(input, item) <= threshold) {
-                suggestions += "\n  " + item;
+                suggestions += "\n" + margin + item;
             }
         }
         if (suggestions.empty()) {
@@ -477,13 +480,29 @@ namespace stdc::cli {
                                correction + "\n", stderr);
             }
         }
-        if (_impl->target) {
+        // How this program spells asking for help rather than how most of them do. A tree that
+        // does not offer it at all gets no line, since pointing at something nobody declared is
+        // worse than saying nothing.
+        std::string help;
+        for (const auto &item : _impl->options) {
+            if (item.option->role() != Option::Help) {
+                continue;
+            }
+            for (const auto &token : item.option->tokens()) {
+                // The long spelling where there is one, since that is the one worth reading.
+                if (help.empty() || (help.rfind("--", 0) != 0 && token.rfind("--", 0) == 0)) {
+                    help = token;
+                }
+            }
+            break;
+        }
+        if (_impl->target && !help.empty()) {
             std::string name;
             for (size_t i = 0; i < _impl->path.size(); ++i) {
                 name += (i ? " " : "") + _impl->path[i];
             }
             console::fputs(console::nostyle, console::nocolor, console::nocolor,
-                           "Try \"" + name + " --help\" for more information.\n", stderr);
+                           "Try \"" + name + " " + help + "\" for more information.\n", stderr);
         }
     }
 
@@ -975,6 +994,27 @@ namespace stdc::cli {
             }
             bool failed() const {
                 return r->error != ParseResult::NoError;
+            }
+            /// What can be written at the command that was reached: its own options first, then
+            /// the ones it inherited. r->options also holds those of the commands left behind,
+            /// which are readable but can no longer be written.
+            std::vector<const Option *> inScope() const {
+                std::vector<const Option *> res;
+                for (const auto &option : r->target->options()) {
+                    res.push_back(&option);
+                }
+                res.insert(res.end(), inherited.begin(), inherited.end());
+                return res;
+            }
+            /// Whether any option in scope was written. Asked beside an empty positional list to
+            /// tell a bare command from one that was given something.
+            bool anythingGiven() const {
+                for (const auto &item : r->options) {
+                    if (!item.occurrences.empty()) {
+                        return true;
+                    }
+                }
+                return false;
             }
             void fail(Error error, std::string text) {
                 if (!failed()) {
@@ -1530,13 +1570,29 @@ namespace stdc::cli {
 
             // An option that stands in for an empty command line, which is what makes a bare
             // command print its help rather than complain.
-            if (!prior_option && tokens.empty()) {
-                for (auto &item : r->options) {
-                    if (item.option->prior() == Option::AutoSetWhenNoSymbols) {
-                        item.occurrences.emplace_back(item.option->arguments().size());
-                        prior_option = item.option;
-                        break;
+            //
+            // What counts is what the command that was reached was given, not how many tokens
+            // there were. A subcommand's name is a token, so counting them left "prog build"
+            // looking like a line with something in it and a subcommand's own auto option never
+            // fired at all.
+            //
+            // Looked for among what is in scope here rather than among everything collected on
+            // the way, since an option of a command already left behind cannot be written here
+            // and has no business standing in for a line written here. The command's own come
+            // before the ones it inherited, so the innermost answer wins.
+            if (!prior_option && positional.empty() && !anythingGiven()) {
+                for (const auto *option : inScope()) {
+                    if (option->prior() != Option::AutoSetWhenNoSymbols ||
+                        option->tokens().empty()) {
+                        continue;
                     }
+                    auto data = r->findForWriting(option->token());
+                    if (!data) {
+                        continue;
+                    }
+                    data->occurrences.emplace_back(option->arguments().size());
+                    prior_option = option;
+                    break;
                 }
             }
 

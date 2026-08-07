@@ -746,6 +746,92 @@ BOOST_AUTO_TEST_CASE(test_prior_can_set_itself_on_an_empty_line) {
     BOOST_CHECK(!ok(parser, {"value"}).option("--help").has_value());
 }
 
+// Everything the prior ladder does, asked once at the root and once a level down, because the
+// two only tell each other apart there. A root only tree makes "the line was empty" and "this
+// command was given nothing" the same value, which is how AutoSetWhenNoSymbols was broken for
+// every subcommand while a case watched the line that decides it.
+BOOST_AUTO_TEST_CASE(test_the_prior_ladder_reads_the_same_a_level_down) {
+    const auto &shaped = [](Option::Prior level, bool nested) {
+        auto inner = Command(nested ? "build" : "prog")
+                         .addArgument(Argument("target"))
+                         .addOption(Option({"-j"}, "Jobs").arg("n"))
+                         .addOption(Option(Option::Help).prior(level));
+        return nested ? Command("prog").addCommand(std::move(inner)) : std::move(inner);
+    };
+    const auto &given = [&shaped](Option::Prior level, bool nested,
+                                  std::vector<std::string> args) {
+        Parser parser(shaped(level, nested));
+        std::vector<std::string> line = {"prog"};
+        if (nested) {
+            line.push_back("build");
+        }
+        line.insert(line.end(), args.begin(), args.end());
+        return parser.parse(line);
+    };
+
+    for (auto level : {Option::NoPrior, Option::IgnoreMissingArguments,
+                       Option::IgnoreMissingSymbols, Option::AutoSetWhenNoSymbols,
+                       Option::ExclusiveToArguments, Option::ExclusiveToOptions,
+                       Option::ExclusiveToAll}) {
+        const std::string at = "prior level " + std::to_string(int(level));
+        for (const auto &args : {std::vector<std::string>{},
+                                 std::vector<std::string>{"--help"},
+                                 std::vector<std::string>{"--help", "-j", "4"},
+                                 std::vector<std::string>{"x"}}) {
+            auto flat = given(level, false, args);
+            auto deep = given(level, true, args);
+
+            std::string what = at + ", given";
+            for (const auto &item : args) {
+                what += " " + item;
+            }
+            BOOST_CHECK_MESSAGE(flat.isValid() == deep.isValid(),
+                                what + ": valid at the root and not a level down, or the other "
+                                       "way about");
+            BOOST_CHECK_MESSAGE(int(flat.error()) == int(deep.error()), what + ": a different "
+                                                                              "error each way");
+            BOOST_CHECK_MESSAGE(flat.isRoleSet(Option::Help) == deep.isRoleSet(Option::Help),
+                                what + ": the option was set at one depth and not the other");
+        }
+    }
+}
+
+// What counts is what the command that was reached was given, not how long the command line
+// was. The name of a subcommand is a token, so counting tokens left "prog build" looking like a
+// line with something in it, and a subcommand's own auto option never fired. Every
+// addHelpOption(true) on a subcommand was dead.
+BOOST_AUTO_TEST_CASE(test_prior_sets_itself_on_a_bare_subcommand) {
+    const auto &tree = [] {
+        return Parser(Command("prog")
+                          .addOption(Option(Option::Version).prior(Option::AutoSetWhenNoSymbols))
+                          .addCommand(Command("build")
+                                          .addArgument(Argument("target"))
+                                          .addOption(Option({"-j"}, "Jobs").arg("n"))
+                                          .addOption(Option(Option::Help)
+                                                         .prior(Option::AutoSetWhenNoSymbols))));
+    };
+
+    // A subcommand with nothing after it, which is the case that never worked. Its required
+    // argument is not missed, since the option that was set stands in for the whole line.
+    auto parser = tree();
+    auto bare = ok(parser, {"build"});
+    BOOST_CHECK(bare.option("--help").has_value());
+    BOOST_CHECK(bare.isRoleSet(Option::Help));
+
+    // Given a value, it stays out of the way and the argument is read as usual.
+    auto given = ok(parser, {"build", "x"});
+    BOOST_CHECK(!given.option("--help").has_value());
+    BOOST_CHECK_EQUAL(must(given.value(0)), "x");
+
+    // Given an option rather than a value, it stays out of the way as well, and what is missing
+    // is missed.
+    bad(parser, {"build", "-j", "4"}, ParseResult::MissingCommandArgument);
+
+    // The root's own is not set by reaching a subcommand, since the line was not empty.
+    BOOST_CHECK(!bare.isRoleSet(Option::Version));
+    BOOST_CHECK(ok(parser, {}).isRoleSet(Option::Version));
+}
+
 BOOST_AUTO_TEST_CASE(test_exclusive_prior_levels) {
     auto build = [](Option::Prior level) {
         return Parser(Command("prog")
@@ -1815,7 +1901,7 @@ BOOST_AUTO_TEST_CASE(test_a_mistyped_name_is_answered_with_the_ones_it_is_near) 
                           .addCommand(Command("remove")));
         auto text = bad(parser, {"copyy"}, ParseResult::UnknownCommand).correctionText();
         BOOST_CHECK(has(text, "\"copyy\" is not matched"));
-        BOOST_CHECK(has(text, "\n  copy"));
+        BOOST_CHECK(has(text, "\n    copy"));
         BOOST_CHECK(!has(text, "\n  move"));
         BOOST_CHECK(!has(text, "\n  remove"));
     }
@@ -1827,8 +1913,8 @@ BOOST_AUTO_TEST_CASE(test_a_mistyped_name_is_answered_with_the_ones_it_is_near) 
             Option({"--version"}, "Say which"),
         }));
         auto text = bad(parser, {"--verbse"}, ParseResult::UnknownOption).correctionText();
-        BOOST_CHECK(has(text, "\n  --verbose"));
-        BOOST_CHECK(has(text, "\n  --version"));
+        BOOST_CHECK(has(text, "\n    --verbose"));
+        BOOST_CHECK(has(text, "\n    --version"));
     }
 
     // one of the few words an argument accepts
@@ -1836,7 +1922,7 @@ BOOST_AUTO_TEST_CASE(test_a_mistyped_name_is_answered_with_the_ones_it_is_near) 
         Parser parser(Command("prog").addArgument(
             Argument("mode").expect({"fast", "slow", "careful"})));
         auto text = bad(parser, {"fest"}, ParseResult::InvalidArgumentValue).correctionText();
-        BOOST_CHECK(has(text, "\n  fast"));
+        BOOST_CHECK(has(text, "\n    fast"));
         BOOST_CHECK(!has(text, "\n  careful"));
     }
 
@@ -1863,14 +1949,17 @@ BOOST_AUTO_TEST_CASE(test_a_mistyped_name_is_answered_with_the_ones_it_is_near) 
 
 // What showError() puts on stderr, since that is the whole point of measuring the distance.
 BOOST_AUTO_TEST_CASE(test_show_error_offers_the_correction) {
-    Parser parser(Command("prog").addCommand(Command("copy")).addCommand(Command("move")));
+    Parser parser(Command("prog")
+                      .addOption(Option(Option::Help))
+                      .addCommand(Command("copy"))
+                      .addCommand(Command("move")));
 
     auto result = bad(parser, {"copyy"}, ParseResult::UnknownCommand);
     auto printed = capturedStderr([&] { result.showError(); });
     BOOST_CHECK(has(printed, "is not a command"));
     BOOST_CHECK(has(printed, "Do you mean"));
     BOOST_CHECK(has(printed, "copy"));
-    BOOST_CHECK(has(printed, "--help"));
+    BOOST_CHECK(has(printed, "Try \"prog --help\""));
 
     // Turned off, the error is still said and only the offer goes away.
     parser.setDisplayOptions(Parser::SkipCorrection);
@@ -1878,7 +1967,47 @@ BOOST_AUTO_TEST_CASE(test_show_error_offers_the_correction) {
     auto printed_quiet = capturedStderr([&] { quiet.showError(); });
     BOOST_CHECK(has(printed_quiet, "is not a command"));
     BOOST_CHECK(!has(printed_quiet, "Do you mean"));
-    BOOST_CHECK(has(printed_quiet, "--help"));
+    BOOST_CHECK(has(printed_quiet, "Try \"prog --help\""));
+}
+
+// The line that points at help names what this program calls it, rather than what most programs
+// call it. It used to say --help whatever the tree declared, and a tree declaring none at all
+// still got told to try one.
+BOOST_AUTO_TEST_CASE(test_the_error_points_at_the_help_this_program_has) {
+    const auto &printedFor = [](Command root) {
+        Parser parser(std::move(root));
+        auto result = parser.parse(argv({"nope"}));
+        BOOST_REQUIRE(!result.isValid());
+        return capturedStderr([&] { result.showError(); });
+    };
+
+    // The long spelling where there is one, since that is the one worth reading.
+    BOOST_CHECK(has(printedFor(Command("prog").addOption(Option(Option::Help))),
+                    "Try \"prog --help\" for more information."));
+
+    // Whatever it is spelled instead.
+    BOOST_CHECK(has(printedFor(Command("prog").addOption(
+                        Option(Option::Help, {"-?", "--usage"}, "Say how to use this"))),
+                    "Try \"prog --usage\" for more information."));
+    BOOST_CHECK(has(printedFor(Command("prog").addOption(
+                        Option(Option::Help, {"-h"}, "Say how to use this"))),
+                    "Try \"prog -h\" for more information."));
+
+    // A tree with none is told to try nothing.
+    BOOST_CHECK(!has(printedFor(Command("prog")), "Try "));
+
+    // An option is not the help option merely by being spelled like one.
+    BOOST_CHECK(!has(printedFor(Command("prog").addOption(Option({"--help"}, "Not the role"))),
+                     "Try "));
+
+    // A subcommand names itself and the option it inherited.
+    Parser parser(Command("prog")
+                      .addOption(Option(Option::Help).global())
+                      .addCommand(Command("build").addArgument(Argument("target"))));
+    auto result = parser.parse(argv({"build"}));
+    BOOST_REQUIRE(!result.isValid());
+    BOOST_CHECK(has(capturedStderr([&] { result.showError(); }),
+                    "Try \"prog build --help\" for more information."));
 }
 
 // The overload that takes what main was handed, rather than making every caller build the
