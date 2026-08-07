@@ -33,6 +33,25 @@
 
 using namespace stdc::cli;
 
+// What is in here, in order. Each line is the heading of a section below, spelled the same way,
+// so searching for one lands on it. No line numbers: they would be wrong by the next commit.
+//
+//     Reading a token back as a type
+//     The builders
+//     Parsing
+//     Edges, taken from what CLI11, argparse and argtable3 test their own parsers with
+//     The help text
+//     Shapes a whole program asks for
+//     Degenerate trees and misuse
+//     What a whole program does, from argv to a handler
+//     When it goes wrong: corrections and what is printed
+//     Wrapping, and the width to wrap to
+//     A subcommand, and what it inherited
+//     The layout: which blocks, in what order
+//     The formatter: overriding a rung of the ladder
+//     Whether a tree may be built that way at all
+//     Reuse, ownership and what outlives what
+
 namespace {
 
     /// The value a case says has to be there. Reading an empty optional would be undefined,
@@ -83,6 +102,10 @@ struct stdc::cli::value_traits<Fraction> {
 };
 
 BOOST_AUTO_TEST_SUITE(test_commandline)
+
+// ---------------------------------------------------------------------------------------------
+// Reading a token back as a type
+// ---------------------------------------------------------------------------------------------
 
 BOOST_AUTO_TEST_CASE(test_string_takes_anything) {
     BOOST_CHECK_EQUAL(read<std::string>(""), "");
@@ -1982,6 +2005,10 @@ BOOST_AUTO_TEST_CASE(test_a_command_with_no_name) {
     BOOST_CHECK(has(result.helpText(), "Usage:"));
 }
 
+// ---------------------------------------------------------------------------------------------
+// What a whole program does, from argv to a handler
+// ---------------------------------------------------------------------------------------------
+
 // The library declares these two roles, gives them their spellings and holds the version
 // string, so it answers them. Leaving that to the caller meant a program written the obvious
 // way ran the command for "prog copy --help" rather than describing it, and did whatever that
@@ -2103,6 +2130,10 @@ BOOST_AUTO_TEST_CASE(test_which_version_a_result_answers_with) {
     // A tree that was never given one says nothing rather than making something up.
     BOOST_CHECK(Parser(Command("prog")).parse(argv({})).versionText().empty());
 }
+
+// ---------------------------------------------------------------------------------------------
+// When it goes wrong: corrections and what is printed
+// ---------------------------------------------------------------------------------------------
 
 // A name spelled wrong is worth answering with the declared names it is close to. Without it a
 // mistyped subcommand only ever says that it is unknown, which is the least useful true thing.
@@ -2293,6 +2324,10 @@ namespace {
 
 }
 
+// ---------------------------------------------------------------------------------------------
+// Wrapping, and the width to wrap to
+// ---------------------------------------------------------------------------------------------
+
 // A description longer than the terminal is wrapped rather than run off the side, and what it
 // wraps to is measured in columns.
 BOOST_AUTO_TEST_CASE(test_a_long_description_is_wrapped) {
@@ -2423,6 +2458,10 @@ BOOST_AUTO_TEST_CASE(test_wrapping_counts_columns_not_bytes) {
         BOOST_CHECK_EQUAL((line.size() - line.find_first_not_of(' ')) % 3, 0u);
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// A subcommand, and what it inherited
+// ---------------------------------------------------------------------------------------------
 
 // A subcommand is handed the globals of every command above it, and it will be refused for
 // leaving out a required one, so its help text has to say what they are. It used to list only
@@ -2672,6 +2711,10 @@ BOOST_AUTO_TEST_CASE(test_the_usage_line_is_wrapped) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// The layout: which blocks, in what order
+// ---------------------------------------------------------------------------------------------
 
 // The description is a section like every other, so it carries a heading and its body is set in
 // under it. Without one it ran on from the prologue with nothing to say which was which.
@@ -2927,6 +2970,10 @@ namespace {
 
 }
 
+// ---------------------------------------------------------------------------------------------
+// The formatter: overriding a rung of the ladder
+// ---------------------------------------------------------------------------------------------
+
 // Overriding the bottom rung alone reaches everywhere a name is written, including through the
 // option rung, which asks for its arguments through this rather than straight to the base.
 BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_how_a_name_is_spelled) {
@@ -3053,6 +3100,10 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_lay_the_whole_page_out) {
     BOOST_CHECK_EQUAL(parser.parse(argv({})).helpText(), "1:0 2:0 3:1 4:2 7:0 ");
 }
 
+// ---------------------------------------------------------------------------------------------
+// Whether a tree may be built that way at all
+// ---------------------------------------------------------------------------------------------
+
 // What a tree may not be built out of. Every one of these is asserted where an assert survives,
 // and every one is asked here as a question, so the rule is checked in a release build too.
 BOOST_AUTO_TEST_CASE(test_what_an_argument_may_follow) {
@@ -3127,6 +3178,10 @@ BOOST_AUTO_TEST_CASE(test_what_a_subcommand_may_join_and_what_a_catalogue_may_gr
     BOOST_CHECK(!CommandCatalogue::canAddGroup(filesystem, {"build", "copy"}));
     BOOST_CHECK(CommandCatalogue::canAddGroup(filesystem, {"build", "configure"}));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Reuse, ownership and what outlives what
+// ---------------------------------------------------------------------------------------------
 
 // A parser is not spent by parsing, and the tree under it can be replaced afterwards. What was
 // handed out goes on reading the tree it was parsed against, since a result holds that tree

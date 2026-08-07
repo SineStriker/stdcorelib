@@ -30,6 +30,19 @@
 
 using namespace stdc;
 
+// What is in here, in order. Each line is the heading of a section below, spelled the same way,
+// so searching for one lands on it. No line numbers: they would be wrong by the next commit.
+//
+//     Starting one, and what comes back
+//     Reading from it and writing to it
+//     Where it starts, and what it starts with
+//     Ending it
+//     What crosses into the child, and what must not
+//     The command line, and what the platform makes of it
+//     The pipes as iostreams
+//     The lifetime of the Popen itself
+//     Redirection, and text mode
+
 BOOST_AUTO_TEST_SUITE(test_popen)
 
 namespace {
@@ -152,6 +165,10 @@ namespace {
 
 }
 
+// ---------------------------------------------------------------------------------------------
+// Starting one, and what comes back
+// ---------------------------------------------------------------------------------------------
+
 BOOST_AUTO_TEST_CASE(test_run_and_returncode) {
     {
         Popen p;
@@ -249,6 +266,10 @@ BOOST_AUTO_TEST_CASE(test_output_survives_wait) {
     BOOST_REQUIRE(std::getline(out, line));
     BOOST_CHECK_EQUAL(first_line(line), "hello");
 }
+
+// ---------------------------------------------------------------------------------------------
+// Reading from it and writing to it
+// ---------------------------------------------------------------------------------------------
 
 BOOST_AUTO_TEST_CASE(test_communicate) {
     // stdout only
@@ -398,6 +419,10 @@ BOOST_AUTO_TEST_CASE(test_poll) {
     BOOST_CHECK_EQUAL(p.error_code().value(), 0);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Where it starts, and what it starts with
+// ---------------------------------------------------------------------------------------------
+
 BOOST_AUTO_TEST_CASE(test_cwd) {
     Popen p;
     std::string err;
@@ -497,6 +522,10 @@ BOOST_AUTO_TEST_CASE(test_shell) {
     BOOST_CHECK_EQUAL(first_line(out), "shelled");
 }
 
+// ---------------------------------------------------------------------------------------------
+// Ending it
+// ---------------------------------------------------------------------------------------------
+
 // kill() and terminate() are send_signal() with a signal picked for them, and the general form
 // had no caller. What it accepts is the part that differs by platform.
 BOOST_AUTO_TEST_CASE(test_send_signal_takes_what_the_platform_takes) {
@@ -558,6 +587,10 @@ BOOST_AUTO_TEST_CASE(test_signal_returncode) {
         BOOST_CHECK_EQUAL(*p.returncode(), -SIGTERM);
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// What crosses into the child, and what must not
+// ---------------------------------------------------------------------------------------------
 
 // Every descriptor a run opens has to come back, or a long-lived program runs out of them.
 BOOST_AUTO_TEST_CASE(test_no_fd_leak) {
@@ -913,6 +946,10 @@ BOOST_AUTO_TEST_CASE(test_user_and_groups) {
 
 #endif // !_WIN32
 
+// ---------------------------------------------------------------------------------------------
+// The command line, and what the platform makes of it
+// ---------------------------------------------------------------------------------------------
+
 // Each argument has to arrive at the program as the one string it was given as.
 //
 // This matters on Windows, where there is no argument vector to hand over: the arguments are
@@ -1073,6 +1110,10 @@ BOOST_AUTO_TEST_CASE(test_devnull_and_inherit) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// The pipes as iostreams
+// ---------------------------------------------------------------------------------------------
+
 // The pipes are C++ streams, so the usual stream vocabulary works on them directly and nobody
 // has to reach for a platform-specific adapter to get there.
 BOOST_AUTO_TEST_CASE(test_stream_interface) {
@@ -1155,6 +1196,10 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
         BOOST_REQUIRE(p.wait(Timeout));
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// The lifetime of the Popen itself
+// ---------------------------------------------------------------------------------------------
 
 BOOST_AUTO_TEST_CASE(test_kill) {
     Popen p;
@@ -1539,6 +1584,10 @@ BOOST_AUTO_TEST_CASE(test_start_failures) {
         BOOST_CHECK_EQUAL(*p.returncode(), 0);
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Redirection, and text mode
+// ---------------------------------------------------------------------------------------------
 
 // A standard stream can be handed a FILE * or a descriptor of the caller's, which is how output
 // goes straight to a file without passing through this process at all.
