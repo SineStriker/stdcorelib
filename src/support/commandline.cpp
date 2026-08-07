@@ -177,8 +177,11 @@ namespace stdc::cli {
         /// the parser that made it.
         std::string prologue;
         std::string epilogue;
+        HelpLayout help_layout = HelpLayout::defaultLayout();
         int display_options = Parser::Normal;
         int text_width = 0;
+        int indent = 4;
+        int spacing = 4;
 
         ParseResult::Error error = ParseResult::NoError;
         std::string error_text;
@@ -204,12 +207,23 @@ namespace stdc::cli {
 
     namespace {
 
-        /// Defined further down, beside the rest of the layout. Named here because the result's
-        /// accessors come first and one of them prints.
-        std::string helpFor(const Command &command, const std::vector<std::string> &path,
-                            const std::vector<const Option *> &inherited,
-                            const std::string &prologue, const std::string &epilogue, int flags,
-                            int text_width);
+        /// A run of help text and how it is printed. helpText() throws the styles away and
+        /// showHelp() applies them, so both take the same road through the layout.
+        struct Piece {
+            TextStyle style;
+            std::string text;
+        };
+
+        /// Both defined further down, beside the rest of the layout. Named here because the
+        /// result's accessors come first and three of them need these.
+        std::vector<HelpBlock> helpBlocksFor(const Command &command,
+                                             const std::vector<std::string> &path,
+                                             const std::vector<const Option *> &inherited,
+                                             const std::string &prologue,
+                                             const std::string &epilogue, int flags,
+                                             const HelpLayout &layout, int indent, int text_width);
+        std::vector<Piece> renderHelp(const std::vector<HelpBlock> &blocks, int indent, int spacing,
+                                      int text_width, bool align_all);
 
     }
 
@@ -383,39 +397,77 @@ namespace stdc::cli {
         return res;
     }
 
-    std::string ParseResult::helpText() const {
+    namespace {
+
+        /// Zero means ask, and the answer is whatever stdout is: a terminal's width, or 80
+        /// columns for a pipe or a file, so help captured into one reads the same everywhere.
+        int textWidthOf(const detail::parse_data *data) {
+            return data->text_width > 0 ? data->text_width : console::width(stdout);
+        }
+
+        /// The globals of every command above the one that was reached, gathered by walking down
+        /// the path the way the parser did. What it gathered on the way is what it demands there,
+        /// so this is where the help text has to agree with it.
+        std::vector<const Option *> inheritedOptions(const detail::parse_data *data) {
+            std::vector<const Option *> res;
+            if (!data->root || data->path.size() <= 1) {
+                return res;
+            }
+            const Command *at = data->root.get();
+            for (size_t i = 1; i < data->path.size() && at; ++i) {
+                for (const auto &option : at->options()) {
+                    if (option.isGlobal()) {
+                        res.push_back(&option);
+                    }
+                }
+                at = at->findCommand(data->path[i]);
+            }
+            return res;
+        }
+
+        /// The whole help text, laid out but not yet joined. The width is asked for once and
+        /// used for both halves, so a terminal resized between them cannot lay the usage line
+        /// out to one width and the descriptions to another.
+        std::vector<Piece> helpPieces(const detail::parse_data *data) {
+            if (!data->target) {
+                return {};
+            }
+            int width = textWidthOf(data);
+            auto blocks =
+                helpBlocksFor(*data->target, data->path, inheritedOptions(data), data->prologue,
+                              data->epilogue, data->display_options, data->help_layout,
+                              data->indent, width);
+            return renderHelp(blocks, data->indent, data->spacing, width,
+                              (data->display_options & Parser::AlignAllCatalogues) != 0);
+        }
+
+    }
+
+    std::vector<HelpBlock> ParseResult::helpBlocks() const {
         if (!_impl->target) {
             return {};
         }
-        // Zero means ask, and the answer is whatever stdout is: a terminal's width, or 80
-        // columns for a pipe or a file, so help captured into one reads the same everywhere.
-        int width = _impl->text_width > 0 ? _impl->text_width : console::width(stdout);
+        return helpBlocksFor(*_impl->target, _impl->path, inheritedOptions(_impl.get()),
+                             _impl->prologue, _impl->epilogue, _impl->display_options,
+                             _impl->help_layout, _impl->indent, textWidthOf(_impl.get()));
+    }
 
-        // The globals of every command above this one, gathered by walking down the path the
-        // way the parser did. What it gathered on the way is what it demands here, so this is
-        // where the help text has to agree with it.
-        std::vector<const Option *> inherited;
-        if (_impl->root && _impl->path.size() > 1) {
-            const Command *at = _impl->root.get();
-            for (size_t i = 1; i < _impl->path.size() && at; ++i) {
-                for (const auto &option : at->options()) {
-                    if (option.isGlobal()) {
-                        inherited.push_back(&option);
-                    }
-                }
-                at = at->findCommand(_impl->path[i]);
-            }
+    std::string ParseResult::helpText() const {
+        std::string out;
+        for (const auto &piece : helpPieces(_impl.get())) {
+            out += piece.text;
         }
-
-        return helpFor(*_impl->target, _impl->path, inherited, _impl->prologue, _impl->epilogue,
-                       _impl->display_options, width);
+        return out;
     }
 
     void ParseResult::showHelp() const {
         // Through the library's own console rather than fwrite, so that one program does not
         // talk to the terminal two different ways, and so a Windows console gets the transcoding
         // it needs.
-        console::fputs(console::nostyle, console::nocolor, console::nocolor, helpText(), stdout);
+        for (const auto &piece : helpPieces(_impl.get())) {
+            console::fputs(piece.style.style, piece.style.foreground, piece.style.background,
+                           piece.text, stdout);
+        }
     }
 
     void ParseResult::showError() const {
@@ -448,22 +500,6 @@ namespace stdc::cli {
     // ---------------------------------------------------------------------------------------
 
     namespace {
-
-        /// One line of a list: what it is called on the left, what it does on the right.
-        struct Entry {
-            std::string left;
-            std::string right;
-        };
-
-        /// A heading and the lines under it. A list with nothing to group has one group whose
-        /// name is the usual heading.
-        struct Section {
-            std::string title;
-            std::vector<Entry> entries;
-        };
-
-        constexpr int indent = 2;
-        constexpr int gap = 4;
 
         /// However narrow the terminal, a description gets at least this much. Below it the text
         /// is broken into a column too thin to read, which is worse than running over.
@@ -556,32 +592,45 @@ namespace stdc::cli {
             return res;
         }
 
-        /// Puts \a names into the groups \a catalogue asks for, in the order the catalogue gives
-        /// them, with whatever it does not mention left under \a fallback at the end.
+        /// A block that prints the way \a slot asks for, with \a title over it.
+        HelpBlock blockLike(const HelpBlock &slot, std::string title) {
+            HelpBlock res;
+            res.role = slot.role;
+            res.title = std::move(title);
+            res.titleStyle = slot.titleStyle;
+            res.bodyStyle = slot.bodyStyle;
+            res.entryStyle = slot.entryStyle;
+            return res;
+        }
+
+        /// Puts \a items into the groups \a groups asks for, in the order it gives them, with
+        /// whatever it does not mention left under \a fallback at the end. One block per group,
+        /// all printed the way \a slot asks for.
         template <class T, class Name, class Line>
-        std::vector<Section> grouped(const std::vector<T> &items,
-                                     const std::vector<CommandCatalogue::Group> &groups,
-                                     const std::string &fallback, Name name, Line line) {
-            std::vector<Section> res;
+        std::vector<HelpBlock> grouped(const std::vector<T> &items,
+                                       const std::vector<CommandCatalogue::Group> &groups,
+                                       const HelpBlock &slot, const std::string &fallback,
+                                       Name name, Line line) {
+            std::vector<HelpBlock> res;
             std::vector<bool> taken(items.size(), false);
 
             for (const auto &group : groups) {
-                Section section{group.name, {}};
+                HelpBlock block = blockLike(slot, group.name);
                 for (const auto &wanted : group.members) {
                     for (size_t i = 0; i < items.size(); ++i) {
                         if (!taken[i] && name(items[i]) == wanted) {
-                            section.entries.push_back(line(items[i]));
+                            block.entries.push_back(line(items[i]));
                             taken[i] = true;
                             break;
                         }
                     }
                 }
-                if (!section.entries.empty()) {
-                    res.push_back(std::move(section));
+                if (!block.entries.empty()) {
+                    res.push_back(std::move(block));
                 }
             }
 
-            Section rest{fallback, {}};
+            HelpBlock rest = blockLike(slot, fallback);
             for (size_t i = 0; i < items.size(); ++i) {
                 if (!taken[i]) {
                     rest.entries.push_back(line(items[i]));
@@ -593,133 +642,30 @@ namespace stdc::cli {
             return res;
         }
 
-        void writeSections(std::string &out, const std::vector<Section> &sections, size_t width,
-                           int text_width) {
-            // Where a description starts, and therefore where the lines under the first one are
-            // indented to, so a wrapped entry stays one block instead of drifting left.
-            size_t column = size_t(indent) + width + size_t(gap);
-            int room = (std::max) (text_width - int(column), min_description);
-
-            for (const auto &section : sections) {
-                out += "\n" + section.title + ":\n";
-                for (const auto &entry : section.entries) {
-                    out += std::string(indent, ' ') + entry.left;
-                    if (!entry.right.empty()) {
-                        auto lines = wrapped(entry.right, room);
-                        out += std::string(width - size_t(console::display_width(entry.left)) + gap,
-                                           ' ') +
-                               lines.front();
-                        for (size_t i = 1; i < lines.size(); ++i) {
-                            out += "\n" + std::string(column, ' ') + lines[i];
-                        }
-                    }
-                    out += "\n";
-                }
-            }
-        }
-
-        size_t widestOf(const std::vector<Section> &sections) {
+        // In columns rather than in bytes, or a metavar written in a script that is not ASCII
+        // pushes its own row out of line with every other.
+        size_t widestOf(const HelpBlock &block) {
             size_t width = 0;
-            for (const auto &section : sections) {
-                for (const auto &entry : section.entries) {
-                    // In columns rather than in bytes, or a metavar written in a script that is
-                    // not ASCII pushes its own row out of line with every other.
-                    width = (std::max) (width, size_t(console::display_width(entry.left)));
-                }
+            for (const auto &entry : block.entries) {
+                width = (std::max) (width, size_t(console::display_width(entry.left)));
             }
             return width;
         }
 
-        std::string helpFor(const Command &command, const std::vector<std::string> &path,
-                            const std::vector<const Option *> &inherited,
-                            const std::string &prologue, const std::string &epilogue, int flags,
-                            int text_width) {
-            const auto &catalogue = command.catalogue();
-            bool align_all = (flags & Parser::AlignAllCatalogues) != 0;
-
-            // What an argument adds to the right hand column beyond its description. The same
-            // for an argument of a command and an argument of an option, since a default value
-            // is worth as much in either place.
-            auto extras = [flags](const Argument &argument) {
-                std::string res;
-                if ((flags & Parser::ShowArgumentExpectedValues) &&
-                    !argument.expectedValues().empty()) {
-                    std::string words;
-                    for (const auto &item : argument.expectedValues()) {
-                        words += (words.empty() ? "" : ", ") + item;
-                    }
-                    res += " [" + words + "]";
-                }
-                if ((flags & Parser::ShowArgumentDefaultValue) && argument.hasDefaultValue()) {
-                    res += " (default: " + argument.defaultValue() + ")";
-                }
-                return res;
-            };
-            auto argument_line = [extras](const Argument &argument) {
-                return Entry{displayed(argument), argument.description() + extras(argument)};
-            };
-            auto option_line = [flags, extras](const Option &option) {
-                std::string right = option.description();
-                for (const auto &argument : option.arguments()) {
-                    right += extras(argument);
-                }
-                if ((flags & Parser::ShowOptionIsRequired) && option.isRequired()) {
-                    right += " (required)";
-                }
-                return Entry{displayed(option, true), right};
-            };
-            auto command_line = [](const Command &item) {
-                return Entry{item.name(), item.description()};
-            };
-
-            auto arguments = grouped(
-                command.arguments(), catalogue.argumentGroups(), "Arguments",
-                [](const Argument &item) { return item.name(); }, argument_line);
-            // An option with no spelling at all has nothing to print and nothing to be looked up
-            // by, and token() is front() on an empty vector. A default constructed Option is one,
-            // so a tree can hold one and the help text is not the place to find that out.
-            std::vector<Option> named;
-            for (const auto &item : command.options()) {
-                if (!item.tokens().empty()) {
-                    named.push_back(item);
-                }
+        size_t widestOf(const std::vector<HelpBlock> &blocks) {
+            size_t width = 0;
+            for (const auto &block : blocks) {
+                width = (std::max) (width, widestOf(block));
             }
-            auto options = grouped(
-                named, catalogue.optionGroups(), "Options",
-                [](const Option &item) { return item.token(); }, option_line);
-            auto commands = grouped(
-                command.commands(), catalogue.commandGroups(), "Commands",
-                [](const Command &item) { return item.name(); }, command_line);
+            return width;
+        }
 
-            // What the commands above declared global is in scope here and is demanded here, so
-            // it is listed here. Under a heading of its own, since it belongs to the program
-            // rather than to this command, and since the catalogue's groups were written for
-            // this command's own options and have nothing to say about these.
-            std::vector<Option> globals;
-            for (const auto *option : inherited) {
-                if (!option->tokens().empty()) {
-                    globals.push_back(*option);
-                }
-            }
-            std::vector<Section> global_options;
-            if (!globals.empty()) {
-                Section section{"Global options", {}};
-                for (const auto &option : globals) {
-                    section.entries.push_back(option_line(option));
-                }
-                global_options.push_back(std::move(section));
-            }
-
-            std::string out;
-            if (!prologue.empty()) {
-                out += prologue + "\n";
-            }
-            if (!command.description().empty()) {
-                out += (out.empty() ? "" : "\n") + command.description() + "\n";
-            }
-
-            // Usage, as pieces that each stay whole. An option and the value it takes are one
-            // piece, since breaking between them would read as two separate things.
+        /// The usage line, broken into as many lines as the room a section body gets, with the
+        /// breaks written into the text. Each piece stays whole, since an option and the value
+        /// it takes read as two separate things once something comes between them.
+        std::string usageText(const Command &command, const std::vector<std::string> &path,
+                              const std::vector<Option> &named, const std::vector<Option> &globals,
+                              int indent, int text_width) {
             std::string head;
             for (size_t i = 0; i < path.size(); ++i) {
                 head += (i ? " " : "") + path[i];
@@ -749,46 +695,231 @@ namespace stdc::cli {
                 parts.push_back("[commands]");
             }
 
-            // Wrapped like everything else, with what follows lined up under the command name
-            // rather than back at the margin, so a long line still reads as one thing.
-            const std::string lead = "Usage: ";
-            std::string line = lead + head;
-            int line_width = console::display_width(line);
-            std::string usage;
+            int room = (std::max) (text_width - indent, min_description);
+            std::string res = head;
+            int line_width = console::display_width(head);
             for (const auto &part : parts) {
                 int part_width = console::display_width(part);
-                bool at_margin = line_width == int(lead.size());
-                if (!at_margin && line_width + 1 + part_width > text_width) {
-                    usage += line + "\n";
-                    line = std::string(lead.size(), ' ');
-                    line_width = int(lead.size());
-                    at_margin = true;
+                if (line_width > 0 && line_width + 1 + part_width > room) {
+                    res += "\n";
+                    line_width = 0;
                 }
-                // At the margin the piece goes straight down under the command name. Anywhere
-                // else it needs the space that separates it from what came before.
-                line += at_margin ? part : " " + part;
-                line_width += at_margin ? part_width : 1 + part_width;
+                // At the margin the piece goes straight down under the one above. Anywhere else
+                // it needs the space that separates it from what came before.
+                res += line_width == 0 ? part : " " + part;
+                line_width += line_width == 0 ? part_width : 1 + part_width;
             }
-            usage += line;
-            out += (out.empty() ? "" : "\n") + usage + "\n";
+            return res;
+        }
 
-            if (align_all) {
-                size_t width = (std::max) ({widestOf(arguments), widestOf(options),
-                                            widestOf(global_options), widestOf(commands)});
-                writeSections(out, arguments, width, text_width);
-                writeSections(out, options, width, text_width);
-                writeSections(out, global_options, width, text_width);
-                writeSections(out, commands, width, text_width);
-            } else {
-                for (const auto *list : {&arguments, &options, &global_options, &commands}) {
-                    for (const auto &section : *list) {
-                        writeSections(out, {section}, widestOf({section}), text_width);
+        std::vector<HelpBlock> helpBlocksFor(const Command &command,
+                                             const std::vector<std::string> &path,
+                                             const std::vector<const Option *> &inherited,
+                                             const std::string &prologue,
+                                             const std::string &epilogue, int flags,
+                                             const HelpLayout &layout, int indent,
+                                             int text_width) {
+            const auto &catalogue = command.catalogue();
+
+            // What an argument adds to the right hand column beyond its description. The same
+            // for an argument of a command and an argument of an option, since a default value
+            // is worth as much in either place.
+            auto extras = [flags](const Argument &argument) {
+                std::string res;
+                if ((flags & Parser::ShowArgumentExpectedValues) &&
+                    !argument.expectedValues().empty()) {
+                    std::string words;
+                    for (const auto &item : argument.expectedValues()) {
+                        words += (words.empty() ? "" : ", ") + item;
+                    }
+                    res += " [" + words + "]";
+                }
+                if ((flags & Parser::ShowArgumentDefaultValue) && argument.hasDefaultValue()) {
+                    res += " (default: " + argument.defaultValue() + ")";
+                }
+                return res;
+            };
+            auto argument_line = [extras](const Argument &argument) {
+                return HelpBlock::Entry{displayed(argument),
+                                        argument.description() + extras(argument)};
+            };
+            auto option_line = [flags, extras](const Option &option) {
+                std::string right = option.description();
+                for (const auto &argument : option.arguments()) {
+                    right += extras(argument);
+                }
+                if ((flags & Parser::ShowOptionIsRequired) && option.isRequired()) {
+                    right += " (required)";
+                }
+                return HelpBlock::Entry{displayed(option, true), right};
+            };
+            auto command_line = [](const Command &item) {
+                return HelpBlock::Entry{item.name(), item.description()};
+            };
+
+            // An option with no spelling at all has nothing to print and nothing to be looked up
+            // by, and token() is front() on an empty vector. A default constructed Option is one,
+            // so a tree can hold one and the help text is not the place to find that out.
+            std::vector<Option> named;
+            for (const auto &item : command.options()) {
+                if (!item.tokens().empty()) {
+                    named.push_back(item);
+                }
+            }
+            // What the commands above declared global is in scope here and is demanded here, so
+            // it is listed here. Under a heading of its own, since it belongs to the program
+            // rather than to this command, and since the catalogue's groups were written for
+            // this command's own options and have nothing to say about these.
+            std::vector<Option> globals;
+            for (const auto *option : inherited) {
+                if (!option->tokens().empty()) {
+                    globals.push_back(*option);
+                }
+            }
+
+            std::vector<HelpBlock> out;
+            // A block with nothing in it is not printed and not handed out, so a command with no
+            // subcommands says nothing about subcommands rather than showing an empty heading.
+            const auto push = [&out](HelpBlock block) {
+                if (!block.isEmpty()) {
+                    out.push_back(std::move(block));
+                }
+            };
+            const auto pushAll = [&out](std::vector<HelpBlock> blocks) {
+                for (auto &block : blocks) {
+                    out.push_back(std::move(block));
+                }
+            };
+
+            for (const auto &slot : layout.blocks()) {
+                switch (slot.role) {
+                    case HelpBlock::Prologue: {
+                        auto block = blockLike(slot, {});
+                        block.text = prologue;
+                        push(std::move(block));
+                        break;
+                    }
+                    case HelpBlock::Description: {
+                        auto block = blockLike(slot, "Description");
+                        block.text = command.description();
+                        push(std::move(block));
+                        break;
+                    }
+                    case HelpBlock::Usage: {
+                        auto block = blockLike(slot, "Usage");
+                        block.text = usageText(command, path, named, globals, indent, text_width);
+                        push(std::move(block));
+                        break;
+                    }
+                    case HelpBlock::Arguments: {
+                        pushAll(grouped(
+                            command.arguments(), catalogue.argumentGroups(), slot, "Arguments",
+                            [](const Argument &item) { return item.name(); }, argument_line));
+                        break;
+                    }
+                    case HelpBlock::Options: {
+                        pushAll(grouped(
+                            named, catalogue.optionGroups(), slot, "Options",
+                            [](const Option &item) { return item.token(); }, option_line));
+                        break;
+                    }
+                    case HelpBlock::GlobalOptions: {
+                        auto block = blockLike(slot, "Global options");
+                        for (const auto &option : globals) {
+                            block.entries.push_back(option_line(option));
+                        }
+                        push(std::move(block));
+                        break;
+                    }
+                    case HelpBlock::Commands: {
+                        pushAll(grouped(
+                            command.commands(), catalogue.commandGroups(), slot, "Commands",
+                            [](const Command &item) { return item.name(); }, command_line));
+                        break;
+                    }
+                    case HelpBlock::Epilogue: {
+                        auto block = blockLike(slot, {});
+                        block.text = epilogue;
+                        push(std::move(block));
+                        break;
+                    }
+                    case HelpBlock::Custom: {
+                        push(slot);
+                        break;
                     }
                 }
             }
+            return out;
+        }
 
-            if (!epilogue.empty()) {
-                out += "\n" + epilogue + "\n";
+        std::vector<Piece> renderHelp(const std::vector<HelpBlock> &blocks, int indent, int spacing,
+                                      int text_width, bool align_all) {
+            std::vector<Piece> out;
+            // Runs that print the same way are one piece, so that a plain help text comes out of
+            // showHelp() in a single write rather than in one per column.
+            const auto append = [&out](const TextStyle &style, const std::string &text) {
+                if (text.empty()) {
+                    return;
+                }
+                if (!out.empty() && out.back().style == style) {
+                    out.back().text += text;
+                    return;
+                }
+                out.push_back({style, text});
+            };
+
+            // Measured across every list rather than across each on its own, so that a catalogue
+            // reads as one table instead of as several.
+            size_t shared = align_all ? widestOf(blocks) : 0;
+
+            for (size_t i = 0; i < blocks.size(); ++i) {
+                const auto &block = blocks[i];
+                if (i > 0) {
+                    append({}, "\n");
+                }
+                if (!block.title.empty()) {
+                    // The newline is outside the styling, so that the escape putting it back is
+                    // the last thing on the line rather than the first thing on the next one.
+                    // A background color painted to the end of the line is what shows this up.
+                    append(block.titleStyle, block.title + ":");
+                    append({}, "\n");
+                }
+
+                if (!block.entries.empty()) {
+                    size_t width = align_all ? shared : widestOf(block);
+                    // Where a description starts, and therefore where the lines under the first
+                    // one are indented to, so a wrapped entry stays one block instead of
+                    // drifting left.
+                    size_t column = size_t(indent) + width + size_t(spacing);
+                    int room = (std::max) (text_width - int(column), min_description);
+                    for (const auto &entry : block.entries) {
+                        append({}, std::string(size_t(indent), ' '));
+                        append(block.entryStyle, entry.left);
+                        if (!entry.right.empty()) {
+                            auto lines = wrapped(entry.right, room);
+                            size_t padding = width - size_t(console::display_width(entry.left)) +
+                                             size_t(spacing);
+                            append({}, std::string(padding, ' '));
+                            append(block.bodyStyle, lines.front());
+                            for (size_t j = 1; j < lines.size(); ++j) {
+                                append({}, "\n" + std::string(column, ' '));
+                                append(block.bodyStyle, lines[j]);
+                            }
+                        }
+                        append({}, "\n");
+                    }
+                    continue;
+                }
+
+                // Prose under a heading is set in under it. Prose without one sits at the
+                // margin, which is what a prologue and an epilogue want.
+                size_t margin = block.title.empty() ? 0 : size_t(indent);
+                int room = (std::max) (text_width - int(margin), min_description);
+                for (const auto &line : wrapped(block.text, room)) {
+                    append({}, std::string(margin, ' '));
+                    append(block.bodyStyle, line);
+                    append({}, "\n");
+                }
             }
             return out;
         }
@@ -1388,8 +1519,11 @@ namespace stdc::cli {
         std::shared_ptr<Command> root = std::make_shared<Command>();
         std::string prologue;
         std::string epilogue;
+        HelpLayout help_layout = HelpLayout::defaultLayout();
         int display_options = Parser::Normal;
         int text_width = 0;
+        int indent = 4;
+        int spacing = 4;
     };
 
     Parser::Parser() : _impl(std::make_unique<Impl>()) {
@@ -1448,14 +1582,41 @@ namespace stdc::cli {
         return _impl->text_width;
     }
 
+    void Parser::setIndent(int columns) {
+        _impl->indent = columns;
+    }
+
+    int Parser::indent() const {
+        return _impl->indent;
+    }
+
+    void Parser::setSpacing(int columns) {
+        _impl->spacing = columns;
+    }
+
+    int Parser::spacing() const {
+        return _impl->spacing;
+    }
+
+    void Parser::setHelpLayout(HelpLayout layout) {
+        _impl->help_layout = std::move(layout);
+    }
+
+    const HelpLayout &Parser::helpLayout() const {
+        return _impl->help_layout;
+    }
+
     ParseResult Parser::parse(const std::vector<std::string> &args, int parseOptions) const {
         ParseResult result;
         result._impl->root = _impl->root;
         result._impl->target = _impl->root.get();
         result._impl->prologue = _impl->prologue;
         result._impl->epilogue = _impl->epilogue;
+        result._impl->help_layout = _impl->help_layout;
         result._impl->display_options = _impl->display_options;
         result._impl->text_width = _impl->text_width;
+        result._impl->indent = _impl->indent;
+        result._impl->spacing = _impl->spacing;
         ParserCore(result._impl.get(), parseOptions).run(args);
         return result;
     }

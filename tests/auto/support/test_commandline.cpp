@@ -1144,18 +1144,26 @@ BOOST_AUTO_TEST_CASE(test_help_layout_is_in_a_fixed_order) {
     BOOST_CHECK(at(text, "Usage:") < at(text, "Options:"));
     BOOST_CHECK(at(text, "Options:") < at(text, "Filesystem Commands:"));
     BOOST_CHECK(at(text, "Filesystem Commands:") < at(text, "An epilogue line"));
+
+    // One blank line between any two blocks, none above the first and none below the last.
+    // Only the relative order was ever checked, which left a blank line at the very top for
+    // nothing to notice.
+    BOOST_CHECK_EQUAL(text.rfind("A prologue line", 0), 0u);
+    BOOST_CHECK(!has(text, "\n\n\n"));
+    BOOST_CHECK(has(text, "An epilogue line\n"));
+    BOOST_CHECK(!has(text, "An epilogue line\n\n"));
 }
 
 BOOST_AUTO_TEST_CASE(test_usage_names_the_path_it_took) {
     auto parser = helpTree();
-    BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage: prog [options] [commands]"));
+    BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage:\n    prog [options] [commands]"));
     BOOST_CHECK(has(parser.parse(argv({"copy", "a", "b"})).helpText(),
-                    "Usage: prog copy [options] <src>... <dest>"));
+                    "Usage:\n    prog copy [options] <src>... <dest>"));
     // An optional argument is bracketed, and one that repeats carries the ellipsis. The only
     // option this command declares is a required one, so it is spelled out, and the hint stands
     // for the root's global that it inherited.
     BOOST_CHECK(has(parser.parse(argv({"configure"})).helpText(),
-                    "Usage: prog configure -p <name> [options] [<mode>]"));
+                    "Usage:\n    prog configure -p <name> [options] [<mode>]"));
 }
 
 // An option that has to be given belongs on the usage line. Left inside "[options]" it is
@@ -1171,7 +1179,7 @@ BOOST_AUTO_TEST_CASE(test_usage_spells_out_the_options_that_are_required) {
                                          .required())
                           .addOption(Option({"-v"}, "Say more")));
         BOOST_CHECK(has(parser.parse(argv({})).helpText(),
-                        "Usage: prog -o <file> [options] <path>"));
+                        "Usage:\n    prog -o <file> [options] <path>"));
     }
 
     // More than one, and no hint left when every option is accounted for.
@@ -1180,20 +1188,20 @@ BOOST_AUTO_TEST_CASE(test_usage_spells_out_the_options_that_are_required) {
                           .addOption(Option({"-i"}, "In").arg("in").required())
                           .addOption(Option({"-o"}, "Out").arg("out").required()));
         BOOST_CHECK(has(parser.parse(argv({"-i", "a", "-o", "b"})).helpText(),
-                        "Usage: prog -i <in> -o <out>\n"));
+                        "Usage:\n    prog -i <in> -o <out>\n"));
     }
 
     // Nothing required reads as it did before.
     {
         Parser parser(Command("prog").addOption(Option({"-v"}, "Say more")));
-        BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage: prog [options]\n"));
+        BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage:\n    prog [options]\n"));
     }
 
     // An option carrying an optional argument of its own keeps that argument's brackets.
     {
         Parser parser(Command("prog").addOption(
             Option({"-c"}, "Config").arg("file", false).required()));
-        BOOST_CHECK(has(parser.parse(argv({"-c"})).helpText(), "Usage: prog -c [<file>]\n"));
+        BOOST_CHECK(has(parser.parse(argv({"-c"})).helpText(), "Usage:\n    prog -c [<file>]\n"));
     }
 
     // A subcommand's own required options, on its own usage line.
@@ -1201,14 +1209,14 @@ BOOST_AUTO_TEST_CASE(test_usage_spells_out_the_options_that_are_required) {
         Parser parser(Command("prog").addCommand(
             Command("build").addOption(Option({"-t"}, "Target").arg("name").required())));
         auto text = parser.parse(argv({"build", "-t", "x"})).helpText();
-        BOOST_CHECK(has(text, "Usage: prog build -t <name>\n"));
+        BOOST_CHECK(has(text, "Usage:\n    prog build -t <name>\n"));
     }
 
     // An option with no spelling cannot be typed, so it is not in the hint either. It used to
     // be counted, which put "[options]" on a command that had nothing to offer.
     {
         Parser parser(Command("prog").addOption(Option()));
-        BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage: prog\n"));
+        BOOST_CHECK(has(parser.parse(argv({})).helpText(), "Usage:\n    prog\n"));
     }
 }
 
@@ -1604,7 +1612,11 @@ BOOST_AUTO_TEST_CASE(test_a_tree_with_nothing_in_it) {
     // NoRole is never set, whatever is in the tree, or every option would answer to it.
     BOOST_CHECK(!result.isRoleSet(Option::NoRole));
     BOOST_CHECK_EQUAL(result.invoke(-1), -1);
-    BOOST_CHECK(!result.helpText().empty());
+    // Nothing to say, so nothing said. A block with no contents is not printed, and a nameless
+    // command with no arguments, options or subcommands leaves every block with no contents,
+    // down to the usage line. It used to print a bare "Usage:" and the name that was not there.
+    BOOST_CHECK(result.helpText().empty());
+    BOOST_CHECK(result.helpBlocks().empty());
 }
 
 BOOST_AUTO_TEST_CASE(test_a_command_with_no_name) {
@@ -1617,15 +1629,16 @@ BOOST_AUTO_TEST_CASE(test_a_command_with_no_name) {
 
 namespace {
 
-    // showError() writes to stderr, so reading it back means pointing that descriptor at a file
-    // for as long as it runs. A file is never a terminal, so the console code resolves color to
-    // never and what lands is plain text.
+    // showError() writes to stderr and showHelp() to stdout, so reading either back means
+    // pointing that descriptor at a file for as long as it runs. A file is never a terminal, so
+    // the console code resolves color to never and what lands is plain text, unless the caller
+    // has forced a mode.
     template <class F>
-    std::string capturedStderr(F &&body) {
-        auto path = std::filesystem::temp_directory_path() / "stdc_cli_stderr.txt";
+    std::string captured(FILE *stream, const char *name, F &&body) {
+        auto path = std::filesystem::temp_directory_path() / name;
 
-        std::fflush(stderr);
-        int saved = STDC_TEST_DUP(STDC_TEST_FILENO(stderr));
+        std::fflush(stream);
+        int saved = STDC_TEST_DUP(STDC_TEST_FILENO(stream));
         BOOST_REQUIRE(saved >= 0);
 
         FILE *file = nullptr;
@@ -1636,10 +1649,10 @@ namespace {
 #endif
         BOOST_REQUIRE(file != nullptr);
 
-        STDC_TEST_DUP2(STDC_TEST_FILENO(file), STDC_TEST_FILENO(stderr));
+        STDC_TEST_DUP2(STDC_TEST_FILENO(file), STDC_TEST_FILENO(stream));
         body();
-        std::fflush(stderr);
-        STDC_TEST_DUP2(saved, STDC_TEST_FILENO(stderr));
+        std::fflush(stream);
+        STDC_TEST_DUP2(saved, STDC_TEST_FILENO(stream));
         STDC_TEST_CLOSE(saved);
         std::fclose(file);
 
@@ -1649,6 +1662,16 @@ namespace {
         std::error_code ec;
         std::filesystem::remove(path, ec);
         return res;
+    }
+
+    template <class F>
+    std::string capturedStderr(F &&body) {
+        return captured(stderr, "stdc_cli_stderr.txt", std::forward<F>(body));
+    }
+
+    template <class F>
+    std::string capturedStdout(F &&body) {
+        return captured(stdout, "stdc_cli_stdout.txt", std::forward<F>(body));
     }
 
 }
@@ -1965,7 +1988,7 @@ BOOST_AUTO_TEST_CASE(test_a_subcommand_lists_what_it_inherited) {
     BOOST_CHECK(!has(text, "--local"));
 
     // The required one is on the usage line, the same as a required option of its own.
-    BOOST_CHECK(has(text, "Usage: prog build -C <dir> [options] <target>"));
+    BOOST_CHECK(has(text, "Usage:\n    prog build -C <dir> [options] <target>"));
 
     // What the help says and what the parser does have to be the same thing.
     auto refused = parser.parse(argv({"build", "x"}));
@@ -2000,8 +2023,8 @@ BOOST_AUTO_TEST_CASE(test_globals_reach_a_grandchild) {
     BOOST_CHECK(has(middle, "--mid-local"));
 }
 
-// The usage line is wrapped like everything else, with what follows lined up under the command
-// name rather than back at the margin.
+// The usage line is wrapped like everything else, and every line of it sits at the indent its
+// heading gives it rather than drifting back to the margin.
 BOOST_AUTO_TEST_CASE(test_the_usage_line_is_wrapped) {
     const auto &usageLines = [](int width) {
         Parser parser(Command("program")
@@ -2013,19 +2036,17 @@ BOOST_AUTO_TEST_CASE(test_the_usage_line_is_wrapped) {
         parser.setTextWidth(width);
         auto text = parser.parse({"program"}).helpText();
 
+        // The body under the heading, which is every line indented under it.
         std::vector<std::string> res;
-        for (size_t start = text.find("Usage:"); start != std::string::npos;) {
+        auto heading = text.find("Usage:\n");
+        for (size_t start = heading == std::string::npos ? heading : heading + 7;
+             start != std::string::npos && text.compare(start, 4, "    ") == 0;) {
             auto end = text.find('\n', start);
-            auto line = text.substr(start, end == std::string::npos ? end : end - start);
-            res.push_back(line);
+            res.push_back(text.substr(start, end == std::string::npos ? end : end - start));
             if (end == std::string::npos) {
                 break;
             }
             start = end + 1;
-            // A continuation is indented under the command name and holds no colon heading.
-            if (text.compare(start, 7, "       ") != 0) {
-                break;
-            }
         }
         return res;
     };
@@ -2047,11 +2068,10 @@ BOOST_AUTO_TEST_CASE(test_the_usage_line_is_wrapped) {
                                 "usage line runs past the width: [" + line + "]");
         }
 
-        // Lined up under the program name, which is where "Usage: " ends.
-        for (size_t i = 1; i < lines.size(); ++i) {
-            BOOST_CHECK_EQUAL(lines[i].find_first_not_of(' '), 7u);
+        // At the indent, all of them, which is what makes the block read as one thing.
+        for (const auto &line : lines) {
+            BOOST_CHECK_EQUAL(line.find_first_not_of(' '), 4u);
         }
-
     }
 
     // An option and the value it takes are one piece, so a break never falls between them.
@@ -2084,6 +2104,235 @@ BOOST_AUTO_TEST_CASE(test_the_usage_line_is_wrapped) {
             BOOST_CHECK_MESSAGE(has(joined, piece), std::string("lost ") + piece);
         }
     }
+}
+
+// The description is a section like every other, so it carries a heading and its body is set in
+// under it. Without one it ran on from the prologue with nothing to say which was which.
+BOOST_AUTO_TEST_CASE(test_the_description_is_a_section_of_its_own) {
+    Parser parser(Command("prog", "What the program is for"));
+    parser.setPrologue("A prologue line");
+    parser.setTextWidth(80);
+    auto text = parser.parse(argv({})).helpText();
+
+    BOOST_CHECK(has(text, "Description:\n    What the program is for\n"));
+    // The prologue is not a section and keeps the margin, since a banner belongs where it was
+    // written rather than under a heading nobody asked for.
+    BOOST_CHECK(has(text, "A prologue line\n"));
+    BOOST_CHECK(!has(text, "    A prologue line"));
+
+    // A command with no description contributes no heading either.
+    Parser bare(Command("prog"));
+    BOOST_CHECK(!has(bare.parse(argv({})).helpText(), "Description:"));
+}
+
+// How far a section body is set in, and how far the two columns of a list stand apart, are the
+// program's to choose. A downstream that has always indented by four keeps doing so, and one
+// that wants it tighter can have that.
+BOOST_AUTO_TEST_CASE(test_the_indent_and_the_spacing_can_be_changed) {
+    const auto &helpAt = [](int indent, int spacing, int width) {
+        Parser parser(Command("prog", "What the program is for")
+                          .addOption(Option({"-v"}, "Say more"))
+                          .addOption(Option({"--output"}, "Where to write it, at whatever length "
+                                                          "it takes to say so")
+                                         .arg("file")));
+        parser.setTextWidth(width);
+        parser.setIndent(indent);
+        parser.setSpacing(spacing);
+        return parser.parse(argv({})).helpText();
+    };
+
+    // The widest name in the block, which is what the descriptions line up after.
+    const size_t widest = std::string("--output <file>").size();
+
+    // Four and four, which is what a parser starts with.
+    {
+        auto text = helpAt(4, 4, 80);
+        BOOST_CHECK(has(text, "\n    What the program is for\n"));
+        BOOST_CHECK(has(text, "\n    -v "));
+        BOOST_CHECK_EQUAL(descriptionColumn(text, "-v"), 4u + widest + 4u);
+    }
+
+    // Both moved, and both move what they are meant to.
+    {
+        auto text = helpAt(2, 1, 80);
+        BOOST_CHECK(has(text, "\n  What the program is for\n"));
+        BOOST_CHECK(has(text, "\n  -v "));
+        BOOST_CHECK_EQUAL(descriptionColumn(text, "-v"), 2u + widest + 1u);
+    }
+
+    // One moved and the other left alone, so that neither is standing in for the other.
+    BOOST_CHECK_EQUAL(descriptionColumn(helpAt(8, 4, 80), "-v"), 8u + widest + 4u);
+    BOOST_CHECK_EQUAL(descriptionColumn(helpAt(4, 9, 80), "-v"), 4u + widest + 9u);
+
+    // A wrapped description carries on at the column it started at, wherever that is.
+    {
+        auto text = helpAt(6, 3, 60);
+        auto start = text.find("Where to write it");
+        BOOST_REQUIRE(start != std::string::npos);
+        auto next = text.find('\n', start) + 1;
+        BOOST_REQUIRE(next != 0u);
+        BOOST_CHECK_EQUAL(text.find_first_not_of(' ', next) - next, 6u + widest + 3u);
+    }
+}
+
+// Which blocks the help text is made of, and in what order, is the layout's business.
+BOOST_AUTO_TEST_CASE(test_a_layout_says_which_blocks_and_in_what_order) {
+    auto parser = helpTree();
+
+    // The order they are added is the order they print.
+    parser.setHelpLayout(
+        HelpLayout().add(HelpBlock::Options).add(HelpBlock::Usage).add(HelpBlock::Description));
+    auto text = parser.parse(argv({})).helpText();
+    BOOST_CHECK(at(text, "Options:") < at(text, "Usage:"));
+    BOOST_CHECK(at(text, "Usage:") < at(text, "Description:"));
+
+    // What it does not ask for is not printed, which is how a program drops a block it has no
+    // use for rather than emptying what feeds it.
+    BOOST_CHECK(!has(text, "A prologue line"));
+    BOOST_CHECK(!has(text, "An epilogue line"));
+    BOOST_CHECK(!has(text, "Filesystem Commands:"));
+
+    // What it asks for twice prints twice.
+    parser.setHelpLayout(
+        HelpLayout().add(HelpBlock::Description).add(HelpBlock::Description));
+    auto twice = parser.parse(argv({})).helpText();
+    size_t count = 0;
+    for (size_t at_ = twice.find("Description:"); at_ != std::string::npos;
+         at_ = twice.find("Description:", at_ + 1)) {
+        count++;
+    }
+    BOOST_CHECK_EQUAL(count, 2u);
+
+    // A layout with nothing in it says nothing.
+    parser.setHelpLayout(HelpLayout());
+    BOOST_CHECK(parser.parse(argv({})).helpText().empty());
+}
+
+// A block the program wrote itself goes through the same layout as the rest, which is the whole
+// point of it being a block rather than something the program prints after the help text.
+BOOST_AUTO_TEST_CASE(test_a_layout_carries_blocks_of_the_programs_own) {
+    Parser parser(Command("prog").addOption(
+        Option({"--output"}, "Where to write").arg("file")));
+    parser.setTextWidth(80);
+
+    HelpBlock examples;
+    examples.title = "Examples";
+    examples.text = "prog --output out.txt";
+
+    HelpBlock environment;
+    environment.title = "Environment";
+    environment.entries = {{"PROG_HOME", "Where it looks for its data"}};
+
+    parser.setHelpLayout(
+        HelpLayout().add(HelpBlock::Options).add(environment).add(examples));
+    auto text = parser.parse(argv({})).helpText();
+
+    BOOST_CHECK(has(text, "Environment:\n    PROG_HOME    Where it looks for its data\n"));
+    BOOST_CHECK(has(text, "Examples:\n    prog --output out.txt\n"));
+    BOOST_CHECK(at(text, "Options:") < at(text, "Environment:"));
+
+    // Measured with the rest when the catalogues are aligned, since it is one of the lists.
+    parser.setDisplayOptions(Parser::AlignAllCatalogues);
+    auto aligned = parser.parse(argv({})).helpText();
+    BOOST_CHECK_EQUAL(descriptionColumn(aligned, "--output <file>"),
+                      descriptionColumn(aligned, "PROG_HOME"));
+
+    // An empty one is dropped like any other, so a block filled in from something that turned
+    // out to have nothing in it leaves no heading behind.
+    parser.setHelpLayout(HelpLayout().add(HelpBlock()).add(HelpBlock::Options));
+    BOOST_CHECK(!has(parser.parse(argv({})).helpText(), "::"));
+}
+
+// What the help text is made of, before it is laid out. A program that wants something the
+// layout cannot say asks for these and prints them itself.
+BOOST_AUTO_TEST_CASE(test_help_blocks_are_what_the_text_is_made_of) {
+    auto blocks = helpTree().parse(argv({})).helpBlocks();
+    BOOST_REQUIRE(!blocks.empty());
+
+    const auto &find = [&blocks](HelpBlock::Role role,
+                                 const std::string &title) -> const HelpBlock * {
+        for (const auto &block : blocks) {
+            if (block.role == role && block.title == title) {
+                return &block;
+            }
+        }
+        return nullptr;
+    };
+
+    // In the layout's order, prologue and epilogue at the ends and neither carrying a heading.
+    BOOST_CHECK(blocks.front().role == HelpBlock::Prologue);
+    BOOST_CHECK_EQUAL(blocks.front().title, "");
+    BOOST_CHECK_EQUAL(blocks.front().text, "A prologue line");
+    BOOST_CHECK(blocks.back().role == HelpBlock::Epilogue);
+    BOOST_CHECK_EQUAL(blocks.back().text, "An epilogue line");
+
+    // The usage line, already broken to the width but with none of the indent on it.
+    auto usage = find(HelpBlock::Usage, "Usage");
+    BOOST_REQUIRE(usage != nullptr);
+    BOOST_CHECK_EQUAL(usage->text, "prog [options] [commands]");
+    BOOST_CHECK(usage->entries.empty());
+
+    // A catalogue's groups are blocks of their own, each carrying the role it came from.
+    BOOST_CHECK(find(HelpBlock::Commands, "Filesystem Commands") != nullptr);
+    BOOST_CHECK(find(HelpBlock::Commands, "Buildsystem Commands") != nullptr);
+    BOOST_CHECK(find(HelpBlock::Commands, "Commands") != nullptr);
+
+    // The root takes no positional arguments, so nothing says it takes any.
+    BOOST_CHECK(find(HelpBlock::Arguments, "Arguments") == nullptr);
+
+    // The two columns as they are, with none of the padding that lines them up.
+    auto options = find(HelpBlock::Options, "Options");
+    BOOST_REQUIRE(options != nullptr);
+    BOOST_REQUIRE(!options->entries.empty());
+    BOOST_CHECK(options->text.empty());
+    BOOST_CHECK_EQUAL(options->entries.front().left, "-h, --help");
+}
+
+// A style says how a block is printed, not what it says. helpText() answers with the text and
+// showHelp() puts the escapes around it.
+BOOST_AUTO_TEST_CASE(test_styling_is_in_what_is_printed_and_not_in_the_text) {
+    Parser parser(Command("prog", "What the program is for")
+                      .addOption(Option({"-v"}, "Say more")));
+    parser.setEpilogue("An epilogue line");
+    parser.setTextWidth(80);
+
+    auto plain = parser.parse(argv({})).helpText();
+
+    auto layout = HelpLayout::defaultLayout();
+    layout.setTitleStyle({stdc::console::bold});
+    layout.setEntryStyle({stdc::console::nostyle, stdc::console::cyan});
+    layout.setBodyStyle(HelpBlock::Epilogue, {stdc::console::bold, stdc::console::yellow});
+    parser.setHelpLayout(layout);
+
+    // Not a character of difference, since none of it is text.
+    BOOST_CHECK_EQUAL(parser.parse(argv({})).helpText(), plain);
+
+    // Printed, it is there. Forced, since the capture writes to a file and a file is never a
+    // terminal, so deciding per target would rightly leave it plain.
+    auto saved = stdc::console::get_color_mode();
+    stdc::console::set_color_mode(stdc::console::vt);
+    auto printed = capturedStdout([&] { parser.parse(argv({})).showHelp(); });
+    stdc::console::set_color_mode(saved);
+
+    BOOST_CHECK(has(printed, "\033[1mOptions:\033[0m"));
+    BOOST_CHECK(has(printed, "\033[36m-v\033[0m"));
+    BOOST_CHECK(has(printed, "\033[33;1mAn epilogue line\033[0m"));
+
+    // A heading's newline is outside its styling, so nothing an escape turned on is still on at
+    // the start of the next line. A background color painted to the edge is what shows this up.
+    BOOST_CHECK(!has(printed, ":\n\033[0m"));
+
+    // Strip the escapes and what is left is the text, so the styling moved nothing.
+    std::string stripped;
+    for (size_t i = 0; i < printed.size(); ++i) {
+        if (printed[i] == '\033') {
+            i = printed.find('m', i);
+            BOOST_REQUIRE(i != std::string::npos);
+            continue;
+        }
+        stripped += printed[i];
+    }
+    BOOST_CHECK_EQUAL(stripped, plain);
 }
 
 // The left column is measured in columns too. A metavar written in a script that is not ASCII

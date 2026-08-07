@@ -23,6 +23,7 @@
 #include <vector>
 
 #include <stdcorelib/stdc_global.h>
+#include <stdcorelib/console.h>
 #include <stdcorelib/adt/array_view.h>
 
 namespace stdc::cli {
@@ -744,6 +745,182 @@ namespace stdc::cli {
         const void *_data;
     };
 
+    /// How a run of help text is printed.
+    ///
+    /// Ignored by ParseResult::helpText(), which answers with plain text, and applied by
+    /// ParseResult::showHelp(), which prints.
+    struct TextStyle {
+        /// A bitwise or of console::style values.
+        int style = console::nostyle;
+        /// One console::color value rather than a bitwise or of several.
+        int foreground = console::nocolor;
+        int background = console::nocolor;
+    };
+
+    inline bool operator==(const TextStyle &a, const TextStyle &b) {
+        return a.style == b.style && a.foreground == b.foreground && a.background == b.background;
+    }
+
+    inline bool operator!=(const TextStyle &a, const TextStyle &b) {
+        return !(a == b);
+    }
+
+    /// One block of the help text: a heading, and under it either a paragraph or a two column
+    /// list.
+    ///
+    /// This is what the help text is made of before it is laid out. A program that wants
+    /// something HelpLayout cannot say asks ParseResult::helpBlocks() for these and prints them
+    /// itself.
+    class HelpBlock {
+    public:
+        /// One row of a list: what it is called on the left, what it does on the right.
+        struct Entry {
+            std::string left;
+            std::string right;
+        };
+
+        /// Which part of the help text this is.
+        ///
+        /// \note One role becomes zero or more blocks. A command with no options contributes no
+        ///       Options block, and a CommandCatalogue splits the options it does have across a
+        ///       block per group.
+        enum Role {
+            /// The text above everything, printed without a heading.
+            Prologue,
+            Description,
+            Usage,
+            Arguments,
+            Options,
+            /// The global options of the commands above this one.
+            GlobalOptions,
+            Commands,
+            /// The text below everything, printed without a heading.
+            Epilogue,
+            /// A block the program wrote itself.
+            Custom,
+        };
+
+        Role role = Custom;
+        /// The heading, written without its colon, which the layout adds. An empty title means
+        /// the block has no heading and its body sits at the margin.
+        std::string title;
+        /// The body of a block that is prose. Newlines already in it are kept.
+        std::string text;
+        /// The rows of a block that is a list. A block is prose or a list, never both.
+        std::vector<Entry> entries;
+
+        TextStyle titleStyle;
+        /// The prose of a paragraph, and the right hand column of a list.
+        TextStyle bodyStyle;
+        /// The left hand column of a list, where the names are worth setting apart from what
+        /// they do.
+        TextStyle entryStyle;
+
+        inline bool isEmpty() const {
+            return text.empty() && entries.empty();
+        }
+    };
+
+    /// Which blocks the help text is made of, in what order, and how each is printed.
+    ///
+    /// A plain value. Start from defaultLayout() and change what is worth changing:
+    ///
+    /// \code
+    ///   auto layout = cli::HelpLayout::defaultLayout();
+    ///   layout.setTitleStyle({console::bold});
+    ///   layout.setBodyStyle(cli::HelpBlock::Epilogue, {console::bold, console::yellow});
+    ///   parser.setHelpLayout(layout);
+    /// \endcode
+    class HelpLayout {
+    public:
+        /// Every role once, in the order the help text has always printed them.
+        static inline HelpLayout defaultLayout() {
+            HelpLayout res;
+            for (auto role : {HelpBlock::Prologue, HelpBlock::Description, HelpBlock::Usage,
+                              HelpBlock::Arguments, HelpBlock::Options, HelpBlock::GlobalOptions,
+                              HelpBlock::Commands, HelpBlock::Epilogue}) {
+                res.add(role);
+            }
+            return res;
+        }
+
+        /// Appends the standard block for \a role. A role added twice prints its contents twice.
+        inline HelpLayout &add(HelpBlock::Role role) {
+            HelpBlock block;
+            block.role = role;
+            _blocks.push_back(std::move(block));
+            return *this;
+        }
+
+        /// Appends a block of the program's own, laid out and aligned like the rest.
+        inline HelpLayout &add(HelpBlock block) {
+            _blocks.push_back(std::move(block));
+            return *this;
+        }
+
+        /// \name Styling
+        ///
+        /// The overloads without a role reach every block the layout holds at the time of the
+        /// call, so add whatever blocks of your own you have before calling one.
+        /// @{
+        inline HelpLayout &setTitleStyle(TextStyle style) {
+            for (auto &block : _blocks) {
+                block.titleStyle = style;
+            }
+            return *this;
+        }
+        inline HelpLayout &setTitleStyle(HelpBlock::Role role, TextStyle style) {
+            for (auto &block : _blocks) {
+                if (block.role == role) {
+                    block.titleStyle = style;
+                }
+            }
+            return *this;
+        }
+        inline HelpLayout &setBodyStyle(TextStyle style) {
+            for (auto &block : _blocks) {
+                block.bodyStyle = style;
+            }
+            return *this;
+        }
+        inline HelpLayout &setBodyStyle(HelpBlock::Role role, TextStyle style) {
+            for (auto &block : _blocks) {
+                if (block.role == role) {
+                    block.bodyStyle = style;
+                }
+            }
+            return *this;
+        }
+        inline HelpLayout &setEntryStyle(TextStyle style) {
+            for (auto &block : _blocks) {
+                block.entryStyle = style;
+            }
+            return *this;
+        }
+        inline HelpLayout &setEntryStyle(HelpBlock::Role role, TextStyle style) {
+            for (auto &block : _blocks) {
+                if (block.role == role) {
+                    block.entryStyle = style;
+                }
+            }
+            return *this;
+        }
+        /// @}
+
+        /// The slots, in order. A standard role carries no contents here, only the styles its
+        /// blocks are made with.
+        inline const std::vector<HelpBlock> &blocks() const {
+            return _blocks;
+        }
+
+        inline bool isEmpty() const {
+            return _blocks.empty();
+        }
+
+    private:
+        std::vector<HelpBlock> _blocks;
+    };
+
     /// What a command line turned out to mean, or why it did not.
     class STDC_EXPORT ParseResult {
     public:
@@ -859,9 +1036,16 @@ namespace stdc::cli {
             return given ? given->value<T>() : std::nullopt;
         }
 
+        /// The help text for the command that was reached, as the blocks it is made of, in the
+        /// order the layout asks for and with the groups a catalogue asks for already split.
+        ///
+        /// This is what helpText() lays out. Ask for these where the layout cannot say what the
+        /// program wants, and print them however it likes.
+        std::vector<HelpBlock> helpBlocks() const;
+
         /// The help text for the command that was reached, prologue and epilogue included.
         std::string helpText() const;
-        /// Writes helpText() to stdout.
+        /// Writes helpText() to stdout, with whatever styling the layout asks for.
         void showHelp() const;
         /// Writes what went wrong to stderr, with a line saying how to ask for help. Does
         /// nothing when the parse succeeded.
@@ -899,8 +1083,8 @@ namespace stdc::cli {
             EnableResponseFile = 0x20,
         };
 
-        /// What the help text says beyond the necessary. The layout is fixed: prologue,
-        /// description, usage, arguments, options, commands, epilogue.
+        /// What the help text says beyond the necessary. Which blocks it is made of and in what
+        /// order is HelpLayout's business rather than this one's.
         enum DisplayOption {
             Normal = 0,
             /// Say what an argument falls back to when it is not given.
@@ -954,6 +1138,21 @@ namespace stdc::cli {
         /// \sa console::width()
         void setTextWidth(int width);
         int textWidth() const;
+
+        /// How far the body of a section is indented from the margin.
+        /// \note Four columns is the default.
+        void setIndent(int columns);
+        int indent() const;
+
+        /// How many columns separate the two columns of a list.
+        /// \note Four columns is the default.
+        void setSpacing(int columns);
+        int spacing() const;
+
+        /// Which blocks the help text is made of, in what order, and how each is printed.
+        /// \note HelpLayout::defaultLayout() is what a parser starts with.
+        void setHelpLayout(HelpLayout layout);
+        const HelpLayout &helpLayout() const;
 
         ParseResult parse(const std::vector<std::string> &args, int parseOptions = Standard) const;
         /// Parses and runs the handler that was reached, which is what a \c main wants.

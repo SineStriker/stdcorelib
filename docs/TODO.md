@@ -5,8 +5,8 @@ Usable, and used, but the version number is honest: interfaces still move.
 ## Known gaps
 
 - The registry code assumes a little-endian host
-- `support/commandline.h` is 900 lines of inline code, paid for by every translation unit that
-  includes it
+- `support/commandline.h` is over a thousand lines of inline code, paid for by every translation
+  unit that includes it
 
 ## Wanted
 
