@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(stdcorelib VERSION 0.0.2.0 LANGUAGES CXX)
+project(stdcorelib VERSION 1.1.0.0 LANGUAGES CXX)
 
 # ----------------------------------
 # Build Options
@@ -164,6 +164,8 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     POSITION_INDEPENDENT_CODE ON
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 # Add platform specific
