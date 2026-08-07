@@ -130,20 +130,11 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE STDC_LIBRARY)
 
 if(NOT STDC_ENABLE_EXCEPTIONS)
     if(MSVC)
-        # Not /EHsc-, which does not disable anything: the trailing minus binds to the c, so it
-        # says extern "C" functions may throw and leaves exceptions on. _CPPUNWIND stays defined.
-        # C4530 is the standard library's own try blocks, which are unreachable here.
         target_compile_options(${PROJECT_NAME} PRIVATE /EHs-c- /wd4530)
     else()
         target_compile_options(${PROJECT_NAME} PRIVATE -fno-exceptions)
     endif()
 endif()
-
-# PRIVATE, and it stays that way. A flag in a target's interface reaches every translation unit
-# of everybody who links it, and what the library was built with is not their business to
-# inherit. Nothing downstream has to match it either: exceptions put no symbol in the ABI, and
-# the library never throws out of a frame it compiled, since the overloads that do throw are
-# inline in the headers and belong to whoever called them.
 
 target_include_directories(${PROJECT_NAME} INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -170,12 +161,8 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
-
-    # CMake does this for a shared library on its own. A static one needs it said out loud, or
-    # ELF refuses to link the archive into anything shared: a plugin that links the static build
-    # stops at "relocation R_X86_64_PC32 can not be used when making a shared object". Mach-O is
-    # position independent throughout and Windows has no such distinction, so this is where it
-    # shows.
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     POSITION_INDEPENDENT_CODE ON
 )
 
