@@ -12,7 +12,6 @@ option(STDC_BUILD_SHARED "Build shared library" OFF)
 option(STDC_BUILD_TESTS "Build test cases" OFF)
 option(STDC_BUILD_DOCS "Build documentation" OFF)
 option(STDC_ENABLE_EXCEPTIONS "Build the library with exceptions" ON)
-option(STDC_ENABLE_RTTI "Build the library with RTTI" ON)
 option(STDC_INSTALL "Install library" ON)
 
 # ----------------------------------
@@ -140,43 +139,11 @@ if(NOT STDC_ENABLE_EXCEPTIONS)
     endif()
 endif()
 
-# The library does not use typeid or dynamic_cast. any and type_id exist so that a type can be
-# named without them, which is only worth anything if the rest of the library holds to it too.
-if(NOT STDC_ENABLE_RTTI)
-    if(MSVC)
-        target_compile_options(${PROJECT_NAME} PRIVATE /GR-)
-    else()
-        target_compile_options(${PROJECT_NAME} PRIVATE -fno-rtti)
-    endif()
-endif()
-
-# Both of the above are PRIVATE, and stay that way. A compiler flag in a target's interface
-# reaches every translation unit of everybody who links it, and what the library was built with
-# is not their business to inherit.
-#
-# It is their business to match where the ABI says so. cli::HelpFormatter is a polymorphic class
-# the library exports whose virtuals are out of line, so the library owns its vtable and with it
-# its typeinfo, and without RTTI it emits neither. Anything deriving from it with RTTI on then
-# asks for a symbol nobody wrote, which is where the linker says "undefined reference to typeinfo
-# for stdc::cli::HelpFormatter". A consumer in that position asks for the same flag, the way the
-# targets here do.
-function(stdc_match_features _target)
-    if(NOT STDC_ENABLE_EXCEPTIONS)
-        if(MSVC)
-            target_compile_options(${_target} PRIVATE /EHs-c- /wd4530)
-        else()
-            target_compile_options(${_target} PRIVATE -fno-exceptions)
-        endif()
-    endif()
-
-    if(NOT STDC_ENABLE_RTTI)
-        if(MSVC)
-            target_compile_options(${_target} PRIVATE /GR-)
-        else()
-            target_compile_options(${_target} PRIVATE -fno-rtti)
-        endif()
-    endif()
-endfunction()
+# PRIVATE, and it stays that way. A flag in a target's interface reaches every translation unit
+# of everybody who links it, and what the library was built with is not their business to
+# inherit. Nothing downstream has to match it either: exceptions put no symbol in the ABI, and
+# the library never throws out of a frame it compiled, since the overloads that do throw are
+# inline in the headers and belong to whoever called them.
 
 target_include_directories(${PROJECT_NAME} INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

@@ -35,11 +35,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE stdcorelib)
 # cannot get at on its own.
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../src)
 
-# Whatever the library was built without, these are built without too. A case derives from
-# cli::HelpFormatter five times, and a class deriving from one the library exports has to
-# agree with it about RTTI.
-stdc_match_features(${PROJECT_NAME})
-
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
@@ -52,7 +47,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # on comparing addresses come apart.
 add_library(test_plugin MODULE plugins/test_plugin.cpp)
 target_link_libraries(test_plugin PRIVATE stdcorelib)
-stdc_match_features(test_plugin)
 set_target_properties(test_plugin PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 17
