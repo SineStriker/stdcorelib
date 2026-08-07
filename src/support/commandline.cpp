@@ -559,24 +559,6 @@ namespace stdc::cli {
         return lines;
     }
 
-    // In columns rather than in bytes, or a metavar written in a script that is not ASCII pushes
-    // its own row out of line with every other.
-    size_t HelpFormatter::widestOf(const HelpBlock &block) {
-        size_t width = 0;
-        for (const auto &entry : block.entries) {
-            width = (std::max) (width, size_t(console::display_width(entry.left)));
-        }
-        return width;
-    }
-
-    size_t HelpFormatter::widestOf(const std::vector<HelpBlock> &blocks) {
-        size_t width = 0;
-        for (const auto &block : blocks) {
-            width = (std::max) (width, widestOf(block));
-        }
-        return width;
-    }
-
     std::string HelpFormatter::displayed(const Argument &argument) const {
         std::string res = "<" + argument.displayName() + ">";
         if (argument.arity() != Argument::Single) {

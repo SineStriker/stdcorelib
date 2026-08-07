@@ -1064,10 +1064,26 @@ namespace stdc::cli {
         virtual std::vector<Run> render(const std::vector<HelpBlock> &blocks,
                                         const HelpSizes &sizes) const;
 
-        /// How wide the left column of \a block is, in columns rather than in bytes.
-        static size_t widestOf(const HelpBlock &block);
+        /// How wide the left column of \a block is.
+        ///
+        /// In columns rather than in bytes, or a metavar written in a script that is not ASCII
+        /// pushes its own row out of line with every other.
+        static inline size_t widestOf(const HelpBlock &block) {
+            size_t res = 0;
+            for (const auto &entry : block.entries) {
+                res = (std::max) (res, size_t(console::display_width(entry.left)));
+            }
+            return res;
+        }
+
         /// The widest across all of them, which is what AlignAllCatalogues lines up to.
-        static size_t widestOf(const std::vector<HelpBlock> &blocks);
+        static inline size_t widestOf(const std::vector<HelpBlock> &blocks) {
+            size_t res = 0;
+            for (const auto &block : blocks) {
+                res = (std::max) (res, widestOf(block));
+            }
+            return res;
+        }
 
         /// \a text broken into lines of at most \a columns columns, at spaces where there are
         /// any and between characters where there are none. Newlines already in it are kept.
