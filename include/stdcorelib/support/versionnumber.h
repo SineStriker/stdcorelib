@@ -62,9 +62,14 @@ namespace stdc {
         std::array<int, 4> m_numbers;
     };
 
+    /// @}
+
 }
 
 namespace std {
+
+    /// \addtogroup utility
+    /// @{
 
     template <>
     struct STDC_EXPORT hash<stdc::VersionNumber> {
@@ -77,6 +82,7 @@ namespace std {
     }
 
     /// @}
+
 }
 
 #endif // STDCORELIB_VERSIONNUMBER_H

@@ -133,24 +133,6 @@ namespace stdc::windows {
         std::shared_ptr<Comp> comp;
     };
 
-    inline RegValue::RegValue(const uint8_t *data, int size)
-        : RegValue(array_view<uint8_t>(data, size)) {
-    }
-
-    inline RegValue::RegValue(uint32_t value) : RegValue(static_cast<int32_t>(value)) {
-    }
-
-    inline RegValue::RegValue(uint64_t value) : RegValue(static_cast<int64_t>(value)) {
-    }
-
-    inline uint32_t RegValue::toUInt32() const {
-        return static_cast<uint32_t>(toInt32());
-    }
-
-    inline uint64_t RegValue::toUInt64() const {
-        return static_cast<uint64_t>(toInt64());
-    }
-
     class STDC_EXPORT RegKey {
     public:
         enum DesiredAccess {
@@ -653,6 +635,30 @@ namespace stdc::windows {
         friend class value_iterator;
     };
 
+    /// @}
+
+    // Everything below is a definition of something declared above, and sits outside the group
+    // on purpose. A member defined out of line inside a group block is listed as a function of
+    // the group, beside the classes rather than under the one it belongs to.
+
+    inline RegValue::RegValue(const uint8_t *data, int size)
+        : RegValue(array_view<uint8_t>(data, size)) {
+    }
+
+    inline RegValue::RegValue(uint32_t value) : RegValue(static_cast<int32_t>(value)) {
+    }
+
+    inline RegValue::RegValue(uint64_t value) : RegValue(static_cast<int64_t>(value)) {
+    }
+
+    inline uint32_t RegValue::toUInt32() const {
+        return static_cast<uint32_t>(toInt32());
+    }
+
+    inline uint64_t RegValue::toUInt64() const {
+        return static_cast<uint64_t>(toInt64());
+    }
+
     inline RegValue RegKey::valueOr(const std::wstring &name, std::error_code &ec,
                                     const RegValue &defaultValue) const noexcept {
         auto result = value(name, ec);
@@ -816,7 +822,6 @@ namespace stdc::windows {
 
 #endif
 
-    /// @}
 }
 
 #endif // STDCORELIB_REGISTRY_H
