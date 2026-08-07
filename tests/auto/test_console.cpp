@@ -515,21 +515,47 @@ BOOST_AUTO_TEST_CASE(test_width_asks_a_real_console) {
     BOOST_CHECK_MESSAGE(first != 4242 && first != 909,
                         "the console branch fell back rather than answering");
 
-    // And it is the visible window rather than the scrollback buffer.
-    //
-    // This does not discriminate on every console. Windows Terminal gives the buffer the same
-    // width as the window, so measuring dwSize.X instead passes here and was measured doing so.
-    // It would fail on a console where somebody widened the buffer, which is the case the code
-    // is written for.
+    // And it agrees with the choice made from the same dimensions, which is checked on its own
+    // below against a console wider than any that exists here.
     CONSOLE_SCREEN_BUFFER_INFO info{};
     HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(console)));
     BOOST_REQUIRE(::GetConsoleScreenBufferInfo(handle, &info));
-    BOOST_CHECK_EQUAL(first, int(info.srWindow.Right) - int(info.srWindow.Left) + 1);
+    BOOST_CHECK_EQUAL(first, stdc::console::detail::columns_of(info));
 
     if (saved) {
         _putenv_s("COLUMNS", keep.c_str());
     }
     std::fclose(console);
+}
+
+// Which of a console's two widths is the answer, asked of dimensions rather than of a console.
+//
+// A console whose scrollback buffer is wider than its window is the case this exists for, and
+// there is no such console to hand: Windows Terminal gives the buffer the window's width, so
+// asking a real one cannot tell the two apart. Making one means a second process with a console
+// of its own. Handing the choice a struct is the same question with none of that.
+BOOST_AUTO_TEST_CASE(test_a_console_is_measured_by_its_window_not_its_buffer) {
+    const auto &dimensions = [](SHORT buffer_width, SHORT window_left, SHORT window_right) {
+        CONSOLE_SCREEN_BUFFER_INFO info{};
+        info.dwSize.X = buffer_width;
+        info.dwSize.Y = 9001;
+        info.srWindow.Left = window_left;
+        info.srWindow.Right = window_right;
+        return info;
+    };
+
+    // The case it is written for: a buffer far wider than the window seen through it.
+    BOOST_CHECK_EQUAL(stdc::console::detail::columns_of(dimensions(500, 0, 119)), 120);
+
+    // Where the two agree, which is what a real console here says, either answer is 120. This
+    // is the reason asking a console cannot check any of this.
+    BOOST_CHECK_EQUAL(stdc::console::detail::columns_of(dimensions(120, 0, 119)), 120);
+
+    // A window that does not start at the left edge, which is what scrolling sideways gives.
+    BOOST_CHECK_EQUAL(stdc::console::detail::columns_of(dimensions(500, 40, 119)), 80);
+
+    // Both bounds inclusive, so one column is one and not zero.
+    BOOST_CHECK_EQUAL(stdc::console::detail::columns_of(dimensions(80, 7, 7)), 1);
 }
 
 #endif // _WIN32

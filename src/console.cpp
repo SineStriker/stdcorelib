@@ -506,6 +506,16 @@ namespace stdc {
 
         }
 
+        namespace detail {
+
+#ifdef _WIN32
+            int columns_of(const CONSOLE_SCREEN_BUFFER_INFO &info) {
+                return int(info.srWindow.Right) - int(info.srWindow.Left) + 1;
+            }
+#endif
+
+        }
+
         int width(FILE *file, int fallback) {
             // COLUMNS first, which is the convention every terminal-aware program follows, and
             // is also the only say anyone has when the output is not a terminal to begin with.
@@ -525,9 +535,7 @@ namespace stdc {
             if (!::GetConsoleScreenBufferInfo(id, &info)) {
                 return fallback;
             }
-            // The visible window, not dwSize, which is the scrollback buffer. The buffer is
-            // routinely much wider, and text laid out to it would run off the side of the screen.
-            int value = int(info.srWindow.Right) - int(info.srWindow.Left) + 1;
+            int value = detail::columns_of(info);
 #else
             struct winsize ws {};
             if (::ioctl(id, TIOCGWINSZ, &ws) != 0) {

@@ -5,7 +5,11 @@
 
 #include <string>
 
-#include "console.h"
+#ifdef _WIN32
+#  include <stdcorelib/platform/windows/stdc_windows.h>
+#endif
+
+#include <stdcorelib/console.h>
 
 namespace stdc::console::detail {
 
@@ -35,6 +39,18 @@ namespace stdc::console::detail {
     /// Returns the sequence that puts a terminal back to its defaults, or an empty string when
     /// \a from already is the default.
     STDC_EXPORT std::string sgr_reset_sequence(const attributes &from);
+
+#ifdef _WIN32
+    /// How many columns a console of these dimensions has.
+    ///
+    /// The visible window, not \c dwSize, which is the scrollback buffer. A buffer is routinely
+    /// much wider than the window it is seen through, and text laid out to it would run off the
+    /// side of the screen. Separate from width() so the choice can be checked against dimensions
+    /// a test makes up, which is the only way to reach it: a console whose buffer is wider than
+    /// its window has to be built to be found, and where the two are equal, as they are under
+    /// Windows Terminal, reading either one passes.
+    STDC_EXPORT int columns_of(const CONSOLE_SCREEN_BUFFER_INFO &info);
+#endif
 
 }
 
