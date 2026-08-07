@@ -887,6 +887,14 @@ BOOST_AUTO_TEST_CASE(test_argument_quoting) {
         "plain",     "a b",   "  ",         "a\"b",   "\"lead",   "trail\"",
         "back\\sla", "end\\", "end\\\\",    "a\\\"b", "\\\"quo\"", "tab\there",
         "semi;colon", "amp&and", "pipe|bar", "caret^up", "per%cent", "dollar$sign",
+
+        // A space and a trailing backslash in the same argument, which the two above have one
+        // each of and neither together. Quoting puts the argument in quotes because of the
+        // space, and then the backslash before the closing quote is the one that escapes it.
+        // This is llvm's CreateProcessTrailingSlash, and it is the case the quoting is written
+        // for. \sa llvm/unittests/Support/ProgramTest.cpp
+        "has\\\\ trailing\\", "a b\\", "a b\\\\", "a b\\\\\\", "\\\\ leading",
+        "quote\" and space", "a b\"c\\",
     };
 
     for (const auto &arg : tricky) {
