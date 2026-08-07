@@ -150,6 +150,34 @@ if(NOT STDC_ENABLE_RTTI)
     endif()
 endif()
 
+# Both of the above are PRIVATE, and stay that way. A compiler flag in a target's interface
+# reaches every translation unit of everybody who links it, and what the library was built with
+# is not their business to inherit.
+#
+# It is their business to match where the ABI says so. cli::HelpFormatter is a polymorphic class
+# the library exports whose virtuals are out of line, so the library owns its vtable and with it
+# its typeinfo, and without RTTI it emits neither. Anything deriving from it with RTTI on then
+# asks for a symbol nobody wrote, which is where the linker says "undefined reference to typeinfo
+# for stdc::cli::HelpFormatter". A consumer in that position asks for the same flag, the way the
+# targets here do.
+function(stdc_match_features _target)
+    if(NOT STDC_ENABLE_EXCEPTIONS)
+        if(MSVC)
+            target_compile_options(${_target} PRIVATE /EHs-c- /wd4530)
+        else()
+            target_compile_options(${_target} PRIVATE -fno-exceptions)
+        endif()
+    endif()
+
+    if(NOT STDC_ENABLE_RTTI)
+        if(MSVC)
+            target_compile_options(${_target} PRIVATE /GR-)
+        else()
+            target_compile_options(${_target} PRIVATE -fno-rtti)
+        endif()
+    endif()
+endfunction()
+
 target_include_directories(${PROJECT_NAME} INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
