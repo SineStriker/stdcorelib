@@ -854,43 +854,33 @@ BOOST_AUTO_TEST_CASE(test_the_parser_reads_the_same_a_level_down) {
     for (auto options : {Parser::Standard, Parser::AllowUnixGroupFlags}) {
         Parser flat(declare("prog"));
         Parser deep(Command("prog").addCommand(declare("inner")));
+        Parser deeper(Command("prog").addCommand(Command("mid").addCommand(declare("inner"))));
 
         for (const auto &line : lines) {
-            std::vector<std::string> flatArgs = {"prog"};
-            flatArgs.insert(flatArgs.end(), line.begin(), line.end());
-            std::vector<std::string> deepArgs = {"prog", "inner"};
-            deepArgs.insert(deepArgs.end(), line.begin(), line.end());
-
             std::string what;
             for (const auto &item : line) {
                 what += " " + item;
             }
-            BOOST_CHECK_MESSAGE(readBack(flat.parse(flatArgs, options)) ==
-                                    readBack(deep.parse(deepArgs, options)),
-                                "[" + what + "] reads one way at the root and another a level "
-                                             "down:\n  root " +
-                                    readBack(flat.parse(flatArgs, options)) + "\n  down " +
-                                    readBack(deep.parse(deepArgs, options)));
+
+            const auto &at = [&line, options](const Parser &parser,
+                                              std::vector<std::string> path) {
+                path.insert(path.end(), line.begin(), line.end());
+                return parser.parse(path, options);
+            };
+            auto root = readBack(at(flat, {"prog"}));
+            for (const auto &deeperOne : {std::make_pair(std::vector<std::string>{"prog", "inner"},
+                                                         &deep),
+                                          std::make_pair(std::vector<std::string>{"prog", "mid",
+                                                                                 "inner"},
+                                                         &deeper)}) {
+                auto below = readBack(at(*deeperOne.second, deeperOne.first));
+                BOOST_CHECK_MESSAGE(root == below,
+                                    "[" + what + "] reads one way at the root and another " +
+                                        std::to_string(deeperOne.first.size() - 1) +
+                                        " down:\n  root " + root + "\n  down " + below);
+            }
         }
     }
-}
-
-// A response file is expanded before the command is looked for, so it may name one.
-BOOST_AUTO_TEST_CASE(test_a_response_file_may_name_a_subcommand) {
-    auto path = std::filesystem::temp_directory_path() / "stdc_cli_response_nested.txt";
-    {
-        std::ofstream file(path, std::ios::binary);
-        file << "build\n-j\n4\ntarget\n";
-    }
-
-    Parser parser(Command("prog").addCommand(
-        Command("build").addArgument(Argument("target")).addOption(Option({"-j"}, "Jobs").arg("n"))));
-    auto result = ok(parser, {"@" + path.string()}, Parser::EnableResponseFile);
-    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "build"}));
-    BOOST_CHECK_EQUAL(must(result.value(0)), "target");
-    BOOST_CHECK_EQUAL(must(result.valueForOption<int>("-j")), 4);
-
-    std::filesystem::remove(path);
 }
 
 // Everything the prior ladder does, asked once at the root and once a level down, because the
@@ -2479,6 +2469,102 @@ BOOST_AUTO_TEST_CASE(test_a_subcommand_lists_what_it_inherited) {
 
     // The root has nothing above it, so it has no such section.
     BOOST_CHECK(!has(parser.parse(argv({})).helpText(), "Global options:"));
+}
+
+// A global written wherever it is in scope, on a line that walks down through three commands and
+// picks one up at each. Every command below where it was declared can be written before, and the
+// ones above have nothing to say about it.
+BOOST_AUTO_TEST_CASE(test_globals_written_between_the_commands_that_declare_them) {
+    const auto &tree = [] {
+        Parser parser(Command("prog")
+                          .addOption(Option({"--root-wide"}, "From the top").global())
+                          .addCommand(Command("remote")
+                                          .addOption(Option({"--mid"}, "From the middle").global())
+                                          .addCommand(Command("add")
+                                                          .addOption(Option({"--leaf"}, "Here"))
+                                                          .addArgument(Argument("name")))));
+        parser.setTextWidth(80);
+        return parser;
+    };
+
+    // One picked up at each step down, which is the shape a program with layered options has.
+    auto parser = tree();
+    auto walked = ok(parser, {"--root-wide", "remote", "--mid", "add", "--leaf", "x"});
+    BOOST_CHECK(walked.commandPath() == std::vector<std::string>({"prog", "remote", "add"}));
+    BOOST_CHECK(walked.option("--root-wide").has_value());
+    BOOST_CHECK(walked.option("--mid").has_value());
+    BOOST_CHECK(walked.option("--leaf").has_value());
+    BOOST_CHECK_EQUAL(must(walked.value(0)), "x");
+
+    // All of them at the end reads the same, since a global stays in scope rather than being
+    // spent where it was written.
+    auto trailing = ok(parser, {"remote", "add", "--root-wide", "--mid", "--leaf", "x"});
+    BOOST_CHECK(trailing.option("--root-wide").has_value());
+    BOOST_CHECK(trailing.option("--mid").has_value());
+    BOOST_CHECK(trailing.option("--leaf").has_value());
+
+    // And so does every arrangement in between.
+    for (const auto &line : {
+             std::vector<std::string>{"--root-wide", "remote", "add", "--mid", "--leaf", "x"},
+             std::vector<std::string>{"remote", "--root-wide", "--mid", "add", "--leaf", "x"},
+             std::vector<std::string>{"remote", "--mid", "add", "--root-wide", "x", "--leaf"},
+         }) {
+        std::vector<std::string> args{"prog"};
+        args.insert(args.end(), line.begin(), line.end());
+        auto result = parser.parse(args);
+        BOOST_REQUIRE_MESSAGE(result.isValid(), result.errorText());
+        BOOST_CHECK(result.option("--root-wide").has_value());
+        BOOST_CHECK(result.option("--mid").has_value());
+        BOOST_CHECK(result.option("--leaf").has_value());
+        BOOST_CHECK_EQUAL(must(result.value(0)), "x");
+    }
+
+    // Written above where it was declared it is nobody's option, which is the rule that lets a
+    // subcommand name one thing what its parent names another.
+    bad(parser, {"--mid", "remote", "add", "x"}, ParseResult::UnknownOption);
+    bad(parser, {"remote", "--leaf", "add", "x"}, ParseResult::UnknownOption);
+
+    // Twice is once too many unless it said otherwise, on either side of a step down the same
+    // as anywhere else. Being global buys it no extra turns.
+    bad(parser, {"--root-wide", "remote", "--root-wide", "add", "x"},
+        ParseResult::OptionOccurTooMuch);
+
+    // Having said otherwise, both are counted, and the step down between them is nothing to it.
+    Parser repeatable(Command("prog")
+                          .addOption(Option({"-v"}, "Say more").global().multi())
+                          .addCommand(Command("remote").addCommand(
+                              Command("add").addArgument(Argument("name")))));
+    auto twice = ok(repeatable, {"-v", "remote", "-v", "add", "x"});
+    BOOST_REQUIRE(twice.option("-v").has_value());
+    BOOST_CHECK_EQUAL(twice.option("-v")->count(), 2);
+
+    // Two levels of them are both listed, under the heading that says they came from above.
+    auto text = parser.parse(argv({"remote", "add", "x"})).helpText();
+    BOOST_CHECK(has(text, "Global options:"));
+    BOOST_CHECK(has(text, "--root-wide"));
+    BOOST_CHECK(has(text, "--mid"));
+    BOOST_CHECK(has(text, "Usage:\n    prog remote add"));
+    // Its own stays where its own goes.
+    BOOST_CHECK(at(text, "Options:") < at(text, "Global options:"));
+    BOOST_CHECK(has(text, "--leaf"));
+}
+
+// A response file is expanded before the command is looked for, so it may name one.
+BOOST_AUTO_TEST_CASE(test_a_response_file_may_name_a_subcommand) {
+    auto path = std::filesystem::temp_directory_path() / "stdc_cli_response_nested.txt";
+    {
+        std::ofstream file(path, std::ios::binary);
+        file << "build\n-j\n4\ntarget\n";
+    }
+
+    Parser parser(Command("prog").addCommand(
+        Command("build").addArgument(Argument("target")).addOption(Option({"-j"}, "Jobs").arg("n"))));
+    auto result = ok(parser, {"@" + path.string()}, Parser::EnableResponseFile);
+    BOOST_CHECK(result.commandPath() == std::vector<std::string>({"prog", "build"}));
+    BOOST_CHECK_EQUAL(must(result.value(0)), "target");
+    BOOST_CHECK_EQUAL(must(result.valueForOption<int>("-j")), 4);
+
+    std::filesystem::remove(path);
 }
 
 // Inheritance is from every command above, not only the one directly above.
