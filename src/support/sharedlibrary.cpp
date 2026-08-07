@@ -44,11 +44,11 @@ namespace stdc {
 
         virtual ~Impl();
 
-        static inline int nativeLoadHints(int loadHints);
+        static inline int nativeLoadHints(LoadHints loadHints);
         static void clearSysError();
         static std::string sysErrorMessage();
 
-        bool open(int hints = 0);
+        bool open(LoadHints hints = {});
         bool close();
         void *resolve(const char *name) const;
     };
@@ -57,17 +57,17 @@ namespace stdc {
         std::ignore = close();
     }
 
-    inline int SharedLibrary::Impl::nativeLoadHints(int loadHints) {
+    inline int SharedLibrary::Impl::nativeLoadHints(LoadHints loadHints) {
 #ifdef _WIN32
         return 0;
 #else
         int dlFlags = 0;
-        if (loadHints & ResolveAllSymbolsHint) {
+        if (loadHints.test_flag(ResolveAllSymbolsHint)) {
             dlFlags |= RTLD_NOW;
         } else {
             dlFlags |= RTLD_LAZY;
         }
-        if (loadHints & ExportExternalSymbolsHint) {
+        if (loadHints.test_flag(ExportExternalSymbolsHint)) {
             dlFlags |= RTLD_GLOBAL;
         }
 #  if !defined(Q_OS_CYGWIN)
@@ -76,8 +76,9 @@ namespace stdc {
         }
 #  endif
 #  if defined(RTLD_DEEPBIND)
-        if (loadHints & DeepBindHint)
+        if (loadHints.test_flag(DeepBindHint)) {
             dlFlags |= RTLD_DEEPBIND;
+        }
 #  endif
         return dlFlags;
 #endif
@@ -106,7 +107,7 @@ namespace stdc {
 #endif
     }
 
-    bool SharedLibrary::Impl::open(int hints) {
+    bool SharedLibrary::Impl::open(LoadHints hints) {
         auto absPath = fs::absolute(path);
         clearSysError();
 
@@ -123,7 +124,7 @@ namespace stdc {
         }
 
 #ifdef _WIN32
-        if (hints & PreventUnloadHint) {
+        if (hints.test_flag(PreventUnloadHint)) {
             // prevent the unloading of this component
             HMODULE hmod;
             ::GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN |
@@ -185,7 +186,7 @@ namespace stdc {
 
     SharedLibrary &SharedLibrary::operator=(SharedLibrary &&other) noexcept = default;
 
-    bool SharedLibrary::open(const fs::path &path, int hints) {
+    bool SharedLibrary::open(const fs::path &path, LoadHints hints) {
         stdc_impl_t;
         impl.error.clear();
         if (impl.hDll) {

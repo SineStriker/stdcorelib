@@ -450,14 +450,14 @@ namespace {
     /// A parse that is expected to succeed, so that a failing one says why rather than blowing
     /// up somewhere further down.
     ParseResult ok(const Parser &parser, std::initializer_list<std::string> args,
-                   int flags = Parser::Standard) {
+                   Parser::ParseOptions flags = Parser::Standard) {
         auto result = parser.parse(argv(args), flags);
         BOOST_REQUIRE_MESSAGE(result.isValid(), result.errorText());
         return result;
     }
 
     ParseResult bad(const Parser &parser, std::initializer_list<std::string> args,
-                    ParseResult::Error expected, int flags = Parser::Standard) {
+                    ParseResult::Error expected, Parser::ParseOptions flags = Parser::Standard) {
         auto result = parser.parse(argv(args), flags);
         BOOST_REQUIRE_MESSAGE(!result.isValid(), "expected a failure, got a clean parse");
         BOOST_CHECK_EQUAL(int(result.error()), int(expected));

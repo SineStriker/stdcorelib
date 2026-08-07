@@ -183,7 +183,7 @@ namespace stdc::cli {
         /// next parse while this may outlive it. The same reason root is shared, and the reason
         /// it is not a unique_ptr: there is no one owner to give it to.
         std::shared_ptr<HelpFormatter> formatter;
-        int display_options = Parser::Normal;
+        Parser::DisplayOptions display_options;
         int text_width = 0;
         int indent = 4;
         int spacing = 4;
@@ -470,7 +470,7 @@ namespace stdc::cli {
         // for itself whether stderr is somewhere escapes belong.
         console::fputs(console::bold, console::red, console::nocolor, _impl->error_text + "\n",
                        stderr);
-        if (!(_impl->display_options & Parser::SkipCorrection)) {
+        if (!_impl->display_options.test_flag(Parser::SkipCorrection)) {
             auto correction = correctionText();
             if (!correction.empty()) {
                 console::fputs(console::nostyle, console::nocolor, console::nocolor,
@@ -720,14 +720,14 @@ namespace stdc::cli {
         }
         const Command &command = *result.command();
         const auto &catalogue = command.catalogue();
-        int flags = sizes.displayOptions;
+        auto flags = sizes.displayOptions;
 
         // What an argument adds to the right hand column beyond its description. The same for an
         // argument of a command and an argument of an option, since a default value is worth as
         // much in either place.
         auto extras = [flags](const Argument &argument) {
             std::string res;
-            if ((flags & Parser::ShowArgumentExpectedValues) &&
+            if (flags.test_flag(Parser::ShowArgumentExpectedValues) &&
                 !argument.expectedValues().empty()) {
                 std::string words;
                 for (const auto &item : argument.expectedValues()) {
@@ -735,7 +735,7 @@ namespace stdc::cli {
                 }
                 res += " [" + words + "]";
             }
-            if ((flags & Parser::ShowArgumentDefaultValue) && argument.hasDefaultValue()) {
+            if (flags.test_flag(Parser::ShowArgumentDefaultValue) && argument.hasDefaultValue()) {
                 res += " (default: " + argument.defaultValue() + ")";
             }
             return res;
@@ -748,7 +748,7 @@ namespace stdc::cli {
             for (const auto &argument : option.arguments()) {
                 right += extras(argument);
             }
-            if ((flags & Parser::ShowOptionIsRequired) && option.isRequired()) {
+            if (flags.test_flag(Parser::ShowOptionIsRequired) && option.isRequired()) {
                 right += " (required)";
             }
             return HelpBlock::Entry{displayed(option, true), right};
@@ -905,7 +905,7 @@ namespace stdc::cli {
                                                           const HelpSizes &sizes) const {
         // Measured across every list rather than across each on its own, so that a catalogue
         // reads as one table instead of as several.
-        bool align_all = (sizes.displayOptions & Parser::AlignAllCatalogues) != 0;
+        bool align_all = sizes.displayOptions.test_flag(Parser::AlignAllCatalogues);
         size_t shared = align_all ? widestOf(blocks) : 0;
 
         std::vector<Run> out;
@@ -947,7 +947,8 @@ namespace stdc::cli {
         /// other without a dozen parameters.
         class ParserCore {
         public:
-            ParserCore(detail::parse_data *out, int flags) : r(out), flags(flags) {
+            ParserCore(detail::parse_data *out, Parser::ParseOptions flags)
+                : r(out), flags(flags) {
             }
 
             void run(const std::vector<std::string> &args);
@@ -956,7 +957,7 @@ namespace stdc::cli {
             using Error = ParseResult::Error;
 
             detail::parse_data *r;
-            int flags;
+            Parser::ParseOptions flags;
             std::vector<std::string> tokens;
             size_t pos = 0;
             /// The positional tokens, gathered first and handed to the arguments afterwards,
@@ -969,8 +970,8 @@ namespace stdc::cli {
             std::vector<const Option *> inherited;
             bool saw_terminator = false;
 
-            bool on(int flag) const {
-                return (flags & flag) != 0;
+            bool on(Parser::ParseOption flag) const {
+                return flags.test_flag(flag);
             }
             bool failed() const {
                 return r->error != ParseResult::NoError;
@@ -1571,7 +1572,7 @@ namespace stdc::cli {
         std::string epilogue;
         HelpLayout help_layout = HelpLayout::defaultLayout();
         std::shared_ptr<HelpFormatter> formatter = defaultFormatter();
-        int display_options = Parser::Normal;
+        Parser::DisplayOptions display_options;
         int text_width = 0;
         int indent = 4;
         int spacing = 4;
@@ -1618,11 +1619,11 @@ namespace stdc::cli {
         return _impl->epilogue;
     }
 
-    void Parser::setDisplayOptions(int options) {
+    void Parser::setDisplayOptions(DisplayOptions options) {
         _impl->display_options = options;
     }
 
-    int Parser::displayOptions() const {
+    Parser::DisplayOptions Parser::displayOptions() const {
         return _impl->display_options;
     }
 
@@ -1668,7 +1669,8 @@ namespace stdc::cli {
         return _impl->formatter;
     }
 
-    ParseResult Parser::parse(const std::vector<std::string> &args, int parseOptions) const {
+    ParseResult Parser::parse(const std::vector<std::string> &args,
+                              ParseOptions parseOptions) const {
         ParseResult result;
         result._impl->root = _impl->root;
         result._impl->target = _impl->root.get();

@@ -7,6 +7,7 @@
 #include <filesystem>
 
 #include <stdcorelib/stdc_global.h>
+#include <stdcorelib/flags.h>
 
 namespace stdc {
 
@@ -39,17 +40,18 @@ namespace stdc {
             ExportExternalSymbolsHint = 0x02,
             LoadArchiveMemberHint = 0x04, // Unused
             PreventUnloadHint = 0x08,
-            DeepBindHint = 0x10
+            DeepBindHint = 0x10,
         };
+        STDC_DECLARE_FLAGS(LoadHints, LoadHint)
 
         /// Loads \a path.
         ///
         /// \param path the library to load
-        /// \param hints a bitwise or of \ref LoadHint values
+        /// \param hints what to ask the loader for
         /// \retval false nothing was loaded, with the reason in lastError()
         /// \note An object that is already open is left alone and this fails, so close() first
         ///       to swap one library for another.
-        bool open(const std::filesystem::path &path, int hints = 0);
+        bool open(const std::filesystem::path &path, LoadHints hints = {});
 
         /// Unloads the library.
         ///
@@ -109,6 +111,8 @@ namespace stdc {
         class Impl;
         std::unique_ptr<Impl> _impl;
     };
+
+    STDC_DECLARE_OPERATORS_FOR_FLAGS(SharedLibrary::LoadHints)
 
 }
 
