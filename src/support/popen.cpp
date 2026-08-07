@@ -182,7 +182,7 @@ namespace stdc {
             return false;
         }
 
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L847
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L847
         if (stdout_dev.kind == 1 && stdout_dev.data.builtin == IOType::STDOUT) {
             error_code = std::make_error_code(std::errc::invalid_argument);
             error_msg = "STDOUT can only be used for stderr";
@@ -203,11 +203,11 @@ namespace stdc {
         }
 #endif
 
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L881
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L881
         // We don't need to handle string encodings in C++.
 
 #ifndef _WIN32
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L911
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L912
         //
         // -1 means "leave it alone", which is also what setregid() and setreuid() take.
         int gid = group;
@@ -245,7 +245,7 @@ namespace stdc {
         // are -1 when not using PIPEs. The child objects are -1
         // when not redirecting.
         //
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1003
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1003
 #ifdef _WIN32
         Handle p2cread = InvalidHandle, p2cwrite_h = InvalidHandle;
         Handle c2pread_h = InvalidHandle, c2pwrite = InvalidHandle;
@@ -342,7 +342,7 @@ namespace stdc {
 #endif
 
         if (!result) {
-            // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1049
+            // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1049
             close_std_files();
             if (!_closed_child_pipe_fds) {
                 _close_pipe_fds_1(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite);

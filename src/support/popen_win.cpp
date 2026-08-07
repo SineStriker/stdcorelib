@@ -38,7 +38,7 @@ namespace stdc {
 #endif
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1623
+    // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1623
     //
     // A pipe blocks its writer once full, so stdout and stderr cannot be drained one after the
     // other, and neither can be drained after the child exits. All three streams have to move
@@ -194,7 +194,7 @@ namespace stdc {
         return true;
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1436
+    // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1439
     //
     // Filter out console handles that can't be used
     // in lpAttributeList["handle_list"] and make sure the list
@@ -219,7 +219,7 @@ namespace stdc {
         return res;
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1348
+    // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1351
     bool Popen::Impl::_get_handles(HANDLE &p2cread, HANDLE &p2cwrite, HANDLE &c2pread,
                                    HANDLE &c2pwrite, HANDLE &errread, HANDLE &errwrite) {
         if (stdin_dev.kind == 0 && stdout_dev.kind == 0 && stderr_dev.kind == 0) {
@@ -587,7 +587,7 @@ namespace stdc {
         return args;
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1157
+    // https://github.com/python/cpython/blob/v3.13.13/Modules/_winapi.c#L1157
     static inline LPHANDLE _get_handle_list(const vlarray<HANDLE, 10> &handles, SIZE_T *size) {
         if (handles.empty()) {
             return nullptr;
@@ -608,7 +608,7 @@ namespace stdc {
     };
 
 
-    // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1210
+    // https://github.com/python/cpython/blob/v3.13.13/Modules/_winapi.c#L1210
     static void _free_attribute_list(AttributeList *attribute_list) {
         if (attribute_list->attribute_list != NULL) {
             DeleteProcThreadAttributeList(attribute_list->attribute_list);
@@ -622,7 +622,7 @@ namespace stdc {
         memset(attribute_list, 0, sizeof(*attribute_list));
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1223
+    // https://github.com/python/cpython/blob/v3.13.13/Modules/_winapi.c#L1223
     static std::tuple<std::error_code, const char *>
         _get_attribute_list(const vlarray<HANDLE, 10> &handles, AttributeList *attribute_list) {
         DWORD err;
@@ -633,7 +633,7 @@ namespace stdc {
         int attribute_count = 0;
         SIZE_T attribute_list_size = 0;
 
-        // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1251
+        // https://github.com/python/cpython/blob/v3.13.13/Modules/_winapi.c#L1251
         attribute_list->handle_list = _get_handle_list(handles, &handle_list_size);
         if (attribute_list->handle_list) {
             attribute_count++;
@@ -686,7 +686,7 @@ namespace stdc {
         return {{}, {}};
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1449
+    // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1452
     bool Popen::Impl::_execute_child(Handle p2cread, int p2cwrite, int c2pread, Handle c2pwrite,
                                      int errread, Handle errwrite) {
         assert(!args.empty());
@@ -715,7 +715,7 @@ namespace stdc {
             si.hStdError = errwrite;
         }
 
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1495
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1499
         vlarray<HANDLE, 10> handle_list;
         if (startupinfo) {
             auto it = startupinfo->lpAttributeList.find("handle_list");
@@ -747,7 +747,7 @@ namespace stdc {
             close_fds = false;
         }
 
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1522
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1526
         // prepare shell arguments
         if (shell) {
             si.dwFlags |= STARTF_USESHOWWINDOW;
@@ -767,7 +767,7 @@ namespace stdc {
         std::wstring application_name = child_executable;
         std::wstring command_line = wstring_conv::from_utf8(args_str);
 
-        // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1373
+        // https://github.com/python/cpython/blob/v3.13.13/Modules/_winapi.c#L1374
         // prepare environment variables
         vlarray<wchar_t, 1024> env_str;
         if (env) {
@@ -803,7 +803,7 @@ namespace stdc {
         DWORD dwCreationFlags;
         PROCESS_INFORMATION pi;
 
-        // https://github.com/python/cpython/blob/v3.13.3/Modules/_winapi.c#L1380
+        // https://github.com/python/cpython/blob/v3.13.13/Modules/_winapi.c#L1380
         AttributeList attribute_list = {0};
         if (auto [ec, err_api] = _get_attribute_list(handle_list, &attribute_list);
             ec.value() != 0) {
@@ -814,7 +814,7 @@ namespace stdc {
 
         dwCreationFlags = creationflags | EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
 
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1551
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1554
         if (!CreateProcessW(application_name.empty() ? NULL : application_name.data(), //
                             command_line.data(),                                       //
                             nullptr,                                                   //

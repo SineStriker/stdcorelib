@@ -30,7 +30,7 @@
 
 namespace stdc {
 
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L2094
+    // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L2094
     //
     // A pipe blocks its writer once full, so stdout and stderr cannot be drained one after the
     // other, and neither can be drained after the child exits: the child would still be blocked
@@ -251,7 +251,7 @@ namespace stdc {
         return true;
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1348
+    // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1723
     bool Popen::Impl::_get_handles(int &p2cread, int &p2cwrite, int &c2pread, int &c2pwrite,
                                    int &errread, int &errwrite) {
         if (stdin_dev.kind == 0 && stdout_dev.kind == 0 && stderr_dev.kind == 0) {
@@ -519,7 +519,7 @@ namespace stdc {
         int extra_gids_len; // 0 to leave alone
     };
 
-    // https://github.com/python/cpython/blob/v3.13.3/Modules/_posixsubprocess.c#L575
+    // https://github.com/python/cpython/blob/v3.13.13/Modules/_posixsubprocess.c#L575
     //
     // Closes every descriptor at or above start_fd except the ones to keep, which must be sorted.
     static void close_open_fds(int start_fd, const int *keep, size_t keep_len) {
@@ -568,7 +568,7 @@ namespace stdc {
         write_all(fd, cur, size_t(buf + sizeof(buf) - cur));
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Modules/_posixsubprocess.c#L664
+    // https://github.com/python/cpython/blob/v3.13.13/Modules/_posixsubprocess.c#L663
     void Popen::Impl::_child_exec(const ChildArgs &ca) {
         // Tells the parent the failure happened before exec, so the message is not a bad path.
         const char *err_msg = "noexec";
@@ -826,7 +826,7 @@ namespace stdc {
         return dirs;
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1449
+    // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1827
     bool Popen::Impl::_execute_child(int p2cread, int p2cwrite, int c2pread, int c2pwrite,
                                      int errread, int errwrite, int gid,
                                      const std::vector<int> &gids, int uid) {
@@ -894,7 +894,7 @@ namespace stdc {
             envp.push_back(nullptr);
         }
 
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1862
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1885
         //
         // For transferring possible exec failure from child to parent.
         // Data format: "exception name:hex errno:description"
@@ -951,7 +951,7 @@ namespace stdc {
 
         std::string errpipe_data;
 
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1873
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1921
         {
             int tmp_pid = _fork_exec(ca);
             if (tmp_pid == -1) {
@@ -990,7 +990,7 @@ namespace stdc {
             close(errpipe_read);
         }
 
-        // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L1930
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1942
         if (errpipe_data.empty() && !_child_created && !_detached_started) {
             error_code = std::make_error_code(std::errc::io_error);
             error_msg = "detached launcher exited without reporting a child";
@@ -1174,7 +1174,7 @@ namespace stdc {
         return send_signal_impl(SIGTERM);
     }
 
-    // https://github.com/python/cpython/blob/v3.13.3/Lib/subprocess.py#L2218
+    // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L2218
     bool Popen::Impl::send_signal_impl(int sig) {
         error_code.clear();
 
