@@ -49,44 +49,51 @@ BOOST_AUTO_TEST_CASE(test_construct) {
 }
 
 BOOST_AUTO_TEST_CASE(test_fromString) {
-    stdc::VersionNumber v;
+    BOOST_CHECK(VersionNumber::fromString("1") == VersionNumber(1));
+    BOOST_CHECK(VersionNumber::fromString("1.2") == VersionNumber(1, 2));
+    BOOST_CHECK(VersionNumber::fromString("1.2.3") == VersionNumber(1, 2, 3));
+    BOOST_CHECK(VersionNumber::fromString("1.2.3.4") == VersionNumber(1, 2, 3, 4));
 
-    v = VersionNumber::fromString("1");
-    BOOST_CHECK(v == VersionNumber(1));
-
-    v = VersionNumber::fromString("1.2");
-    BOOST_CHECK(v == VersionNumber(1, 2));
-
-    v = VersionNumber::fromString("1.2.3");
-    BOOST_CHECK(v == VersionNumber(1, 2, 3));
-
-    v = VersionNumber::fromString("1.2.3.4");
-    BOOST_CHECK(v == VersionNumber(1, 2, 3, 4));
-
-    v = VersionNumber::fromString("1.2.3.4.5");
-    BOOST_CHECK(v == VersionNumber(1, 2, 3, 4));
-
-    // error cases
-    v = VersionNumber::fromString("1.x");
-    BOOST_CHECK(v == VersionNumber(1));
-
-    v = VersionNumber::fromString("1.2.x");
-    BOOST_CHECK(v == VersionNumber(1, 2));
-
-    v = VersionNumber::fromString("xxx");
-    BOOST_CHECK(v == VersionNumber());
-
-    // the empty string parses to the empty version
-    BOOST_CHECK(VersionNumber::fromString("") == VersionNumber());
-
-    // an unparsable component is left at zero, later ones still parse
-    BOOST_CHECK(VersionNumber::fromString("x.2") == VersionNumber(0, 2));
-
-    // leading zeros are accepted
+    // Leading zeros are read as the number they are.
     BOOST_CHECK(VersionNumber::fromString("01.02.03") == VersionNumber(1, 2, 3));
-
-    // large components
     BOOST_CHECK(VersionNumber::fromString("2024.11.30") == VersionNumber(2024, 11, 30));
+    BOOST_CHECK(VersionNumber::fromString("0") == VersionNumber());
+}
+
+// Anything that is not a version is nothing rather than the part of one it could get to. All of
+// these used to come back as a VersionNumber, and "abc" and "0" were the same answer.
+BOOST_AUTO_TEST_CASE(test_fromString_refuses_what_is_not_a_version) {
+    for (const auto *given : {
+             "",           // nothing at all
+             "abc",        // a word
+             "x.2",        // a word where the first component goes
+             "1.x",        // and where a later one goes
+             "1.2.x",      //
+             "1.2.3abc",   // digits and then something else, which used to read as 1.2.3
+             "1.2.3.4.5",  // more components than there are places for
+             "1.",         // a trailing dot, so an empty component
+             ".1",         // and a leading one
+             "1..2",       // and one in the middle
+             "1.-2",       // a minus, which from_chars reads into an int quite happily
+             "-1",         //
+             "1.2.3.4.",   // full up and then a dot
+             " 1.2",       // blanks are not part of a version
+             "1.2 ",       //
+             "+1",         // from_chars refuses this one, but say so here rather than rely on it
+             "1.2.3999999999999",  // digits throughout and past what an int holds
+         }) {
+        BOOST_CHECK_MESSAGE(!VersionNumber::fromString(given).has_value(),
+                            "\"" + std::string(given) + "\" was read as a version");
+    }
+
+    // A view over nothing at all, whose data() is null rather than pointing at a terminator.
+    // The answer is the same as for the empty string, and the reason for asking separately is
+    // that the range handed to from_chars is not the same one.
+    BOOST_CHECK(!VersionNumber::fromString(std::string_view()).has_value());
+
+    // One component too many is refused rather than written past the end of the four there are.
+    BOOST_CHECK(!VersionNumber::fromString("1.2.3.4.5").has_value());
+    BOOST_CHECK(!VersionNumber::fromString("1.2.3.4.5.6.7.8.9").has_value());
 }
 
 BOOST_AUTO_TEST_CASE(test_toString) {

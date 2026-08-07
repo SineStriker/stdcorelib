@@ -6,6 +6,7 @@
 #include <string>
 #include <array>
 #include <iostream>
+#include <optional>
 
 #include <stdcorelib/stdc_global.h>
 
@@ -16,7 +17,16 @@ namespace stdc {
         VersionNumber();
         explicit VersionNumber(int major, int minor = 0, int patch = 0, int tweak = 0);
 
-        static VersionNumber fromString(const std::string_view &s);
+        /// The version \a s spells, or nothing where it does not spell one.
+        ///
+        /// One to four components separated by dots, each of them digits and nothing else, each
+        /// fitting an \c int. Leading zeros are read as the number they are, so \c 01.02 is
+        /// 1.2.
+        ///
+        /// \note It used to answer with whatever it could get and zeros for the rest, so
+        ///       \c abc and \c 0 were the same answer and \c 1.2.3.4.5 was 1.2.3.4. There was
+        ///       no way to tell a version from a sentence.
+        static std::optional<VersionNumber> fromString(const std::string_view &s);
 
     public:
         inline int major() const {

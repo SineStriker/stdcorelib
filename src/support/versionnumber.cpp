@@ -4,7 +4,6 @@
 
 #include <cstdlib>
 #include <charconv>
-#include <tuple>
 
 #include "algorithms.h"
 
@@ -24,26 +23,49 @@ namespace stdc {
         m_numbers[3] = tweak;
     }
 
-    VersionNumber VersionNumber::fromString(const std::string_view &s) {
-        VersionNumber version;
+    std::optional<VersionNumber> VersionNumber::fromString(const std::string_view &s) {
+        VersionNumber res;
+        size_t index = 0;
+        size_t start = 0;
+        for (;;) {
+            if (index == res.m_numbers.size()) {
+                // More components than there are places to put them, which is a version of
+                // something else rather than a longer version of this.
+                return std::nullopt;
+            }
 
-        // Split the string by '.' and convert each segment to int
-        int i = 0;
-        std::string::size_type start = 0;
-        std::string::size_type end = s.find('.');
-        while (i < version.m_numbers.size() && end != std::string::npos) {
-            std::string_view segment = s.substr(start, end - start);
-            std::ignore = std::from_chars(segment.data(), segment.data() + segment.size(),
-                                          version.m_numbers[i++]);
-            start = end + 1;
-            end = s.find('.', start);
+            auto stop = s.find('.', start);
+            auto segment =
+                s.substr(start, stop == std::string_view::npos ? stop : stop - start);
+            // The same answer comes out of from_chars, which refuses an empty range. This is
+            // here so that a default constructed string_view, whose data() is null, is not the
+            // range handed to it.
+            if (segment.empty()) {
+                return std::nullopt;
+            }
+            // Checked here rather than left to from_chars, which reads a leading minus into an
+            // int quite happily and would make "1.-2" a version.
+            for (char c : segment) {
+                if (c < '0' || c > '9') {
+                    return std::nullopt;
+                }
+            }
+
+            // Digits throughout, so the only thing left for from_chars to refuse is a number
+            // too big for an int, and there is nothing it can leave behind.
+            auto answer =
+                std::from_chars(segment.data(), segment.data() + segment.size(),
+                                res.m_numbers[index]);
+            if (answer.ec != std::errc{}) {
+                return std::nullopt;
+            }
+            index++;
+
+            if (stop == std::string_view::npos) {
+                return res;
+            }
+            start = stop + 1;
         }
-        if (i < version.m_numbers.size() && start < s.size()) {
-            std::string_view segment = s.substr(start);
-            std::ignore = std::from_chars(segment.data(), segment.data() + segment.size(),
-                                          version.m_numbers[i++]);
-        }
-        return version;
     }
 
     std::string VersionNumber::toString() const {
