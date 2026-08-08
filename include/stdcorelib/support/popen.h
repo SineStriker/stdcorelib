@@ -197,26 +197,25 @@ namespace stdc {
         /// All of these take effect at start() and mean nothing after it.
         /// @{
 
-        /// The file to load, for when that is not the same as what the program should call
-        /// itself.
+        /// The file to load, where that should not also be the name the program is given.
         ///
-        /// Starting a program involves two separate things, and this is the first. \a executable
-        /// is the file the system loads. \c args()[0] is the string handed to the program as its
-        /// own name, and has no bearing on which file runs. Leaving this unset makes it
-        /// \c args()[0], which is why most callers never touch it.
+        /// \warning Almost nobody wants this. \c args()[0] is both the file to run and the name,
+        ///          and leaving them the same is what nearly every program expects. It is not
+        ///          what makes a path with a space in it work, nor what stops one being looked
+        ///          up along \c PATH, since \c args()[0] covers both already.
         ///
-        /// What it exists for is a program that reads its own name and behaves accordingly, the
-        /// way a multi-call binary does:
+        /// Set it only where the two must differ, which means a program that reads its own name
+        /// and behaves accordingly. \c execve takes the file and the argument vector separately,
+        /// so nothing requires them to agree, and \c login relies on that to start a shell under
+        /// the name \c -bash.
         ///
         /// \code
         ///   // loads /bin/busybox, which finds "ls" as its name and behaves as ls
         ///   popen.executable("/bin/busybox").args({"ls", "-l"});
         /// \endcode
         ///
-        /// \note Not needed for a path with a space in it, nor for one that should be taken as
-        ///       written rather than looked up along \c PATH. \c args()[0] covers both already.
-        /// \note Under shell() this names the shell rather than the program, standing in for
-        ///       \c /bin/sh on unix and \c cmd.exe on Windows.
+        /// \note Under shell() it names the shell instead, standing in for \c /bin/sh or
+        ///       \c cmd.exe, and there it is the ordinary way to ask for a different one.
         /// \sa args()
         Popen &executable(const std::filesystem::path &executable);
 
