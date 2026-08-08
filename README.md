@@ -56,12 +56,12 @@ Each carries its own description and an example. Build the `stdcorelib_docs` tar
 
 ## Credits
 
-Parts are derived from other projects and keep their attribution in the source:
+Code derived from these is cited where it is used:
 
 - [CPython](https://github.com/python/cpython)
 - [qtbase](https://github.com/qt/qtbase)
 - [xmake](https://github.com/xmake-io/xmake)
-- [Registry](https://github.com/m4x1m1l14n/Registry)
+- [Registry](https://github.com/m4x1m1l14n/Registry) by m4x1m1l14n
 - [LLVM](https://github.com/llvm/llvm-project)
 
 The test suites use:

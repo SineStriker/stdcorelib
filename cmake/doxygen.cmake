@@ -57,7 +57,7 @@ GENERATE_LATEX         = NO
 # headers.
 #
 # docs/doxygen holds what is written for this and nothing else, which is the landing page. Every
-# topic is defined by the header that owns it, so that the prose and what it describes cannot
+# component is defined by the header that owns it, so that the prose and what it describes cannot
 # drift apart, and that leaves only the page no header owns.
 #
 # The README is not in here. It answers what a reader arriving at the repository asks, which is
@@ -127,6 +127,11 @@ DISABLE_INDEX          = NO
 FULL_SIDEBAR           = NO
 HTML_COLORSTYLE        = LIGHT
 HTML_EXTRA_STYLESHEET  = ${_doxy_awesome_dir}/doxygen-awesome.css ${_doxy_awesome_dir}/doxygen-awesome-sidebar-only.css
+
+# Written by doxygen -l at build time and then patched, so that a \\defgroup page is called a
+# component here rather than a topic, which is what the README calls them. Generated rather than
+# committed for the same reason as the header above. See cmake/doxygen-utils/layout.cmake.
+LAYOUT_FILE            = ${CMAKE_CURRENT_BINARY_DIR}/DoxygenLayout.xml
 ")
 
 set(_doxy_file ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_Doxyfile)
@@ -136,13 +141,20 @@ file(WRITE ${_doxy_file} ${_doxy_content})
 # wants it on the path from an edit to a test run.
 add_custom_target(${PROJECT_NAME}_docs
     COMMAND ${CMAKE_COMMAND} -E make_directory ${_doxy_dir}
+
+    # The layout this Doxygen would use anyway, with the tab holding the \defgroup pages renamed.
+    # Written fresh each time rather than committed, so it cannot fall behind the tool.
+    COMMAND ${DOXYGEN_EXECUTABLE} -l ${CMAKE_CURRENT_BINARY_DIR}/DoxygenLayout.xml
+    COMMAND ${CMAKE_COMMAND} -DLAYOUT=${CMAKE_CURRENT_BINARY_DIR}/DoxygenLayout.xml
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/doxygen-utils/layout.cmake
+
     COMMAND ${DOXYGEN_EXECUTABLE} ${_doxy_file}
 
     # Undoes an escaping that Doxygen 1.17.0 applies to text it then assigns as a text node,
     # which spells every operator in the treeview out in entities. See the script for why, and
     # for why a Doxygen that does not do it is left alone.
     COMMAND ${CMAKE_COMMAND} -DNAVTREE=${_doxy_dir}/html/navtree.js
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/doxygen-navtree.cmake
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/doxygen-utils/navtree.cmake
 
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Generating documentation into ${_doxy_dir}/html"

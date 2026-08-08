@@ -24,7 +24,7 @@
 /// \li Header-only where it can be, compiled where it has to be. Nothing outside the standard
 ///     library is required.
 ///
-/// \section main_topics Topics
+/// \section main_components Components
 ///
 /// \li \ref cli "Command line" for declaring what a program takes and reading back what it was
 ///     given
