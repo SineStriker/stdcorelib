@@ -3221,6 +3221,48 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_the_usage_line) {
     BOOST_CHECK_EQUAL(formatter->inherited[0], "-V");
 }
 
+// The row rung, all three of it, and the name rung for a subcommand. Their defaults are what
+// every help text goes through and nothing had ever overridden one, which is the shape that
+// matters for a class promising each rung can be replaced on its own.
+BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_a_row) {
+    struct Rows : HelpFormatter {
+        std::string displayed(const Command &command) const override {
+            return "/" + HelpFormatter::displayed(command);
+        }
+        HelpBlock::Entry entry(const Argument &argument, const HelpSizes &sizes) const override {
+            auto res = HelpFormatter::entry(argument, sizes);
+            res.right = "arg: " + res.right;
+            return res;
+        }
+        HelpBlock::Entry entry(const Option &option, const HelpSizes &sizes) const override {
+            auto res = HelpFormatter::entry(option, sizes);
+            res.right = "opt: " + res.right;
+            return res;
+        }
+        HelpBlock::Entry entry(const Command &command, const HelpSizes &sizes) const override {
+            auto res = HelpFormatter::entry(command, sizes);
+            res.right = "cmd: " + res.right;
+            return res;
+        }
+    };
+
+    auto parser = helpTree();
+    parser.setHelpFormatter(std::make_shared<Rows>());
+    auto text = parser.parse(argv({})).helpText();
+
+    // The command row reaches the name rung through the base, so overriding either shows here.
+    BOOST_CHECK(has(text, "/copy"));
+    BOOST_CHECK(has(text, "cmd: Copy things"));
+    BOOST_CHECK(has(text, "opt: Show this help and exit"));
+    // The usage line writes the path rather than a name, so it is not touched by either.
+    BOOST_CHECK(!has(text, "/prog"));
+
+    // Arguments are a level down, the root having none.
+    text = parser.parse(argv({"copy", "a", "b"})).helpText();
+    BOOST_CHECK(has(text, "arg: Where from"));
+    BOOST_CHECK(has(text, "opt: Overwrite"));
+}
+
 // ---------------------------------------------------------------------------------------------
 // Whether a tree may be built that way at all
 // ---------------------------------------------------------------------------------------------
