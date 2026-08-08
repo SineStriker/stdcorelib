@@ -94,9 +94,10 @@ namespace stdc {
         ///
         /// One of these per type per module, reached through a pointer that is null exactly when
         /// the any is empty.
+        /// No slot for reaching the value. Getting at it is any_cast's business, and any_cast is
+        /// a template that already knows the type, so it calls any_handler<T>::value() straight.
         struct any_vtable {
             type_id (*type)();
-            void *(*value)(any_storage &) noexcept;
             void (*destroy)(any_storage &) noexcept;
             void (*copy)(const any_storage &, any_storage &);
             void (*move)(any_storage &, any_storage &) noexcept;
@@ -106,7 +107,6 @@ namespace stdc {
         const any_vtable &vtable_of() noexcept {
             static const any_vtable table{
                 [] { return type_id::of<T>(); },
-                [](any_storage &s) noexcept -> void * { return any_handler<T>::value(s); },
                 &any_handler<T>::destroy,
                 &any_handler<T>::copy,
                 &any_handler<T>::move,
