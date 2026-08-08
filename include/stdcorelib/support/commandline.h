@@ -419,7 +419,14 @@ namespace stdc::cli {
     class Option {
     public:
         /// What the option means, for the few every program has. A role brings the usual
-        /// spellings, and lets a caller ask by role rather than by spelling.
+        /// spellings and description, and lets a caller ask by role rather than by spelling.
+        ///
+        /// The set is closed. \c Help and \c Version are the two the library answers by itself.
+        /// \c Verbose and \c Debug are spellings only, and mean whatever the program reading
+        /// isRoleSet() takes them to mean.
+        ///
+        /// \note A role says nothing about scope, which is global(), nor about where an option
+        ///       sits in the help text, which is where it was declared.
         enum Role {
             NoRole,
             Debug,
