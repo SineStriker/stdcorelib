@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 
+#include <stdcorelib/scope_guard.h>
 #include <stdcorelib/support/popen.h>
 #include <stdcorelib/system.h>
 
@@ -250,6 +251,29 @@ BOOST_AUTO_TEST_CASE(test_path_lookup) {
     BOOST_REQUIRE(p.wait(Timeout));
     BOOST_CHECK_EQUAL(*p.returncode(), 0);
 }
+
+#ifdef _WIN32
+// creationflags goes straight through to CreateProcess, and CREATE_SUSPENDED is the flag whose
+// effect a parent can see without the child agreeing to anything: one that would exit at once
+// does not, because it has not been let run.
+BOOST_AUTO_TEST_CASE(test_creation_flags_reach_create_process) {
+    Popen p;
+    std::string err;
+    p.args(child_args({"exit", "0"})).creationflags(CREATE_SUSPENDED);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_CHECK(p.pid() > 0);
+
+    // Started and suspended, so there is nothing to report and nothing to wait for.
+    BOOST_CHECK(!p.poll());
+    BOOST_CHECK(!p.wait(200));
+    BOOST_CHECK(!p.returncode().has_value());
+
+    // It is still ours to end, suspended or not.
+    BOOST_CHECK(p.kill());
+    BOOST_REQUIRE(p.wait(Timeout));
+    BOOST_CHECK(p.returncode().has_value());
+}
+#endif
 
 // The getter answers with the setting rather than with what will run, so an unset one is empty
 // and not args[0]. Nothing had read it back at all.
@@ -993,6 +1017,62 @@ BOOST_AUTO_TEST_CASE(test_user_and_groups) {
 }
 
 #endif // !_WIN32
+
+#ifdef _WIN32
+// The Windows counterpart of what the section above asks on POSIX. startupinfo is handed to
+// CreateProcess, and two parts of it decide what the child starts with: the standard handles it
+// names, and the handle_list that says which of ours it may inherit.
+//
+// The streams are left alone on purpose. Setting all three sends the pipe ends through
+// STARTF_USESTDHANDLES instead, which overwrites what is given here, so this is the arrangement
+// in which what startupinfo says is what the child gets.
+BOOST_AUTO_TEST_CASE(test_startupinfo_names_the_handles_the_child_starts_with) {
+    TempFile out_file("startupinfo");
+
+    SECURITY_ATTRIBUTES inheritable{};
+    inheritable.nLength = sizeof(inheritable);
+    inheritable.bInheritHandle = TRUE;
+
+    HANDLE out = CreateFileW(out_file.path().wstring().c_str(), GENERIC_WRITE,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE, &inheritable, CREATE_ALWAYS,
+                             FILE_ATTRIBUTE_NORMAL, nullptr);
+    BOOST_REQUIRE(out != INVALID_HANDLE_VALUE);
+    bool out_open = true;
+    auto close_out = stdc::make_scope_guard([&] {
+        if (out_open) {
+            CloseHandle(out);
+        }
+    });
+
+    // A child given STARTF_USESTDHANDLES gets all three, so stdin needs one it can hold.
+    HANDLE in = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ, &inheritable, OPEN_EXISTING,
+                            FILE_ATTRIBUTE_NORMAL, nullptr);
+    BOOST_REQUIRE(in != INVALID_HANDLE_VALUE);
+    auto close_in = stdc::make_scope_guard([&] { CloseHandle(in); });
+
+    // Terminated by INVALID_HANDLE_VALUE, which is what the header says the key holds.
+    HANDLE handles[] = {in, out, INVALID_HANDLE_VALUE};
+
+    Popen::StartupInfo info{};
+    info.dwFlags = STARTF_USESTDHANDLES;
+    info.hStdInput = in;
+    info.hStdOutput = out;
+    info.hStdError = out;
+    info.lpAttributeList["handle_list"] = handles;
+
+    Popen p;
+    std::string err;
+    p.args(child_args({"argv", "through-startupinfo"})).startupinfo(info);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+    BOOST_REQUIRE(p.wait(Timeout));
+    BOOST_CHECK_EQUAL(*p.returncode(), 0);
+
+    // Closed before reading, since the child's copy was never the only one open.
+    CloseHandle(out);
+    out_open = false;
+    BOOST_CHECK_EQUAL(first_line(out_file.read()), "through-startupinfo");
+}
+#endif
 
 // ---------------------------------------------------------------------------------------------
 // The command line, and what the platform makes of it

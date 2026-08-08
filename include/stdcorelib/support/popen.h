@@ -271,9 +271,8 @@ namespace stdc {
         Popen &env(const std::optional<std::map<std::string, std::string>> &env);
 
         // @overload: env(initializer_list)
-        // The parameter is not called env, or it would shadow the overload this forwards to.
-        inline Popen &env(std::initializer_list<std::pair<const std::string, std::string>> vars) {
-            return env(std::map<std::string, std::string>(vars));
+        inline Popen &env(std::initializer_list<std::pair<const std::string, std::string>> env) {
+            return this->env(std::map<std::string, std::string>(env));
         }
 
         /// Where each standard stream goes. Inherited if left unset.
