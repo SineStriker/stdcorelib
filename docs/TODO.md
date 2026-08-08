@@ -1,12 +1,11 @@
 # Status
 
-Usable, and used, but the version number is honest: interfaces still move.
+Usable, and used. The version says 1.1, and what that promises is written down: the headers stay source compatible across a major version, and the soname carries the minor as well, so a minor bump is free to change what the binary exports.
 
 ## Before a release
 
 - Port qmsetup's `corecmd` onto `cli`. It is the one consumer this was written for, and until it builds against it the API has been validated by nothing but its own tests.
 - Nothing has ever been tagged, and there is no changelog. Both wait on a stretch with no breaking change in it, which the reader API of `ParseResult` and the signature of `VersionNumber::fromString` have not had yet.
-- The installed package config says `AnyNewerVersion`, which promises that 0.0.2 answers a request for 0.0.1. Under semver a 0.x minor is the breaking position, so that promise is wrong until 1.0. The soname already treats it as breaking.
 
 ## Known gaps
 
