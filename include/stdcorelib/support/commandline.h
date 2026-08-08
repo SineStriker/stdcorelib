@@ -1552,6 +1552,7 @@ namespace stdc::cli {
         /// \param path how it was reached, \c args[0] first
         /// \param named the options it declares that have a spelling
         /// \param globals the options in scope from the commands above it
+        /// \param sizes the indent and the width to break the line against
         /// \note Each piece stays whole, since an option and the value it takes read as two
         ///       separate things once a line break comes between them.
         virtual std::string usageText(const Command &command, const std::vector<std::string> &path,
