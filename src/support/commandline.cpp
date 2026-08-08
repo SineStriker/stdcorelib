@@ -685,13 +685,12 @@ namespace stdc::cli {
             }
         }
 
-        /// The usage line, broken into as many lines as the room a section body gets, with the
-        /// breaks written into the text. Each piece stays whole, since an option and the value
-        /// it takes read as two separate things once something comes between them.
-        std::string usageText(const HelpFormatter &formatter, const Command &command,
-                              const std::vector<std::string> &path,
-                              const std::vector<Option> &named, const std::vector<Option> &globals,
-                              int indent, int text_width) {
+        // Broken into as many lines as the room a section body gets, with the breaks written into
+        // the text.
+        std::string usage_text(const HelpFormatter &formatter, const Command &command,
+                               const std::vector<std::string> &path,
+                               const std::vector<Option> &named,
+                               const std::vector<Option> &globals, int indent, int text_width) {
             std::string head;
             for (size_t i = 0; i < path.size(); ++i) {
                 head += (i ? " " : "") + path[i];
@@ -740,6 +739,57 @@ namespace stdc::cli {
 
     }
 
+    std::string HelpFormatter::displayed(const Command &command) const {
+        return command.name();
+    }
+
+    // What an argument adds to the right hand column beyond its description. The same for an
+    // argument of a command and an argument of an option, since a default value is worth as much
+    // in either place.
+    static std::string argument_extras(const Argument &argument, const HelpSizes &sizes) {
+        auto flags = sizes.displayOptions;
+        std::string res;
+        if (flags.test_flag(Parser::ShowArgumentExpectedValues) &&
+            !argument.expectedValues().empty()) {
+            std::string words;
+            for (const auto &item : argument.expectedValues()) {
+                words += (words.empty() ? "" : ", ") + item;
+            }
+            res += " [" + words + "]";
+        }
+        if (flags.test_flag(Parser::ShowArgumentDefaultValue) && argument.hasDefaultValue()) {
+            res += " (default: " + argument.defaultValue() + ")";
+        }
+        return res;
+    }
+
+    HelpBlock::Entry HelpFormatter::entry(const Argument &argument, const HelpSizes &sizes) const {
+        return {displayed(argument), argument.description() + argument_extras(argument, sizes)};
+    }
+
+    HelpBlock::Entry HelpFormatter::entry(const Option &option, const HelpSizes &sizes) const {
+        std::string right = option.description();
+        for (const auto &argument : option.arguments()) {
+            right += argument_extras(argument, sizes);
+        }
+        if (sizes.displayOptions.test_flag(Parser::ShowOptionIsRequired) && option.isRequired()) {
+            right += " (required)";
+        }
+        return {displayed(option, true), right};
+    }
+
+    HelpBlock::Entry HelpFormatter::entry(const Command &command, const HelpSizes &) const {
+        return {displayed(command), command.description()};
+    }
+
+    std::string HelpFormatter::usageText(const Command &command,
+                                         const std::vector<std::string> &path,
+                                         const std::vector<Option> &named,
+                                         const std::vector<Option> &globals,
+                                         const HelpSizes &sizes) const {
+        return usage_text(*this, command, path, named, globals, sizes.indent, sizes.textWidth);
+    }
+
     std::vector<HelpBlock> HelpFormatter::blocks(const ParseResult &result,
                                                  const HelpSizes &sizes) const {
         if (!result.command()) {
@@ -749,40 +799,11 @@ namespace stdc::cli {
         const auto &catalogue = command.catalogue();
         auto flags = sizes.displayOptions;
 
-        // What an argument adds to the right hand column beyond its description. The same for an
-        // argument of a command and an argument of an option, since a default value is worth as
-        // much in either place.
-        auto extras = [flags](const Argument &argument) {
-            std::string res;
-            if (flags.test_flag(Parser::ShowArgumentExpectedValues) &&
-                !argument.expectedValues().empty()) {
-                std::string words;
-                for (const auto &item : argument.expectedValues()) {
-                    words += (words.empty() ? "" : ", ") + item;
-                }
-                res += " [" + words + "]";
-            }
-            if (flags.test_flag(Parser::ShowArgumentDefaultValue) && argument.hasDefaultValue()) {
-                res += " (default: " + argument.defaultValue() + ")";
-            }
-            return res;
-        };
-        auto argument_line = [this, extras](const Argument &argument) {
-            return HelpBlock::Entry{displayed(argument), argument.description() + extras(argument)};
-        };
-        auto option_line = [this, flags, extras](const Option &option) {
-            std::string right = option.description();
-            for (const auto &argument : option.arguments()) {
-                right += extras(argument);
-            }
-            if (flags.test_flag(Parser::ShowOptionIsRequired) && option.isRequired()) {
-                right += " (required)";
-            }
-            return HelpBlock::Entry{displayed(option, true), right};
-        };
-        auto command_line = [](const Command &item) {
-            return HelpBlock::Entry{item.name(), item.description()};
-        };
+        // A row at a time, through the rung that makes one, so that a formatter changing what a
+        // row says does not have to take over this whole function to do it.
+        auto argument_line = [this, &sizes](const Argument &item) { return entry(item, sizes); };
+        auto option_line = [this, &sizes](const Option &item) { return entry(item, sizes); };
+        auto command_line = [this, &sizes](const Command &item) { return entry(item, sizes); };
 
         // An option with no spelling at all has nothing to print and nothing to be looked up by,
         // and token() is front() on an empty vector. A default constructed Option is one, so a
@@ -834,8 +855,8 @@ namespace stdc::cli {
                 }
                 case HelpBlock::Usage: {
                     auto block = blockLike(slot, "Usage");
-                    block.text = usageText(*this, command, result.commandPath(), named, globals,
-                                           sizes.indent, sizes.textWidth);
+                    block.text =
+                        usageText(command, result.commandPath(), named, globals, sizes);
                     push(std::move(block));
                     break;
                 }

@@ -1529,6 +1529,36 @@ namespace stdc::cli {
         ///       that one reaches here too.
         virtual std::string displayed(const Option &option, bool allSpellings) const;
 
+        /// How a subcommand is written where it is named, which is its name.
+        virtual std::string displayed(const Command &command) const;
+
+        /// One row of a two column list: what displayed() writes on the left, and on the right
+        /// the description together with whatever the display options add to it, a default value
+        /// or the set of values expected or a mark that it has to be given.
+        ///
+        /// \note The left column is asked of displayed(), so overriding that one reaches here
+        ///       too. Override this where the right column is what should differ.
+        virtual HelpBlock::Entry entry(const Argument &argument, const HelpSizes &sizes) const;
+
+        // @overload: entry
+        virtual HelpBlock::Entry entry(const Option &option, const HelpSizes &sizes) const;
+
+        // @overload: entry
+        virtual HelpBlock::Entry entry(const Command &command, const HelpSizes &sizes) const;
+
+        /// The usage line, already broken across as many lines as it needs.
+        ///
+        /// \param command the one that was reached
+        /// \param path how it was reached, \c args[0] first
+        /// \param named the options it declares that have a spelling
+        /// \param globals the options in scope from the commands above it
+        /// \note Each piece stays whole, since an option and the value it takes read as two
+        ///       separate things once a line break comes between them.
+        virtual std::string usageText(const Command &command, const std::vector<std::string> &path,
+                                      const std::vector<Option> &named,
+                                      const std::vector<Option> &globals,
+                                      const HelpSizes &sizes) const;
+
         /// What the help text is made of, in the order ParseResult::helpLayout() asks for and
         /// with the groups a CommandCatalogue asks for already split.
         virtual std::vector<HelpBlock> blocks(const ParseResult &result,
