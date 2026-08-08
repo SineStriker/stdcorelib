@@ -431,7 +431,13 @@ namespace stdc {
         /// \name Properties
         /// @{
 
+        /// What executable() was set to, empty where it was not set.
+        ///
+        /// Not \c args()[0] in that case, on purpose. Which file runs is worked out by start(),
+        /// along \c PATH where \c args()[0] carries no separator, so answering with it here would
+        /// look like a resolution that has not happened yet.
         const std::filesystem::path &executable() const;
+
         array_view<std::string> args() const;
 
         /// The pipe for that stream. Not open unless it was set to \c PIPE.

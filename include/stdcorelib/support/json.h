@@ -144,17 +144,17 @@ namespace stdc {
         /// Returns the serialized JSON text of this value.
         ///
         /// \param indent The number of spaces to indent the JSON text. If negative, no indentation
-        /// is performed.
+        ///        is performed.
         std::string toJson(int indent = -1) const;
 
         /// Returns the serialized JsonValue instance of the given JSON text.
         ///
         /// \param json The text to parse.
         /// \param ignoreComments Whether comments should be ignored and treated like whitespace
-        /// (true) or yield a parse error (false)
+        ///        (true) or yield a parse error (false)
         /// \param error Set to why the text was rejected, and left alone otherwise. A rejected
-        /// document and the text \c null both come back as a null value, so this is what tells
-        /// them apart, which means it has to start out empty.
+        ///        document and the text \c null both come back as a null value, so this is what
+        ///        tells them apart, which means it has to start out empty.
         static JsonValue fromJson(std::string_view json, bool ignoreComments,
                                   std::string *error = nullptr);
 

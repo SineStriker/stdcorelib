@@ -32,7 +32,7 @@ namespace {
     }
 
     int usage() {
-        std::fputs("usage: test_child argv|exit|fill|cat ...\n", stderr);
+        std::fputs("usage: test_child arg0|argv|exit|fill|cat ...\n", stderr);
         return 2;
     }
 
@@ -59,6 +59,15 @@ int main(int argc, char *argv[]) {
     }
 
     std::string mode = argv[1];
+
+    // The name this process was given, which is not the file it was loaded from when the parent
+    // set those apart.
+    if (mode == "arg0") {
+        std::fwrite(argv[0], 1, std::strlen(argv[0]), stdout);
+        std::fputc('\n', stdout);
+        std::fflush(stdout);
+        return 0;
+    }
 
     // Every argument after the mode, one per line. What arrives here is what the parent's
     // quoting produced and the runtime parsed back.

@@ -251,6 +251,54 @@ BOOST_AUTO_TEST_CASE(test_path_lookup) {
     BOOST_CHECK_EQUAL(*p.returncode(), 0);
 }
 
+// The getter answers with the setting rather than with what will run, so an unset one is empty
+// and not args[0]. Nothing had read it back at all.
+BOOST_AUTO_TEST_CASE(test_the_executable_getter_answers_with_the_setting) {
+    Popen p;
+    BOOST_CHECK(p.executable().empty());
+
+    // Still empty with args in place, which is the case worth pinning: args[0] is what runs
+    // here, and the getter does not say so.
+    p.args({"echo", "found"});
+    BOOST_CHECK(p.executable().empty());
+    BOOST_CHECK_EQUAL(p.args()[0], "echo");
+
+    // And set, it comes back as written.
+    p.executable("/bin/busybox");
+    BOOST_CHECK(p.executable() == std::filesystem::path("/bin/busybox"));
+    BOOST_CHECK_EQUAL(p.args()[0], "echo");
+}
+
+// The point of executable(): the file that runs and the name the program is given are two
+// separate things, which is what execve takes and what CreateProcess takes. Only the failing
+// half of this was covered, so nothing said a child really answers with the name it was handed
+// rather than with the file it came from.
+BOOST_AUTO_TEST_CASE(test_a_child_is_given_the_name_and_not_the_file) {
+    // Without it the two are the same, since args[0] does both jobs.
+    {
+        Popen p;
+        std::string err;
+        p.args(child_args({"arg0"})).stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, _] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(first_line(out), TEST_CHILD_PATH);
+    }
+
+    // With it they part: the loaded file is the helper, and what it reads back is the name.
+    {
+        Popen p;
+        std::string err;
+        p.executable(TEST_CHILD_PATH)
+            .args({"a-name-of-its-own", "arg0"})
+            .stdout_(Popen::PIPE);
+        BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+        auto [out, _] = p.communicate({}, Timeout);
+        BOOST_CHECK_EQUAL(first_line(out), "a-name-of-its-own");
+        BOOST_REQUIRE(p.wait(Timeout));
+        BOOST_CHECK_EQUAL(*p.returncode(), 0);
+    }
+}
+
 // wait() used to close the pipes along with the process handle, which threw away the output
 // before anyone could read it.
 BOOST_AUTO_TEST_CASE(test_output_survives_wait) {
