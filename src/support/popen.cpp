@@ -385,15 +385,15 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::executable(const std::filesystem::path &executable) {
+    Popen &Popen::executable(std::filesystem::path executable) {
         stdc_impl_t;
-        impl.executable = executable;
+        impl.executable = std::move(executable);
         return *this;
     }
 
-    Popen &Popen::args(const std::vector<std::string> &args) {
+    Popen &Popen::args(std::vector<std::string> args) {
         stdc_impl_t;
-        impl.args = args;
+        impl.args = std::move(args);
         return *this;
     }
 
@@ -403,15 +403,15 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::cwd(const std::filesystem::path &cwd) {
+    Popen &Popen::cwd(std::filesystem::path cwd) {
         stdc_impl_t;
-        impl.cwd = cwd;
+        impl.cwd = std::move(cwd);
         return *this;
     }
 
-    Popen &Popen::env(const std::optional<std::map<std::string, std::string>> &env) {
+    Popen &Popen::env(std::optional<std::map<std::string, std::string>> env) {
         stdc_impl_t;
-        impl.env = env;
+        impl.env = std::move(env);
         return *this;
     }
 
@@ -459,9 +459,9 @@ namespace stdc {
     }
 
 #ifdef _WIN32
-    Popen &Popen::startupinfo(const std::optional<StartupInfo> &startupinfo) {
+    Popen &Popen::startupinfo(std::optional<StartupInfo> startupinfo) {
         stdc_impl_t;
-        impl.startupinfo = startupinfo;
+        impl.startupinfo = std::move(startupinfo);
         return *this;
     }
 
@@ -471,9 +471,9 @@ namespace stdc {
         return *this;
     }
 #else
-    Popen &Popen::preexec_fn(const std::function<void()> &preexec_fn) {
+    Popen &Popen::preexec_fn(std::function<void()> preexec_fn) {
         stdc_impl_t;
-        impl.preexec_fn = preexec_fn;
+        impl.preexec_fn = std::move(preexec_fn);
         return *this;
     }
 
@@ -489,9 +489,9 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::pass_fds(const std::vector<int> &pass_fds) {
+    Popen &Popen::pass_fds(std::vector<int> pass_fds) {
         stdc_impl_t;
-        impl.pass_fds = pass_fds;
+        impl.pass_fds = std::move(pass_fds);
         return *this;
     }
 
@@ -501,9 +501,9 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::extra_groups(const std::vector<int> &extra_groups) {
+    Popen &Popen::extra_groups(std::vector<int> extra_groups) {
         stdc_impl_t;
-        impl.extra_groups = extra_groups;
+        impl.extra_groups = std::move(extra_groups);
         return *this;
     }
 

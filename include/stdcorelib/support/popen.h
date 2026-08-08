@@ -217,7 +217,7 @@ namespace stdc {
         /// \note Under shell() it names the shell instead, standing in for \c /bin/sh or
         ///       \c cmd.exe, and there it is the ordinary way to ask for a different one.
         /// \sa args()
-        Popen &executable(const std::filesystem::path &executable);
+        Popen &executable(std::filesystem::path executable);
 
         /// The argument vector, \c argv[0] included.
         ///
@@ -228,7 +228,7 @@ namespace stdc {
         /// \note Quoting is handled here. An argument with a space in it, \c args[0] included,
         ///       arrives at the program as one argument on either platform.
         /// \sa executable()
-        Popen &args(const std::vector<std::string> &args);
+        Popen &args(std::vector<std::string> args);
 
         /// Whether \a args is short enough for the system to start a program with.
         ///
@@ -259,7 +259,7 @@ namespace stdc {
         Popen &shell(bool shell);
 
         /// The child's working directory. Inherited if left unset.
-        Popen &cwd(const std::filesystem::path &cwd);
+        Popen &cwd(std::filesystem::path cwd);
 
         /// The child's environment, which replaces ours rather than adding to it.
         ///
@@ -268,7 +268,7 @@ namespace stdc {
         ///        same thing.
         /// \note Replacing it drops \c PATH along with everything else, so a bare program name
         ///       will not be found unless \a env carries one.
-        Popen &env(const std::optional<std::map<std::string, std::string>> &env);
+        Popen &env(std::optional<std::map<std::string, std::string>> env);
 
         // @overload: env(initializer_list)
         inline Popen &env(std::initializer_list<std::pair<const std::string, std::string>> env) {
@@ -320,15 +320,15 @@ namespace stdc {
         ///       as a reference to the caller's object.
         /// \note An \c lpAttributeList carrying \c handle_list decides for itself which handles
         ///       the child inherits, so it overrides close_fds() and says so in a warning.
-        Popen &startupinfo(const std::optional<StartupInfo> &startupinfo);
-        Popen &creationflags(int creationflags);            // windows only
+        Popen &startupinfo(std::optional<StartupInfo> startupinfo);
+        Popen &creationflags(int creationflags); // windows only
 #else
         /// Runs in the child after the pipes are in place and before exec.
         ///
         /// \warning The child has one thread, the one that called \c fork. Any lock another
         ///          thread held at that moment is still held and will never be released, so
         ///          allocating or locking here can deadlock the child outright.
-        Popen &preexec_fn(const std::function<void()> &preexec_fn); // unix only
+        Popen &preexec_fn(std::function<void()> preexec_fn); // unix only
 
         /// Puts the signal dispositions this process changed back to their defaults, so the
         /// child does not inherit an ignored \c SIGPIPE it never asked for. On by default.
@@ -341,15 +341,15 @@ namespace stdc {
         /// Descriptors to leave open across exec despite close_fds().
         ///
         /// \note Setting this forces close_fds() on, since the two disagree otherwise.
-        Popen &pass_fds(const std::vector<int> &pass_fds); // unix only
+        Popen &pass_fds(std::vector<int> pass_fds); // unix only
 
         /// Credentials for the child.
         ///
         /// \pre The calling process is privileged. start() fails with \c EPERM otherwise.
         /// \note extra_groups() replaces the supplementary group list rather than adding to it.
-        Popen &group(int group);                                   // unix only
-        Popen &extra_groups(const std::vector<int> &extra_groups); // unix only
-        Popen &user(int user);                                     // unix only
+        Popen &group(int group);                            // unix only
+        Popen &extra_groups(std::vector<int> extra_groups); // unix only
+        Popen &user(int user);                              // unix only
         /// The name is copied and need not outlive this call.
         Popen &user(const char *user); // unix only
 
