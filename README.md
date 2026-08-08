@@ -61,7 +61,6 @@ Code derived from these is cited where it is used:
 - [CPython](https://github.com/python/cpython)
 - [qtbase](https://github.com/qt/qtbase)
 - [xmake](https://github.com/xmake-io/xmake)
-- [Registry](https://github.com/m4x1m1l14n/Registry) by m4x1m1l14n
 - [LLVM](https://github.com/llvm/llvm-project)
 
 The test suites use:
