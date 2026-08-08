@@ -354,6 +354,7 @@ namespace stdc::cli {
                 (void) item;
             }
         }
+
     public:
         /// Whether \a argument may be added after \a arguments, which is what every place that
         /// takes one asserts.
