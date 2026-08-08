@@ -1,16 +1,12 @@
 # Status
 
-Usable, and used. The version says 1.1, and what that promises is written down: the headers stay source compatible across a major version, and the soname carries the minor as well, so a minor bump is free to change what the binary exports.
-
-## Before a release
-
-- Port qmsetup's `corecmd` onto `cli`. It is the one consumer this was written for, and until it builds against it the API has been validated by nothing but its own tests.
-- Nothing has ever been tagged, and there is no changelog. Both wait on a stretch with no breaking change in it, which the reader API of `ParseResult` and the signature of `VersionNumber::fromString` have not had yet.
+Released as v1.1.0.0, and used by qmsetup's `qmcorecmd`. What the version promises is written down: the headers stay source compatible across a major version, and the soname carries the minor as well, so a minor bump is free to change what the binary exports.
 
 ## Known gaps
 
 - The registry code assumes a little-endian host
 - `support/commandline.h` is over a thousand lines of inline code, paid for by every translation unit that includes it
+- `processMemoryUsage()` in `src/system.cpp` has never had a caller. It is `[[maybe_unused]] static`, is declared in no header, and carries `<Psapi.h>` and `<mach/mach.h>` in with it. Either delete it or promote it to `system::` with a comment and a case, since nothing can cover it as it stands.
 
 ## Wanted
 
