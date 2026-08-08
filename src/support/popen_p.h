@@ -54,7 +54,7 @@ namespace stdc {
         int pipesize = -1;
 
 #ifdef _WIN32
-        const StartupInfo *startupinfo = nullptr;
+        std::optional<StartupInfo> startupinfo;
         int creationflags = 0;
 #else
         std::function<void()> preexec_fn;

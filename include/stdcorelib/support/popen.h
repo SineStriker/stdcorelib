@@ -313,7 +313,15 @@ namespace stdc {
         Popen &pipesize(int pipesize); // linux only (ignored on other platforms)
 
 #ifdef _WIN32
-        Popen &startupinfo(const StartupInfo *startupinfo); // windows only
+        /// The \c STARTUPINFO fields to start the child with, and the attributes to give it.
+        ///
+        /// \param startupinfo what to pass \c CreateProcess, or \c std::nullopt to let this
+        ///        decide, which is what the stream settings above already do
+        /// \note Windows only, and taken by value: what is given here is copied rather than kept
+        ///       as a reference to the caller's object.
+        /// \note An \c lpAttributeList carrying \c handle_list decides for itself which handles
+        ///       the child inherits, so it overrides close_fds() and says so in a warning.
+        Popen &startupinfo(const std::optional<StartupInfo> &startupinfo);
         Popen &creationflags(int creationflags);            // windows only
 #else
         /// Runs in the child after the pipes are in place and before exec.
