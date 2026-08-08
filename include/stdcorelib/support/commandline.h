@@ -1549,15 +1549,14 @@ namespace stdc::cli {
 
         /// The usage line, already broken across as many lines as it needs.
         ///
-        /// \param command the one that was reached
+        /// \param command the one that was reached, which is where its own options come from
         /// \param path how it was reached, \c args[0] first
-        /// \param named the options it declares that have a spelling
-        /// \param globals the options in scope from the commands above it
+        /// \param globals the options in scope from the commands above it, which is the one
+        ///        thing here that \a command cannot answer for
         /// \param sizes the indent and the width to break the line against
         /// \note Each piece stays whole, since an option and the value it takes read as two
         ///       separate things once a line break comes between them.
         virtual std::string usageText(const Command &command, const std::vector<std::string> &path,
-                                      const std::vector<Option> &named,
                                       const std::vector<Option> &globals,
                                       const HelpSizes &sizes) const;
 

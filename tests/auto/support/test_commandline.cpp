@@ -3183,6 +3183,44 @@ BOOST_AUTO_TEST_CASE(test_a_formatter_can_lay_the_whole_page_out) {
     BOOST_CHECK_EQUAL(parser.parse(argv({})).helpText(), "1:0 2:0 3:1 4:2 7:0 ");
 }
 
+// The usage line on its own, and what it is handed. The command answers for its own options and
+// for its arguments and subcommands, so the only thing passed alongside is what the commands
+// above left in scope, which nothing reachable from the command could say.
+BOOST_AUTO_TEST_CASE(test_a_formatter_can_change_the_usage_line) {
+    struct Synopsis : HelpFormatter {
+        mutable std::vector<std::string> inherited;
+        std::string usageText(const Command &command, const std::vector<std::string> &path,
+                              const std::vector<Option> &globals,
+                              const HelpSizes &sizes) const override {
+            inherited.clear();
+            for (const auto &option : globals) {
+                inherited.push_back(option.token());
+            }
+            return "SYNOPSIS " + std::to_string(path.size()) + "\n" +
+                   HelpFormatter::usageText(command, path, globals, sizes);
+        }
+    };
+
+    auto formatter = std::make_shared<Synopsis>();
+    auto parser = helpTree();
+    parser.setHelpFormatter(formatter);
+
+    // At the root the path is the program alone and nothing is inherited.
+    auto text = parser.parse(argv({})).helpText();
+    BOOST_CHECK(has(text, "SYNOPSIS 1\n"));
+    BOOST_CHECK(has(text, "prog [options] [commands]"));
+    BOOST_CHECK(formatter->inherited.empty());
+
+    // A level down the path is two words, and the global the root declared is in scope. It is
+    // still written on the usage line, which is what says the base was reached through the
+    // override rather than instead of it.
+    text = parser.parse(argv({"copy", "a", "b"})).helpText();
+    BOOST_CHECK(has(text, "SYNOPSIS 2\n"));
+    BOOST_CHECK(has(text, "prog copy [options]"));
+    BOOST_REQUIRE_EQUAL(formatter->inherited.size(), 1u);
+    BOOST_CHECK_EQUAL(formatter->inherited[0], "-V");
+}
+
 // ---------------------------------------------------------------------------------------------
 // Whether a tree may be built that way at all
 // ---------------------------------------------------------------------------------------------

@@ -614,6 +614,17 @@ namespace stdc::cli {
 
     namespace {
 
+        /// Whether \a option can be printed and typed at all.
+        ///
+        /// One with no spelling has nothing to show and nothing to be looked up by, and
+        /// token() is front() on an empty vector. Command::addOption() asserts on one, so this
+        /// only answers false in a release build, where the assert is gone and the option is in
+        /// the tree regardless. Asked wherever an option's name is read, so the two places
+        /// cannot come to disagree about what counts.
+        inline bool spelled(const Option &option) {
+            return !option.tokens().empty();
+        }
+
         /// A block that prints the way \a slot asks for, with \a title over it.
         HelpBlock blockLike(const HelpBlock &slot, std::string title) {
             HelpBlock res;
@@ -689,7 +700,6 @@ namespace stdc::cli {
         // the text.
         std::string usage_text(const HelpFormatter &formatter, const Command &command,
                                const std::vector<std::string> &path,
-                               const std::vector<Option> &named,
                                const std::vector<Option> &globals, int indent, int text_width) {
             std::string head;
             for (size_t i = 0; i < path.size(); ++i) {
@@ -701,14 +711,21 @@ namespace stdc::cli {
             // whatever is left, and goes away when nothing is.
             std::vector<std::string> parts;
             size_t optional_count = 0;
-            for (const auto *list : {&named, &globals}) {
-                for (const auto &option : *list) {
-                    if (option.isRequired()) {
-                        parts.push_back(formatter.displayed(option, false));
-                    } else {
-                        optional_count++;
-                    }
+            const auto &take = [&](const Option &option) {
+                if (!spelled(option)) {
+                    return;
                 }
+                if (option.isRequired()) {
+                    parts.push_back(formatter.displayed(option, false));
+                } else {
+                    optional_count++;
+                }
+            };
+            for (const auto &option : command.options()) {
+                take(option);
+            }
+            for (const auto &option : globals) {
+                take(option);
             }
             if (optional_count > 0) {
                 parts.push_back("[options]");
@@ -784,10 +801,9 @@ namespace stdc::cli {
 
     std::string HelpFormatter::usageText(const Command &command,
                                          const std::vector<std::string> &path,
-                                         const std::vector<Option> &named,
                                          const std::vector<Option> &globals,
                                          const HelpSizes &sizes) const {
-        return usage_text(*this, command, path, named, globals, sizes.indent, sizes.textWidth);
+        return usage_text(*this, command, path, globals, sizes.indent, sizes.textWidth);
     }
 
     std::vector<HelpBlock> HelpFormatter::blocks(const ParseResult &result,
@@ -805,13 +821,12 @@ namespace stdc::cli {
         auto option_line = [this, &sizes](const Option &item) { return entry(item, sizes); };
         auto command_line = [this, &sizes](const Command &item) { return entry(item, sizes); };
 
-        // An option with no spelling at all has nothing to print and nothing to be looked up by,
-        // and token() is front() on an empty vector. A default constructed Option is one, so a
-        // tree can hold one and the help text is not the place to find that out.
-        std::vector<Option> named;
+        // Only the ones that can be printed, which is spelled() and why. The help text is not
+        // the place to find out that a tree holds an option nobody can type.
+        std::vector<Option> own;
         for (const auto &item : command.options()) {
-            if (!item.tokens().empty()) {
-                named.push_back(item);
+            if (spelled(item)) {
+                own.push_back(item);
             }
         }
         // What the commands above declared global is in scope here and is demanded here, so it is
@@ -820,7 +835,7 @@ namespace stdc::cli {
         // options and have nothing to say about these.
         std::vector<Option> globals;
         for (const auto *option : result.inheritedOptions()) {
-            if (!option->tokens().empty()) {
+            if (spelled(*option)) {
                 globals.push_back(*option);
             }
         }
@@ -855,8 +870,7 @@ namespace stdc::cli {
                 }
                 case HelpBlock::Usage: {
                     auto block = blockLike(slot, "Usage");
-                    block.text =
-                        usageText(command, result.commandPath(), named, globals, sizes);
+                    block.text = usageText(command, result.commandPath(), globals, sizes);
                     push(std::move(block));
                     break;
                 }
@@ -868,7 +882,7 @@ namespace stdc::cli {
                 }
                 case HelpBlock::Options: {
                     pushAll(grouped(
-                        named, catalogue.optionGroups(), slot, "Options",
+                        own, catalogue.optionGroups(), slot, "Options",
                         [](const Option &item) { return item.token(); }, option_line));
                     break;
                 }
