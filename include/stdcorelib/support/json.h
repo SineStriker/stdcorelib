@@ -162,11 +162,11 @@ namespace stdc {
         static JsonValue fromCbor(array_view<uint8_t> cbor, std::string *error = nullptr);
 
     private:
-        /// The alternatives, all trivially copyable, so the payload moves as one object rather than
-        /// one member at a time. Which member is live is \c _type and nothing else.
-        ///
-        /// Anything larger than a scalar sits behind a pointer this owns, and is copied when the
-        /// value is. \c std::string alone is wider than everything here put together.
+        // The alternatives, all trivially copyable, so the payload moves as one object rather
+        // than one member at a time. Which member is live is _type and nothing else.
+        //
+        // Anything larger than a scalar sits behind a pointer this owns, and is copied when the
+        // value is. A std::string alone is wider than everything here put together.
         union Payload {
             bool b;
             int64_t i;
@@ -181,7 +181,7 @@ namespace stdc {
         Type _type;
         Payload _p;
 
-        /// Frees what the live alternative owns, if it owns anything, and becomes null.
+        // Frees what the live alternative owns, if it owns anything, and becomes null.
         void reset() noexcept;
         void copyFrom(const JsonValue &RHS);
     };

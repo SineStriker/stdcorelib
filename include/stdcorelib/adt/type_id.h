@@ -148,8 +148,8 @@ namespace stdc {
         explicit type_id(detail::type_entry *entry) noexcept : _entry(entry) {
         }
 
-        /// The one address standing for this type, which is what a hash has to be taken over so
-        /// that two ids comparing equal also hash equal.
+        // The one address standing for this type, which is what a hash has to be taken over so
+        // that two ids comparing equal also hash equal.
         const void *canonical() const {
             return _entry ? detail::resolve_type_id(*_entry) : nullptr;
         }

@@ -343,7 +343,7 @@ namespace stdc::cli {
         }
 
     private:
-        /// Any of the three may be written first, so each calls what it can now check.
+        // Any of the three may be written first, so each calls what it can now check.
         inline void assertExpectedMatchType() const {
             if (!_type.check) {
                 return;
@@ -868,6 +868,7 @@ namespace stdc::cli {
     public:
         /// How many times the option was given, which is at least once.
         int count() const;
+
         /// The option itself.
         const Option *option() const;
 
@@ -1201,6 +1202,10 @@ namespace stdc::cli {
         /// \code
         ///   if (auto force = result.option("-f")) { ... }
         /// \endcode
+        ///
+        /// \note What comes back reads out of this result rather than copying, so it is good only
+        ///       while this one is. What that rules out is on OptionResult.
+        /// \sa OptionResult
         std::optional<OptionResult> option(std::string_view token) const;
 
         /// The \a index'th positional argument of the command that was reached, as text, or

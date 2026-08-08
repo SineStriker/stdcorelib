@@ -3394,6 +3394,34 @@ BOOST_AUTO_TEST_CASE(test_the_default_width_is_asked_for) {
 // points into the result's own storage, and the shape below is what a caller writes without
 // thinking about it. With a view for a default it read freed storage, which the address
 // sanitizer says outright and an ordinary build says by printing whatever was there.
+// The other half of the split OptionResult warns about: the handle borrows from the result, and
+// what is read through it owns. So a value taken while the result is alive is still good after
+// both are gone, and only the handle itself is what must not outlive anything.
+BOOST_AUTO_TEST_CASE(test_a_read_through_an_option_handle_owns_what_it_answers) {
+    Parser parser(Command("prog").addOption(Option({"-j"}, "Jobs").arg("n")));
+
+    std::optional<int> jobs;
+    std::optional<std::string> raw;
+    std::vector<std::string> all;
+    {
+        auto result = parser.parse(argv({"-j", "8"}));
+        auto handle = result.option("-j");
+        BOOST_REQUIRE(handle);
+        BOOST_CHECK_EQUAL(handle->count(), 1);
+
+        jobs = handle->value<int>();
+        raw = handle->value<std::string>();
+        auto values = handle->values<std::string>();
+        BOOST_REQUIRE(values);
+        all = *values;
+    }
+
+    BOOST_CHECK(jobs == 8);
+    BOOST_CHECK(raw == std::string("8"));
+    BOOST_REQUIRE_EQUAL(all.size(), 1u);
+    BOOST_CHECK_EQUAL(all[0], "8");
+}
+
 BOOST_AUTO_TEST_CASE(test_a_read_outlives_the_result_it_came_from) {
     Parser parser(Command("prog")
                       .addArgument(Argument("source"))

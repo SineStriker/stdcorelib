@@ -306,7 +306,7 @@ namespace stdc {
                 AT::deallocate(m_alloc, m_begin, m_capacity);
         }
 
-        /// Registers the derived object's inline buffer. Call once, right after construction.
+        // Registers the derived object's inline buffer. Call once, right after construction.
         void adopt_inline_buffer(T *buffer, size_type capacity) {
             m_begin = buffer;
             m_capacity = capacity;

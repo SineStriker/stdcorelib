@@ -225,9 +225,8 @@ namespace stdc {
         }
 
     private:
-        /// Takes the value out of \a from, leaving it empty.
-        ///
-        /// \pre this holds nothing
+        // Takes the value out of from, leaving it empty. Only correct on an any that holds
+        // nothing itself.
         void adopt(any &from) noexcept {
             if (from._vtable) {
                 from._vtable->move(from._storage, _storage);
