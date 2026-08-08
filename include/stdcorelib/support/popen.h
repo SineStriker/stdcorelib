@@ -87,6 +87,10 @@ namespace stdc {
     /// was meant rather than in the system code page. What executable() and cwd() take is a
     /// \c std::filesystem::path, which carries its own encoding and is passed on as it is.
     ///
+    /// \note The three stream names end in an underscore because \c stdin, \c stdout and
+    ///       \c stderr are macros, which no namespace or class can hide. Everything else here
+    ///       is spelled the way Python spells it.
+    ///
     /// \warning Reading a pipe by hand rather than through communicate() works for one pipe,
     ///          not for two. A pipe blocks its writer once full, so a child filling stderr while
     ///          the parent is still draining stdout waits forever. communicate() exists to get
