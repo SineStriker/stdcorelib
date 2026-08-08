@@ -83,6 +83,22 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure --no-tests=error
 
+      # user(), group() and extra_groups() need privilege to do anything, so the case that
+      # covers them asks who it is: as root it checks the credentials the child ended up with,
+      # and as anyone else it checks that start() refuses in an orderly way and reaps the child
+      # it had already forked. The runner is not root, so without this the half that proves the
+      # setters work would never run anywhere.
+      #
+      # That one case rather than the suite. Being root changes what several of the others are
+      # asking about, the descriptor count and the umask among them.
+      #
+      # Linux only. The case writes 65534 and "0 65534" into its expectations, and macOS answers
+      # id -u nobody with 4294967294 and id -G nobody with "4294967294 12 61 100 701", so it is
+      # wrong there before privilege comes into it. Measured on the machine.
+      - name: Test as root
+        if: startsWith(matrix.platform, 'linux')
+        run: sudo ./build/out/bin/test_auto --run_test=test_popen/test_user_and_groups
+
   # Exceptions switched off. Four platforms rather than five, the fifth being linux-clang, whose
   # frontend and standard library are both covered by one of the others.
   #
