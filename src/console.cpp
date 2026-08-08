@@ -714,6 +714,12 @@ namespace stdc {
             return console::vfprintf(nostyle, nocolor, nocolor, stdout, fmt, args);
         }
 
+        // The ${...} markup the cfputs family reads is after xmake's, which spells a foreground
+        // ${red}, a background ${onred}, and the way back ${clear}. Ours writes a background
+        // ${@red} and only ${reset}, and takes the 8 colors and the attribute words rather than
+        // the 256 and true color forms.
+        //
+        // https://github.com/xmake-io/xmake/blob/v2.9.9/xmake/core/base/colors.lua
         static int cfputs_get_color_name(const std::string_view &var) {
             if (var == "red") {
                 return red;

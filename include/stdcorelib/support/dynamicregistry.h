@@ -23,21 +23,8 @@ namespace stdc {
 
     namespace detail {
 
-        /// The one object this process keeps under \a name, built by \a create the first time
-        /// anybody asks for it.
-        ///
-        /// A registry declared in a header cannot hold its own singleton: a function-local static
-        /// in a template has one copy per module, so a plugin would register into a table the
-        /// host never reads. What is exported here is a function, and a function belongs to the
-        /// library, so every module that shares one copy of it resolves to the same object no
-        /// matter what its own symbols are doing.
-        ///
-        /// \note What is built here is never destroyed, on purpose. Whichever module asks first
-        ///       is the one that builds it, so a destructor would have to be called through a
-        ///       pointer into that module, and a plugin that asked first and then unloaded would
-        ///       take the process down at exit. Nothing is gained by running it either: the
-        ///       memory goes back at exit regardless, and the entries a destructor would release
-        ///       may belong to code that has already been unloaded.
+        // The one object this process keeps under name, built by create the first time anybody
+        // asks for it. Why it is a function rather than a static is in the cpp.
         STDC_EXPORT void *shared_instance(std::string_view name, void *(*create)());
 
     }

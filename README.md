@@ -54,9 +54,7 @@ target_link_libraries(myapp PRIVATE stdcorelib::stdcorelib)
 
 Each carries its own description and an example. Build the `stdcorelib_docs` target with `-DSTDC_BUILD_DOCS=ON`, or read the headers, which is where that text lives.
 
-## License
-
-MIT. See [LICENSE](LICENSE).
+## Credits
 
 Parts are derived from other projects and keep their attribution in the source:
 
@@ -66,4 +64,15 @@ Parts are derived from other projects and keep their attribution in the source:
 - [Registry](https://github.com/m4x1m1l14n/Registry)
 - [LLVM](https://github.com/llvm/llvm-project)
 
-The generated documentation is styled with [doxygen-awesome-css](https://github.com/jothepro/doxygen-awesome-css), MIT, fetched at configure time by `cmake/doxygen.cmake` when `STDC_BUILD_DOCS` is on, pinned to a tag and checked against a hash. It is a stylesheet: nothing in the library uses it.
+The test suites use:
+
+- [Boost.Test](https://www.boost.org/users/history/test.html)
+
+The documentation is built and styled with:
+
+- [Doxygen](https://www.doxygen.nl/)
+- [doxygen-awesome-css](https://github.com/jothepro/doxygen-awesome-css)
+
+## License
+
+MIT. See [LICENSE](LICENSE).

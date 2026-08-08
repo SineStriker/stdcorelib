@@ -867,6 +867,7 @@ namespace stdc {
         return dirs;
     }
 
+    // https://github.com/llvm/llvm-project/blob/llvmorg-21.1.8/llvm/lib/Support/Unix/Program.inc#L549
     bool Popen::commandLineFits(const std::vector<std::string> &args) {
         static const long arg_max = sysconf(_SC_ARG_MAX);
         if (arg_max == -1) {
