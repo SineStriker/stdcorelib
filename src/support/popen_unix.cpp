@@ -925,6 +925,7 @@ namespace stdc {
 
         // Candidate paths to try in order. A name with no slash is looked up along PATH, which is
         // what execvp would do, except that we cannot call it once the environment is replaced.
+        // https://github.com/python/cpython/blob/v3.13.13/Lib/subprocess.py#L1912
         std::vector<std::string> exec_paths;
         {
             std::string name = child_executable.string();
