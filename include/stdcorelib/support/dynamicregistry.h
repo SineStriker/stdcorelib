@@ -15,6 +15,7 @@
 
 #include <stdcorelib/stdc_global.h>
 #include <stdcorelib/adt/type_id.h>
+#include <stdcorelib/adt/vlarray.h>
 
 namespace stdc {
 
@@ -131,7 +132,7 @@ namespace stdc {
         bool add(std::string name, std::string desc, Factory factory) {
             auto entry =
                 std::make_shared<const Entry>(std::move(name), std::move(desc), std::move(factory));
-            std::vector<Listener *> listeners;
+            ListenerList listeners;
             {
                 std::unique_lock<std::shared_mutex> lock(_mutex);
                 if (_entries.find(entry->name()) != _entries.end()) {
@@ -167,7 +168,7 @@ namespace stdc {
         /// what a plugin owns here.
         bool remove(std::string_view name) {
             EntryPointer entry;
-            std::vector<Listener *> listeners;
+            ListenerList listeners;
             {
                 std::unique_lock<std::shared_mutex> lock(_mutex);
                 auto it = _entries.find(name);
@@ -248,9 +249,15 @@ namespace stdc {
 
         mutable std::shared_mutex _mutex;
 
+        // Watching is the exception rather than the rule, and a program that does watch installs
+        // one or two. Four pointers sit inline, which is what the snapshot add() and remove() take
+        // to call outside the lock is made of, so the common case allocates nothing.
+        static constexpr size_t PreallocatedListeners = 4;
+        using ListenerList = vlarray<Listener *, PreallocatedListeners>;
+
         // std::less<> so a string_view looks up without building a string first.
         std::map<std::string, EntryPointer, std::less<>> _entries;
-        std::vector<Listener *> _listeners;
+        ListenerList _listeners;
 
         STDC_DISABLE_COPY_MOVE(DynamicRegistry)
     };
