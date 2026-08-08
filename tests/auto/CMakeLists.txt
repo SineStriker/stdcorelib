@@ -80,3 +80,17 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 # Note that ctest exits 0 when it finds no tests at all, so anything running this in anger wants
 # --no-tests=error, or it is back to a green run of nothing.
 add_test(NAME ${PROJECT_NAME} COMMAND ${PROJECT_NAME})
+
+# The same binary again, narrowed to the one case that needs privilege to say anything: user(),
+# group() and extra_groups() do nothing without it. Labeled rather than added to the run above,
+# because being root changes what several of the other cases are asking about, the descriptor
+# count and the umask among them. CI runs this entry under sudo and excludes the label from the
+# ordinary run, where the same case is covered anyway by the whole-binary entry.
+#
+# Linux only. The case writes 65534 and "0 65534" into its expectations, and macOS answers
+# `id -u nobody` with 4294967294, so it is wrong there before privilege comes into it.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_test(NAME ${PROJECT_NAME}_root
+        COMMAND ${PROJECT_NAME} --run_test=test_popen/test_user_and_groups)
+    set_tests_properties(${PROJECT_NAME}_root PROPERTIES LABELS root)
+endif()

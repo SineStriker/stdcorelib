@@ -80,8 +80,11 @@ jobs:
       # ctest rather than the binary by name, so that where it landed is CMake's business. The
       # flag is not optional. ctest exits 0 when it finds no tests at all, which is what a test
       # CMakeLists that could not find Boost once produced here.
+      #
+      # The root label is what the step below runs, and running it here as well would only repeat
+      # a case the whole-binary entry already covers.
       - name: Test
-        run: ctest --test-dir build --output-on-failure --no-tests=error
+        run: ctest --test-dir build --output-on-failure --no-tests=error --label-exclude root
 
       # user(), group() and extra_groups() need privilege to do anything, so the case that
       # covers them asks who it is: as root it checks the credentials the child ended up with,
@@ -89,15 +92,11 @@ jobs:
       # it had already forked. The runner is not root, so without this the half that proves the
       # setters work would never run anywhere.
       #
-      # That one case rather than the suite. Being root changes what several of the others are
-      # asking about, the descriptor count and the umask among them.
-      #
-      # Linux only. The case writes 65534 and "0 65534" into its expectations, and macOS answers
-      # id -u nobody with 4294967294 and id -G nobody with "4294967294 12 61 100 701", so it is
-      # wrong there before privilege comes into it. Measured on the machine.
+      # Which case that is, and why it is Linux only, is in tests/auto/CMakeLists.txt beside the
+      # entry itself. Nothing here names a path or a case: that is what the label is for.
       - name: Test as root
         if: startsWith(matrix.platform, 'linux')
-        run: sudo ./build/out/bin/test_auto --run_test=test_popen/test_user_and_groups
+        run: sudo ctest --test-dir build --output-on-failure --no-tests=error --label-regex root
 
   # Exceptions switched off. Four platforms rather than five, the fifth being linux-clang, whose
   # frontend and standard library are both covered by one of the others.
