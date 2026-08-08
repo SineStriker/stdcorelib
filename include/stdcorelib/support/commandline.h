@@ -1562,6 +1562,11 @@ namespace stdc::cli {
 
         /// What the help text is made of, in the order ParseResult::helpLayout() asks for and
         /// with the groups a CommandCatalogue asks for already split.
+        ///
+        /// \note \a sizes is not what \a result was given, and is not to be worked out again
+        ///       from it. A text width of zero means ask, and this is the answer, settled once
+        ///       and handed to render() as well, so that a terminal resized in between cannot
+        ///       lay the usage line out to one width and the descriptions to another.
         virtual std::vector<HelpBlock> blocks(const ParseResult &result,
                                               const HelpSizes &sizes) const;
 
