@@ -415,13 +415,6 @@ namespace stdc {
         return *this;
     }
 
-    Popen &Popen::env(std::initializer_list<std::pair<const std::string, std::string>> env) {
-        // Through the other one, so that only one place decides what setting the environment
-        // means. A map converts to the optional it takes in one step, which is exactly the step
-        // a braced list cannot make on its own and the reason this overload is here.
-        return this->env(std::map<std::string, std::string>(env));
-    }
-
     Popen &Popen::stdin_(IODev dev) {
         stdc_impl_t;
         impl.stdin_dev = dev;

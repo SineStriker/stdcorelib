@@ -271,10 +271,10 @@ namespace stdc {
         Popen &env(const std::optional<std::map<std::string, std::string>> &env);
 
         // @overload: env(initializer_list)
-        //
-        // A braced list cannot reach the optional on its own, since building the map and then
-        // wrapping it is two user-defined conversions.
-        Popen &env(std::initializer_list<std::pair<const std::string, std::string>> env);
+        // The parameter is not called env, or it would shadow the overload this forwards to.
+        inline Popen &env(std::initializer_list<std::pair<const std::string, std::string>> vars) {
+            return env(std::map<std::string, std::string>(vars));
+        }
 
         /// Where each standard stream goes. Inherited if left unset.
         ///
