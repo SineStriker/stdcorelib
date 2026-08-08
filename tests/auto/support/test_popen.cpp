@@ -1325,6 +1325,54 @@ BOOST_AUTO_TEST_CASE(test_stream_interface) {
     }
 }
 
+// The error stream is read the same way as the output one, and had only ever been reached
+// through communicate(), which asks the implementation for it rather than the caller.
+//
+// The child writes to both, and the counts are small enough to sit in the pipe buffers, which is
+// what makes reading one after the other safe here. A larger one is what communicate() is for.
+BOOST_AUTO_TEST_CASE(test_the_error_stream_is_read_like_any_other) {
+    Popen p;
+    std::string err;
+    p.args(child_args({"fill", "128", "both"})).stdout_(Popen::PIPE).stderr_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+    BOOST_CHECK(p.stderr_().is_open());
+    BOOST_CHECK(p.stderr_().file() != nullptr);
+    BOOST_REQUIRE(p.wait(Timeout));
+
+    const auto &drain = [](Popen::Stream &stream) {
+        return std::string(std::istreambuf_iterator<char>(stream),
+                           std::istreambuf_iterator<char>());
+    };
+    BOOST_CHECK_EQUAL(drain(p.stdout_()).size(), 128u);
+    BOOST_CHECK_EQUAL(drain(p.stderr_()).size(), 128u);
+
+    p.stderr_().close();
+    BOOST_CHECK(!p.stderr_().is_open());
+}
+
+// A character at a time, which is a different path through the buffer from a whole string: the
+// stream has no put area, so sputc() goes to overflow() where sputn() goes to xsputn().
+BOOST_AUTO_TEST_CASE(test_writing_one_character_at_a_time) {
+    Popen p;
+    std::string err;
+    p.args(child_args({"cat"})).stdin_(Popen::PIPE).stdout_(Popen::PIPE);
+    BOOST_REQUIRE_MESSAGE(p.start(&err), err);
+
+    for (char c : std::string("one\n")) {
+        p.stdin_().put(c);
+    }
+    p.stdin_() << std::flush;
+    p.stdin_().close();
+
+    std::string out(std::istreambuf_iterator<char>(p.stdout_()),
+                    std::istreambuf_iterator<char>());
+    BOOST_CHECK_EQUAL(first_line(out), "one");
+    BOOST_REQUIRE(p.wait(Timeout));
+    BOOST_REQUIRE(p.returncode());
+    BOOST_CHECK_EQUAL(*p.returncode(), 0);
+}
+
 // ---------------------------------------------------------------------------------------------
 // The lifetime of the Popen itself
 // ---------------------------------------------------------------------------------------------

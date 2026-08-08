@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -520,6 +521,20 @@ BOOST_AUTO_TEST_CASE(test_iterators) {
         }
         std::vector<int> expect = {10, 20, 30};
         BOOST_CHECK(map.values() == expect);
+    }
+
+    // A default constructed one refers to nothing and is assigned over later, which is what a
+    // caller declaring an iterator before the loop that finds it writes. Required of every
+    // forward iterator, and reached by nothing here until now.
+    {
+        static_assert(std::is_default_constructible_v<Map::iterator>,
+                      "a forward iterator has to be default constructible");
+        Map::iterator it;
+        Map::const_iterator cit;
+        it = map.find("2");
+        cit = map.cbegin();
+        BOOST_CHECK_EQUAL(it.key(), "2");
+        BOOST_CHECK_EQUAL(cit.key(), "1");
     }
 }
 

@@ -1685,6 +1685,89 @@ BOOST_AUTO_TEST_CASE(test_a_parser_can_be_built_and_returned) {
     Parser moved = std::move(parser);
     BOOST_CHECK_EQUAL(moved.rootCommand().name(), "prog");
     BOOST_CHECK(moved.parse(argv({"copy", "a", "b"})).isValid());
+
+    // And assigned over one that already holds a tree, which is what a parser kept as a member
+    // and rebuilt later goes through. Only the constructor had ever been used.
+    Parser assigned(Command("placeholder"));
+    assigned = std::move(moved);
+    BOOST_CHECK_EQUAL(assigned.rootCommand().name(), "prog");
+    BOOST_CHECK(assigned.parse(argv({"copy", "a", "b"})).isValid());
+}
+
+// Every setting a parser takes read back off it. A program that wraps one of these, which is what
+// a help formatter of its own has to do, asks for all of them, and none but the two widths had
+// ever been called.
+BOOST_AUTO_TEST_CASE(test_a_parser_answers_for_what_it_was_told) {
+    Parser parser;
+    BOOST_CHECK(parser.prologue().empty());
+    BOOST_CHECK(parser.epilogue().empty());
+    BOOST_CHECK(parser.displayOptions() == Parser::Normal);
+    BOOST_CHECK_EQUAL(parser.textWidth(), 0);
+    BOOST_CHECK_EQUAL(parser.indent(), 4);
+    BOOST_CHECK_EQUAL(parser.spacing(), 4);
+    // Not empty by default: a parser that was told nothing still lays a help text out.
+    BOOST_CHECK(!parser.helpLayout().isEmpty());
+
+    parser.setRootCommand(Command("prog"));
+    parser.setPrologue("A prologue line");
+    parser.setEpilogue("An epilogue line");
+    parser.setDisplayOptions(Parser::AlignAllCatalogues | Parser::ShowOptionIsRequired);
+    parser.setTextWidth(72);
+    parser.setIndent(2);
+    parser.setSpacing(3);
+
+    HelpLayout layout;
+    layout.add(HelpBlock::Usage).add(HelpBlock::Options);
+    parser.setHelpLayout(layout);
+
+    BOOST_CHECK_EQUAL(parser.rootCommand().name(), "prog");
+    BOOST_CHECK_EQUAL(parser.prologue(), "A prologue line");
+    BOOST_CHECK_EQUAL(parser.epilogue(), "An epilogue line");
+    BOOST_CHECK(parser.displayOptions() ==
+                (Parser::AlignAllCatalogues | Parser::ShowOptionIsRequired));
+    BOOST_CHECK_EQUAL(parser.textWidth(), 72);
+    BOOST_CHECK_EQUAL(parser.indent(), 2);
+    BOOST_CHECK_EQUAL(parser.spacing(), 3);
+    BOOST_REQUIRE_EQUAL(parser.helpLayout().blocks().size(), 2u);
+    BOOST_CHECK_EQUAL(int(parser.helpLayout().blocks().front().role), int(HelpBlock::Usage));
+}
+
+// A catalogue groups arguments and options as well as commands, and only the command half was
+// ever rendered. Everything not named by a group stays under the plain heading at the end, so
+// what this pins is the order and the leftovers, not just that the headings appear.
+BOOST_AUTO_TEST_CASE(test_a_catalogue_groups_arguments_and_options_too) {
+    // An option is matched by its first spelling, which is what token() answers.
+    CommandCatalogue catalogue;
+    catalogue.addArguments("Inputs", {"source"})
+        .addArguments("Outputs", {"dest"})
+        .addOptions("Common Options", {"-f"})
+        .addOptions("Rare Options", {"-m"});
+
+    Parser parser(Command("prog", "Something")
+                      .addArguments({Argument("source", "Where from"), Argument("dest", "Where to"),
+                                     Argument("extra", "An ungrouped argument")})
+                      .addOptions({Option({"-f", "--force"}, "Overwrite"),
+                                   Option({"-m", "--mode"}, "How").arg("name"),
+                                   Option({"-q"}, "An ungrouped option")})
+                      .setCatalogue(catalogue));
+    parser.setTextWidth(80);
+    auto text = parser.parse(argv({})).helpText();
+
+    // The fallback headings are searched for with the newline in front, since "Options:" is a
+    // substring of "Common Options:" and would be found in it.
+    BOOST_CHECK(at(text, "Inputs:") < at(text, "Outputs:"));
+    BOOST_CHECK(at(text, "Outputs:") < at(text, "\nArguments:"));
+    BOOST_CHECK(at(text, "\nArguments:") < at(text, "Common Options:"));
+    BOOST_CHECK(at(text, "Common Options:") < at(text, "Rare Options:"));
+    BOOST_CHECK(at(text, "Rare Options:") < at(text, "\nOptions:"));
+
+    // And the rows land under the heading that asked for them rather than all under the fallback.
+    BOOST_CHECK(at(text, "Inputs:") < at(text, "Where from"));
+    BOOST_CHECK(at(text, "Where from") < at(text, "Outputs:"));
+    BOOST_CHECK(at(text, "\nArguments:") < at(text, "An ungrouped argument"));
+    BOOST_CHECK(at(text, "Common Options:") < at(text, "Overwrite"));
+    BOOST_CHECK(at(text, "Overwrite") < at(text, "Rare Options:"));
+    BOOST_CHECK(at(text, "\nOptions:") < at(text, "An ungrouped option"));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3408,6 +3491,12 @@ BOOST_AUTO_TEST_CASE(test_a_read_through_an_option_handle_owns_what_it_answers) 
         auto handle = result.option("-j");
         BOOST_REQUIRE(handle);
         BOOST_CHECK_EQUAL(handle->count(), 1);
+
+        // The declaration behind the handle, which is what a program reads to find out what it
+        // was that matched. It points into the tree the result holds alive, not into the handle.
+        BOOST_REQUIRE(handle->option() != nullptr);
+        BOOST_CHECK_EQUAL(handle->option()->token(), "-j");
+        BOOST_CHECK_EQUAL(handle->option()->description(), "Jobs");
 
         jobs = handle->value<int>();
         raw = handle->value<std::string>();

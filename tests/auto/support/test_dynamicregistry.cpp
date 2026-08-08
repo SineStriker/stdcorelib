@@ -51,6 +51,10 @@ namespace {
         std::vector<std::string> added, removed;
     };
 
+    // Overrides neither, which is what a listener installed for a purpose it has not written yet
+    // looks like. The inherited bodies do nothing, and the registry must call them all the same.
+    class SilentListener : public WidgetRegistry::Listener {};
+
 }
 
 BOOST_AUTO_TEST_SUITE(test_dynamicregistry)
@@ -120,6 +124,23 @@ BOOST_AUTO_TEST_CASE(test_listeners) {
     reg.remove_listener(&listener);
     make("two", 2);
     BOOST_CHECK_EQUAL(listener.added.size(), 1u); // no longer told
+}
+
+// One that overrides nothing is told the same things and does nothing with them. Both halves are
+// declared virtual with a body rather than pure, so this has to compile and has to be harmless.
+BOOST_AUTO_TEST_CASE(test_a_listener_may_override_neither_half) {
+    RegistryGuard guard;
+    auto &reg = WidgetRegistry::instance();
+
+    SilentListener silent;
+    reg.add_listener(&silent);
+
+    make("three", 3);
+    BOOST_CHECK_EQUAL(reg.size(), 1u);
+    BOOST_CHECK(reg.remove("three"));
+    BOOST_CHECK_EQUAL(reg.size(), 0u);
+
+    reg.remove_listener(&silent);
 }
 
 // The registry takes a lock, so registering from several threads at once has to come out with

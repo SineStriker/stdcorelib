@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+#include <cmath>
+
 #include <stdcorelib/support/json.h>
 
 #include <boost/test/unit_test.hpp>
@@ -59,6 +61,21 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_Types) {
         BOOST_CHECK(v.toBinary().size() == 4);
         BOOST_CHECK(v.toBinaryView().size() == 4);
         BOOST_CHECK(v.toBinary()[3] == 0xFF);
+    }
+    // A container built up first and then wrapped is copied rather than taken over, which is a
+    // separate constructor from the one every case above reaches with a temporary.
+    {
+        JsonArray array{JsonValue(1), JsonValue(2)};
+        JsonObject object{{"a", JsonValue(1)}};
+        JsonValue wrapped_array(array);
+        JsonValue wrapped_object(object);
+
+        array.clear();
+        object.clear();
+        BOOST_CHECK(wrapped_array.toArray().size() == 2);
+        BOOST_CHECK(wrapped_array.toArray()[1].toInt() == 2);
+        BOOST_CHECK(wrapped_object.toObject().size() == 1);
+        BOOST_CHECK(wrapped_object["a"].toInt() == 1);
     }
 }
 
@@ -533,6 +550,47 @@ BOOST_AUTO_TEST_CASE(test_JsonValue_CborShapes) {
         encoded.push_back(0x02);
         std::string error;
         BOOST_CHECK(JsonValue::fromCbor(encoded, &error).isNull());
+        BOOST_CHECK(!error.empty());
+    }
+}
+
+/// The half-precision test vectors from RFC 8949 appendix A.
+///
+/// We never write one, since a double is what a JsonValue holds. Other encoders do write them,
+/// and 0xF9 was the one initial byte of major type 7 that nothing here had ever handed over.
+BOOST_AUTO_TEST_CASE(test_JsonValue_CborHalfPrecision) {
+    auto decode = [](uint8_t hi, uint8_t lo) {
+        const std::vector<uint8_t> buffer{0xF9, hi, lo};
+        auto v = JsonValue::fromCbor(buffer);
+        BOOST_REQUIRE(v.isDouble());
+        return v.toDouble();
+    };
+
+    BOOST_CHECK_EQUAL(decode(0x00, 0x00), 0.0);
+    BOOST_CHECK_EQUAL(decode(0x3C, 0x00), 1.0);
+    BOOST_CHECK_EQUAL(decode(0x3E, 0x00), 1.5);
+    BOOST_CHECK_EQUAL(decode(0x7B, 0xFF), 65504.0);
+    BOOST_CHECK_EQUAL(decode(0xC4, 0x00), -4.0);
+
+    // The sign bit is read separately from the magnitude, so a negative zero stays one rather
+    // than becoming the zero the comparison alone cannot tell it from.
+    BOOST_CHECK_EQUAL(decode(0x80, 0x00), 0.0);
+    BOOST_CHECK(std::signbit(decode(0x80, 0x00)));
+    BOOST_CHECK(!std::signbit(decode(0x00, 0x00)));
+
+    // The two exponents that are not an exponent. Subnormal, where the leading bit is absent,
+    // and all ones, where the mantissa says which of infinity and a NaN it is.
+    BOOST_CHECK_EQUAL(decode(0x00, 0x01), 5.960464477539063e-8);
+    BOOST_CHECK_EQUAL(decode(0x04, 0x00), 0.00006103515625);
+    BOOST_CHECK(std::isinf(decode(0x7C, 0x00)) && decode(0x7C, 0x00) > 0);
+    BOOST_CHECK(std::isinf(decode(0xFC, 0x00)) && decode(0xFC, 0x00) < 0);
+    BOOST_CHECK(std::isnan(decode(0x7E, 0x00)));
+
+    // And two bytes are what it takes, so one is a truncated value rather than a zero.
+    {
+        const std::vector<uint8_t> buffer{0xF9, 0x3C};
+        std::string error;
+        BOOST_CHECK(JsonValue::fromCbor(buffer, &error).isNull());
         BOOST_CHECK(!error.empty());
     }
 }

@@ -798,13 +798,22 @@ BOOST_AUTO_TEST_CASE(test_the_message_severities_are_println_with_a_color) {
 BOOST_AUTO_TEST_CASE(test_the_va_list_overloads_agree_with_the_variadic_ones) {
     ColorModeGuard guard(color_mode::automatic);
 
-    // The three that take a file, checked against a scratch file.
+    // The three that take a file, each written both ways into a scratch file of its own. Only
+    // the va_list halves were ever called here, so what the case is named for went unchecked and
+    // console::fprintf() and console::cfprintf() were reached by nothing at all.
     {
-        TempFile file;
-        call_vfprintf(file.get(), "%d and %s\n", 1, "one");
-        call_u8vfprintf(file.get(), "%d and %s\n", 2, "two");
-        call_cvfprintf(file.get(), "${red}%d and %s\n", 3, "three");
-        BOOST_CHECK_EQUAL(file.contents(), "1 and one\n2 and two\n3 and three\n");
+        TempFile through_va_list;
+        call_vfprintf(through_va_list.get(), "%d and %s\n", 1, "one");
+        call_u8vfprintf(through_va_list.get(), "%d and %s\n", 2, "two");
+        call_cvfprintf(through_va_list.get(), "${red}%d and %s\n", 3, "three");
+
+        TempFile variadic;
+        console::fprintf(nostyle, nocolor, nocolor, variadic.get(), "%d and %s\n", 1, "one");
+        console::u8fprintf(variadic.get(), "%d and %s\n", 2, "two");
+        console::cfprintf(variadic.get(), "${red}%d and %s\n", 3, "three");
+
+        BOOST_CHECK_EQUAL(through_va_list.contents(), "1 and one\n2 and two\n3 and three\n");
+        BOOST_CHECK_EQUAL(variadic.contents(), "1 and one\n2 and two\n3 and three\n");
     }
 
     // And the three that take none, which is what needed the redirect.
