@@ -101,29 +101,36 @@ namespace stdc {
         char _buf[4096]{};
     };
 
-    // Base classes are built before members, so the buffer does not exist yet. Pass null and
-    // point the base at it with rdbuf() once it does.
-    Popen::Stream::Stream() : std::iostream(nullptr), _buf(new Buf()) {
-        rdbuf(_buf.get());
+    // No buffer until there is a pipe to put in it. Every Popen holds three of these and most
+    // runs open one or none, so building the buffer here spends four kilobytes apiece on streams
+    // nobody asked for. A null streambuf leaves the stream in badbit, which is what a stream
+    // that was never opened should report anyway.
+    Popen::Stream::Stream() : std::iostream(nullptr) {
     }
 
     Popen::Stream::~Stream() = default;
 
     void Popen::Stream::open(FILE *file) {
+        if (!_buf) {
+            _buf.reset(new Buf());
+            rdbuf(_buf.get());
+        }
         _buf->open(file);
         clear();
     }
 
     void Popen::Stream::close() {
-        _buf->close();
+        if (_buf) {
+            _buf->close();
+        }
     }
 
     bool Popen::Stream::is_open() const {
-        return _buf->is_open();
+        return _buf && _buf->is_open();
     }
 
     FILE *Popen::Stream::file() const {
-        return _buf->file();
+        return _buf ? _buf->file() : nullptr;
     }
 
     Popen::Impl::Impl() = default;
